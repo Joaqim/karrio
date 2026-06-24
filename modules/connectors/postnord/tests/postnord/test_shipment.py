@@ -270,13 +270,18 @@ ParsedShipmentResponse = [
 ]
 
 ParsedShipmentCancelResponse = [
-    {
-        "carrier_id": "postnord",
-        "carrier_name": "postnord",
-        "operation": "Cancel Shipment",
-        "success": True,
-    },
-    [],
+    None,
+    [
+        {
+            "carrier_id": "postnord",
+            "carrier_name": "postnord",
+            "code": "cancellation_unsupported",
+            "message": (
+                "PostNord REST cancellation is unavailable: the id-based delete "
+                "endpoint is pending. The shipment was not cancelled."
+            ),
+        }
+    ],
 ]
 
 ParsedErrorResponse = [
