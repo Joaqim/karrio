@@ -30,7 +30,12 @@ def parse_shipment_response(
     messages = error.parse_error_response(response, settings)
 
     booking = response.get("bookingResponse") or {}
-    has_shipment = any(booking.get("idInformation") or []) and not any(messages)
+    # A booking succeeds per-item: any item allocated ids (item/shipment id)
+    # yields a usable label and tracking number. Inline per-item faults are
+    # surfaced as messages alongside the details, so the presence of messages
+    # must not suppress a partially-successful booking.
+    informations = booking.get("idInformation") or []
+    has_shipment = any(info.get("ids") for info in informations)
     shipment = (
         _extract_details(response, settings, _response.ctx)
         if has_shipment
