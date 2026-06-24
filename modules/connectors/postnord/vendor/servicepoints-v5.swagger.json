@@ -1,0 +1,2825 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Service Points V5",
+    "description": "This section describes how to retrieve delivery-address information for Postnord-locations such as Service points, Parcel-boxes, Terminals and Collect-in-store locations.Includes the Nordic region and other parts of Europe.\n\n**MyPack Collect (19)** is mainly the service that needs this information in order to route a parcel to a specific delivery location (optional service point). It will also be requirement for **Expresspaket (42)** and **Parcel (18)** when using collect-in-store/Early collect. \n- The additional service **\"Optional Service Point\" (A7)** enables the customer to choose which service point the parcel should be delivered to for collection/pickup. \n- The additional service **\"Collect In-Store\" (E4)** enables the customer to choose which of the customer’s self-provided collection points/stores the parcel should be delivered to for collection/pickup. Requires a special contract and setup with Postnord. \n- The additional service **\"Early Collect\" (F6)** enables the customer to choose service points that offers an earlier delivery of the parcel.  \n---\n\n**These are the main uses cases for the APIs**\n\n- Find nearest service point based on an address, postal code, city, or geo co-ordinates \n- Present for customers where they can collect or drop off parcels in the E-commerce platform.\n- What to state as delivery-party In the PostNord EDI when the additional service \"optional service point\" is used.\n- What to print as delivery-party On the PostNord Label when the additional service \"optional service point\" is used.\n\n_For detailed information about EDI and Labels, see our Implementation Guidelines: <BR> https://developer.postnord.com/edi/edis-and-labels#humany-developer-portal-edi-contact=/contact/4461_\n\n---\n\n**Important** \n- The service point ID:s are not unique, you need to combine the service point ID with the country code. \n- Service points are changed on a regular basis, we recommend you update your local database every day.\n- The delivery address should be used in the EDI and on the Label\n- The visiting address is used to guide the customers to the service point\n\n---\n\n**Nearest Service Points APIs**\n\nThe APIs provides the nearest service points from a location defined by an address or geo co-ordinates.  \n\n- Distance is based on driving route. \n\nThe accuracy of what service points that are presented in the response and the distance to these service points is dependent on how detailed the information in the search criteria is. \n- If the search includes a full address down to street number, the service will be able to calculate an exact starting point and thus the response will be as accurate as it can be. \n\n- If the search only contains country code and city there are two different risks of getting a response that the e-buyer will not be satisfied with. \n\n- One is that if there are many cities in the country with the name in the search, the system might choose the wrong city. \n- The other is that the system will calculate the starting point as the center of the city. If the e-buyer lives in the outskirts of the city the presented service points might not be the ones nearest at all. \n\nThe remedy for the first case is to add the postal code as a search parameter and for the second one to also add street. In some cases postal code and street are pretty much the same, hence the starting position will be almost the same regardless of what value used.\n\n---\n\n**Service Points Information APIs**\n\nThe APIs provides service points information using different types of selections; defined by the incoming query parameters.\n\n- The bypostalcode API will retrieve the default service point associated with the postal code area of notification.\n- The ids will get you information about a single service point\n- The information will get you information about the service points that meets the incoming query. \n\nThese APIs can be used for multiple reasons, like informing your customers of the address and opening hours for a specific service point. \n\n---\n\n**Service Points Delta Information APIs**\n\nThe APIs provides the functionality to discover newly created, updated, or deleted service points without performing a full read of the target resource with every request.\n\n---\n\n**API Information** \n\n| **Date**   | **Version** | **Description**                                          |\n| ---------- | ----------- | -------------------------------------------------------- |\n|  |       |  |\n\n| **Feature**| **Setting** | **Description**                                          |\n| ---------- | ----------- | -------------------------------------------------------- |\n| CORS       | True        | Enable access to the API from a different origin |\n| SECURED    | False      |The API do not require a PostNord Oauth2 login         |\n---\n<h1><strong>NOTE: Click on Authorization button and provide your apikey you received after signup</strong></h1>\n",
+    "version": "5.0.14"
+  },
+  "servers": [
+    {
+      "url": "https://atapi2.postnord.com/rest/businesslocation",
+      "description": "Sandbox server (uses test data)"
+    },
+    {
+      "url": "https://api2.postnord.com/rest/businesslocation"
+    }
+  ],
+  "security": [
+    {
+      "apiKey": []
+    }
+  ],
+  "paths": {
+    "/v5/servicepoints/nearest/bycoordinates": {
+      "get": {
+        "tags": [
+          "Nearest Service Points"
+        ],
+        "summary": "Find nearest service points by coordinates",
+        "description": "**Description** \n\nFind Nearest Service Points allows you to fetch information directly to your E-commerce platform or other system.\n- Query the enables applications to discover the nearest service point by coordinate. \n- The response contains an array of service points sorted by distance from the search point.  ",
+        "operationId": "RestBusinesslocationV1ServicepointFindNearestByCoordinatesByReturntypeGet",
+        "parameters": [
+          {
+            "name": "returnType",
+            "in": "query",
+            "description": "Defines the response message format",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "xml"
+              ]
+            },
+            "x-default": "json"
+          },
+          {
+            "name": "countryCode",
+            "in": "query",
+            "description": "Defines the country where the service point is located. Country code in ISO 3166-1. \n* Allowed value is one of SE, NO, FI, DK, DE, BE, NL, LU, EE, LV, LT, AT, FR, ES, AX, PL, PT, CZ, IE, SK, SI",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "SE"
+          },
+          {
+            "name": "northing",
+            "in": "query",
+            "description": "The Northing coordinate",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            },
+            "example": 57.8727
+          },
+          {
+            "name": "easting",
+            "in": "query",
+            "description": "The Easting coordinate",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            },
+            "example": 11.968
+          },
+          {
+            "name": "agreementCountry",
+            "in": "query",
+            "description": "Used to retreive service points for the countryCode that has an agreement to be used for senders in the agreementCountry. Defined in ISO 3166-1.\n* Value can be one of **(SE,NO,DK,FI)**. If countryCode is one of SE,NO,DK,FI then agreementCountry can be left empty.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "DK"
+          },
+          {
+            "name": "srId",
+            "in": "query",
+            "description": "World Geodetic System reference (SRID), the latest revision is WGS 84 (also known as WGS 1984, EPSG 4326)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "EPSG:4326"
+            }
+          },
+          {
+            "name": "numberOfServicePoints",
+            "in": "query",
+            "description": "The number of service points to be returned",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 5
+            }
+          },
+          {
+            "name": "customerKey",
+            "in": "query",
+            "description": "Used to retreive service points belong to a customer key\n* **Collect In Store**",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "context",
+            "in": "query",
+            "description": "A context has the logic of what types of service points to include in the response. \n* **optionalservicepoint** - active service points available for deliveries. (**Recommended value for checkout-solutions and TA-systems**)\n* **earlycollect** - service points available for the addon earlycollect (**F6**)\n* **saturdaydelivery** - returns service points with Saturday delivery. When paired with another context for example 'optionalservicepoint', will return all optional servicepoints with Saturday delivery\n* **mypacksmall** - Used for service Mypack Small (NO). will return one service point with preference to parcel locker if within 500 meters driving distance from consumer address.\n* **all** - returns all service points including service points not eligible for sorting and deliveries. (**Only use if you have a logic for filtering out the not eligible service points from reponse**)\n\nSeveral contexts can be selected via a comma separated list.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "optionalservicepoint"
+            }
+          },
+          {
+            "name": "responseFilter",
+            "in": "query",
+            "description": "Defines the objects/attributes that is included in the response message to the application. \n* **public** - Standard set of objects/attributes necessary for PostNord Customer requirements (EDI, Delivery Checkouts, Map views, etc)  \n* **internal** - Extended set that includes all objects/attributes defined in the swagger model (**only use if you need other data than standard set and have separate filtering and logic to manage the response**)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "public"
+            }
+          },
+          {
+            "name": "typeId",
+            "in": "query",
+            "description": "Defines the type of the service point, used to retreive specified types.\n* **If left empty** - all types are included\n* **2** - Parcel Box Location (Nordic, Europe)\n* **4** - Cancelled (DK)\n* **6** - Pakkeshop med salg (DK)\n* **22** - Letter Office (SE)\n* **24** - Business Centre (SE)\n* **25** - Servicepoint (SE)\n* **37** - Servicepoint (NOR)\n* **38** - Servicepoint (FIN)\n* **44** - Pakkeshop (DK)\n* **46** - Cancelled (DK)\n* **51** - Collect in Store (Nordic)\n* **54** - Delivery Office (SE)\n* **61** - Servicepoint (Europe)\n* **73** - Terminal pickup (SE)\n* **74** - Letter terminal drop off (SE)\n\nA comma separated list of valid typeIds\n\nRecommended types for checkout-solutions:\n* Optional service points - 4,6,24,25,37,38,44,46,54,61\n \n* Parcel-boxes - 2\n \n* Collect in store service points (Special agreement requred) - 51\n* Early Collect (Special agreement requred) - 73\n\nRecommended is to divide the service points, parcel-boxes and collect in store.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "24,25,54"
+          },
+          {
+            "name": "located",
+            "in": "query",
+            "description": "Used to retrieve service points based on location placement\n* **indoor** \n* **outdoor**\n* **all**",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "all"
+            }
+          },
+          {
+            "name": "callback",
+            "in": "query",
+            "description": "JSONP enables making cross domain calls by generating script tags in the current document and expecting a result back to calls a specified callback handler.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "whiteLabelName",
+            "in": "query",
+            "description": "Add a prefix called Postnord to each service point name that defines that it belongs to PostNord.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "false"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseDto"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The server cannot or will not process the request due to something that is perceived to be a client error (e.g., malformed request syntax, invalid request message framing, or deceptive request routing).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication token is missing/invalid ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The server understood the request but refuses to authorize it (e.g. API-key, access-token, JWT)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The origin server did not find a current representation for the target resource or is not willing to disclose that one exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "The method received in the request-line is known by the origin server but not supported by the target resource."
+          },
+          "429": {
+            "description": "The user has sent too many requests in a given amount of time."
+          },
+          "499": {
+            "description": "The server does not support the functionality required to fulfill the request."
+          },
+          "503": {
+            "description": "The server is currently unable to handle the request due to a temporary overload or scheduled maintenance, which will likely be alleviated after some delay."
+          },
+          "504": {
+            "description": "The server, while acting as a gateway or proxy, did not receive a timely response from an upstream server it needed to access in order to complete the request."
+          }
+        }
+      }
+    },
+    "/v5/servicepoints/bypostalcode": {
+      "get": {
+        "tags": [
+          "Service Points Information"
+        ],
+        "summary": "Find the default service point by postal code",
+        "description": "**Description** \n- Query the enables applications to discover the default service point by postal code. \n- This is query is only valid for the countryCodes **(SE, NO, FI)**.   \n- Service points Denmark are connected to more than one postal code. ",
+        "operationId": "RestBusinesslocationV1ServicepointFindByPostalCodeByReturntypeGet",
+        "parameters": [
+          {
+            "name": "returnType",
+            "in": "query",
+            "description": "Defines the response message format",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "xml"
+              ]
+            },
+            "x-default": "json"
+          },
+          {
+            "name": "countryCode",
+            "in": "query",
+            "description": "Defines the country where the service point is located. Country code in ISO 3166-1. \n* Allowed value can be one of SE, FI, NO ",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "SE"
+          },
+          {
+            "name": "postalCode",
+            "in": "query",
+            "description": "The postal code.\n* The postal code should always be presented without country code and spaces. \n* Hyphens are regarded as part of the postal code and should be included.'",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "context",
+            "in": "query",
+            "description": "A context has the logic of what types of service points to include in the response. \n* **optionalservicepoint** - active service points available for deliveries. (**Recommended value for checkout-solutions and TA-systems**)\n* **earlycollect** - service points available for the addon earlycollect (**F6**)\n* **saturdaydelivery** - returns service points with Saturday delivery. When paired with another context for example 'optionalservicepoint', will return all optional servicepoints with Saturday delivery\n* **all** - returns all service points including service points not eligible for sorting and deliveries. (**Only use if you have a logic for filtering out the not eligible service points from reponse**)\n\nSeveral contexts can be selected via a comma separated list.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "optionalservicepoint"
+            }
+          },
+          {
+            "name": "located",
+            "in": "query",
+            "description": "Used to retrieve service points based on location placement\n* **indoor** \n* **outdoor**\n* **all**",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "all"
+            }
+          },
+          {
+            "name": "callback",
+            "in": "query",
+            "description": "JSONP enables making cross domain calls by generating script tags in the current document and expecting a result back to calls a specified callback handler.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "jsonp"
+          },
+          {
+            "name": "whiteLabelName",
+            "in": "query",
+            "description": "Add a prefix called Postnord to each service point name that defines that it belongs to PostNord.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "false"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseDto"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The server cannot or will not process the request due to something that is perceived to be a client error (e.g., malformed request syntax, invalid request message framing, or deceptive request routing).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication token is missing/invalid ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The server understood the request but refuses to authorize it (e.g. API-key, access-token, JWT)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The origin server did not find a current representation for the target resource or is not willing to disclose that one exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "The method received in the request-line is known by the origin server but not supported by the target resource."
+          },
+          "429": {
+            "description": "The user has sent too many requests in a given amount of time."
+          },
+          "499": {
+            "description": "The server does not support the functionality required to fulfill the request."
+          },
+          "503": {
+            "description": "The server is currently unable to handle the request due to a temporary overload or scheduled maintenance, which will likely be alleviated after some delay."
+          },
+          "504": {
+            "description": "The server, while acting as a gateway or proxy, did not receive a timely response from an upstream server it needed to access in order to complete the request."
+          }
+        }
+      }
+    },
+    "/v5/servicepoints/nearest/byaddress": {
+      "get": {
+        "tags": [
+          "Nearest Service Points"
+        ],
+        "summary": "Find the nearest service points by address",
+        "description": "**Description** \n- Query the enables applications to discover the nearest service point by address. \n- Always use as detailed information as possible, to get the most accurate response. \n- The response contains an array of service points sorted by distance from the search point.",
+        "operationId": "RestBusinesslocationV5ServicepointFindNearestByAddressByReturntypeGet",
+        "parameters": [
+          {
+            "name": "returnType",
+            "in": "query",
+            "description": "Defines the response message format",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "xml"
+              ]
+            },
+            "x-default": "json"
+          },
+          {
+            "name": "countryCode",
+            "in": "query",
+            "description": "Defines the country where the service point is located. Country code in ISO 3166-1. \n* Allowed value is one of SE, NO, FI, DK, DE, BE, NL, LU, EE, LV, LT, AT, FR, ES, AX, , PL, PT, CZ, IE, SK, SI",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "SE"
+          },
+          {
+            "name": "agreementCountry",
+            "in": "query",
+            "description": "Used to retreive service points for the countryCode that has an agreement to be used for senders in the agreementCountry. Defined in ISO 3166-1.\n* Value can be one of **(SE,NO,DK,FI)**. If countryCode is one of SE,NO,DK,FI agreementCountry can be left empty.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "SE"
+          },
+          {
+            "name": "customerKey",
+            "in": "query",
+            "description": "Used to retreive service points belong to a customer key\n* **Collect In Store**",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "city",
+            "in": "query",
+            "description": "The name of the city. \n* Mandatory, if the postalCode is not provided.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "postalCode",
+            "in": "query",
+            "description": "The postal code.\n* Mandatory, if the city is not provided. \n\nThe postal code should always be presented without country code and spaces. \nHyphens are regarded as part of the postal code and should be included.'",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "streetName",
+            "in": "query",
+            "description": "Name of the street",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "streetNumber",
+            "in": "query",
+            "description": "Street Number",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "numberOfServicePoints",
+            "in": "query",
+            "description": "The number of service points to be returned",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 5
+            }
+          },
+          {
+            "name": "srId",
+            "in": "query",
+            "description": "World Geodetic System reference (SRID), the latest revision is WGS 84 (also known as WGS 1984, EPSG 4326)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "EPSG:4326"
+            }
+          },
+          {
+            "name": "context",
+            "in": "query",
+            "description": "A context has the logic of what types of service points to include in the response. \n* **optionalservicepoint** - active service points available for deliveries. (**Recommended value for checkout-solutions and TA-systems**)\n* **earlycollect** - service points available for the addon earlycollect (**F6**)\n* **labelless** - list service points that supports labelless code drop offs earlycollect (**F6**)\n* **saturdaydelivery** - returns service points with Saturday delivery. When paired with another context for example 'optionalservicepoint', will return all optional servicepoints with Saturday delivery\n* **mypacksmall** - Used for service Mypack Small (NO). will return one service point with preference to parcel locker if within 500 meters driving distance from consumer address.\n* **all** - returns all service points including service points not eligible for sorting and deliveries. (**Only use if you have a logic for filtering out the not eligible service points from reponse**)\n\nSeveral contexts can be selected via a comma separated list.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "optionalservicepoint"
+            }
+          },
+          {
+            "name": "responseFilter",
+            "in": "query",
+            "description": "Defines the objects/attributes that is included in the response message to the application. \n* **public** - Standard set of objects/attributes necessary for PostNord Customer requirements (EDI, Delivery Checkouts, Map views, etc)  \n* **internal** - Extended set that includes all objects/attributes defined in the swagger model (**only use if you need other data than standard set and have separate filtering and logic to manage the response**)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "public"
+            }
+          },
+          {
+            "name": "typeId",
+            "in": "query",
+            "description": "Defines the type of the service point, used to retreive specified types.\n* **If left empty** - all types are included\n* **2** - Parcel Box Location (Nordic, Europe)\n* **4** - Cancelled (DK)\n* **6** - Pakkeshop med salg (DK)\n* **22** - Letter Office (SE)\n* **24** - Business Centre (SE)\n* **25** - Servicepoint (SE)\n* **37** - Servicepoint (NOR)\n* **38** - Servicepoint (FIN)\n* **44** - Pakkeshop (DK)\n* **46** - Cancelled (DK)\n* **54** - Delivery Office (SE)\n* **61** - Servicepoint (Europe)\n* **73** - Terminal pickup (SE)\n* **74** - Letter terminal drop off (SE)\n\nA comma separated list of valid typeIds \n\nRecommended types for checkout-solutions:\n* Optional service points - 4,6,24,25,37,38,44,46,54,61\n \n* Parcel-boxes - 2\n \n* Collect in store service points (Special agreement requred) - 51\n* Early Collect (Special agreement requred) - 73\n\nRecommended is to divide the service points, parcel-boxes and collect in store.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "24,25,54"
+          },
+          {
+            "name": "located",
+            "in": "query",
+            "description": "Used to retrieve service points based on location placement\n* **indoor** \n* **outdoor**\n* **all**",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "all"
+            }
+          },
+          {
+            "name": "callback",
+            "in": "query",
+            "description": "JSONP enables making cross domain calls by generating script tags in the current document and expecting a result back to calls a specified callback handler.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "whiteLabelName",
+            "in": "query",
+            "description": "Add a prefix called Postnord to each service point name that defines that it belongs to PostNord.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "false"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseDto"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The server cannot or will not process the request due to something that is perceived to be a client error (e.g., malformed request syntax, invalid request message framing, or deceptive request routing).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication token is missing/invalid ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The server understood the request but refuses to authorize it (e.g. API-key, access-token, JWT)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The origin server did not find a current representation for the target resource or is not willing to disclose that one exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "The method received in the request-line is known by the origin server but not supported by the target resource."
+          },
+          "429": {
+            "description": "The user has sent too many requests in a given amount of time."
+          },
+          "499": {
+            "description": "The server does not support the functionality required to fulfill the request."
+          },
+          "503": {
+            "description": "The server is currently unable to handle the request due to a temporary overload or scheduled maintenance, which will likely be alleviated after some delay."
+          },
+          "504": {
+            "description": "The server, while acting as a gateway or proxy, did not receive a timely response from an upstream server it needed to access in order to complete the request."
+          }
+        }
+      }
+    },
+    "/v5/servicepoints/ids": {
+      "get": {
+        "tags": [
+          "Service Points Information"
+        ],
+        "summary": "Find service points by IDs",
+        "description": "**Description** \n- Query the enables applications to discover service points using  one or more service point IDs.",
+        "operationId": "getServicePointByIds",
+        "parameters": [
+          {
+            "name": "returnType",
+            "in": "query",
+            "description": "Defines the response message format",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "xml"
+              ]
+            },
+            "x-default": "json"
+          },
+          {
+            "name": "countryCode",
+            "in": "query",
+            "description": "Defines the country where the service point is located. Country code in ISO 3166-1. \n* Allowed value can be one of SE, NO, FI, DK, DE, BE, NL, LU, EE, LV, LT, AT, FR, ES, AX, PL, PT, CZ, IE, SK, SI",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "SE"
+          },
+          {
+            "name": "ids",
+            "in": "query",
+            "description": "Service point Id's. Several Id's can be selected via an comma separated list, i.e 10000,10001,10028. One and only one country code must be given when this parameter is supplied",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "376062"
+          },
+          {
+            "name": "responseFilter",
+            "in": "query",
+            "description": "Defines the objects/attributes that is included in the response message to the application. \n* **public** - returns objects/attributes nessassary for PostNord Customer requirements (EDI, Delivery Checkouts, Map views, ..)  \n* **internal** - returns all objects/attributes defined in the swagger model",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "public",
+              "enum": [
+                "public",
+                "internal"
+              ]
+            }
+          },
+          {
+            "name": "located",
+            "in": "query",
+            "description": "Used to retrieve service points based on location placement\n* **indoor** \n* **outdoor**\n* **all**",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "all"
+            }
+          },
+          {
+            "name": "callback",
+            "in": "query",
+            "description": "JSONP enables making cross domain calls by generating script tags in the current document and expecting a result back to calls a specified callback handler.          ",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "jsonp"
+          },
+          {
+            "name": "whiteLabelName",
+            "in": "query",
+            "description": "Add a prefix called Postnord to each service point name that defines that it belongs to PostNord.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "false"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseDto"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The server cannot or will not process the request due to something that is perceived to be a client error (e.g., malformed request syntax, invalid request message framing, or deceptive request routing).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication token is missing/invalid ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The server understood the request but refuses to authorize it (e.g. API-key, access-token, JWT)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The origin server did not find a current representation for the target resource or is not willing to disclose that one exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "The method received in the request-line is known by the origin server but not supported by the target resource."
+          },
+          "429": {
+            "description": "The user has sent too many requests in a given amount of time."
+          },
+          "499": {
+            "description": "The server does not support the functionality required to fulfill the request."
+          },
+          "503": {
+            "description": "The server is currently unable to handle the request due to a temporary overload or scheduled maintenance, which will likely be alleviated after some delay."
+          },
+          "504": {
+            "description": "The server, while acting as a gateway or proxy, did not receive a timely response from an upstream server it needed to access in order to complete the request."
+          }
+        }
+      }
+    },
+    "/v5/servicepoints/information": {
+      "get": {
+        "tags": [
+          "Service Points Information"
+        ],
+        "summary": "Find service points by parameters keys",
+        "description": "**Description** \n- Query the enables applications to discover service points using  defined parameter keys. This endpoint now supports gzip response. You can add **Accept-Encoding: gzip** in request header.",
+        "operationId": "getServicePoints",
+        "parameters": [
+          {
+            "name": "returnType",
+            "in": "query",
+            "description": "Defines the response message format",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "xml"
+              ]
+            },
+            "x-default": "json"
+          },
+          {
+            "name": "countryCode",
+            "in": "query",
+            "description": "Defines the country where the service point is located. Country code in ISO 3166-1. \n* Allowed values are SE, NO, FI, DK, DE, BE, NL, LU, EE, LV, LT, AT, FR,ES, AX, PL, PT, CZ, IE, SK, SI\n* If left empty the response contains all available Nordic countries service points (SE,FI,NO,DK)\n\nSeveral countries can be selected via a comma separated list. ",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "SE,FI,NO,DK"
+          },
+          {
+            "name": "agreementCountry",
+            "in": "query",
+            "description": "Used to retreive service points for the countryCode that has an agreement to be used for senders in the agreementCountry. Defined in ISO 3166-1.\n* Value can be one of **(SE,NO,DK,FI)**. If countryCode is one of SE,NO,DK,FI agreementCountry can be left empty.\n",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "SE"
+          },
+          {
+            "name": "customerKey",
+            "in": "query",
+            "description": "Used to retreive service points belong to a customer key\n* **Collect In Store**",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "context",
+            "in": "query",
+            "description": "A context has the logic of what types of service points to include in the response. \n* **optionalservicepoint** - active service points available for deliveries. (**Recommended value for checkout-solutions and TA-systems**)\n* **earlycollect** - service points available for the addon earlycollect (**F6**)\n* **saturdaydelivery** - returns service points with Saturday delivery. When paired with another context for example 'optionalservicepoint', will return all optional servicepoints with Saturday delivery\n* **all** - returns all service points including service points not eligible for sorting and deliveries. (**Only use if you have a logic for filtering out the not eligible service points from reponse**)\n\nSeveral contexts can be selected via a comma separated list.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "optionalservicepoint"
+            }
+          },
+          {
+            "name": "responseFilter",
+            "in": "query",
+            "description": "Defines the objects/attributes that is included in the response message to the application. \n* **public** - Standard set of objects/attributes necessary for PostNord Customer requirements (EDI, Delivery Checkouts, Map views, etc)  \n* **internal** - Extended set that includes all objects/attributes defined in the swagger model (**only use if you need other data than standard set and have separate filtering and logic to manage the response**)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "public"
+            }
+          },
+          {
+            "name": "typeId",
+            "in": "query",
+            "description": "Defines the type of the service point, used to retreive specified types.\n* **If left empty** - all types are included\n* **2** - Parcel Box Location (Nordic, Europe)\n* **4** - Cancelled (DK)\n* **6** - Pakkeshop med salg (DK)\n* **22** - Letter Office (SE)\n* **24** - Business Centre (SE)\n* **25** - Servicepoint (SE)\n* **37** - Servicepoint (NOR)\n* **38** - Servicepoint (FIN)\n* **44** - Pakkeshop (DK)\n* **46** - Cancelled (DK)\n* **51** - Collect in Store (Nordic)\n* **54** - Delivery Office (SE)\n* **61** - Servicepoint (Europe)\n* **73** - Terminal pickup (SE)\n* **74** - Letter terminal drop off (SE)\n\nA comma separated list of valid typeIds\n\nRecommended types for checkout-solutions:\n* Optional service points - 4,6,24,25,37,38,44,46,54,61\n \n* Parcel-boxes - 2\n \n* Collect in store service points (Special agreement requred) - 51\n* Early Collect (Special agreement requred) - 73\n\nRecommended is to divide the service points, parcel-boxes and collect in store.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "25"
+          },
+          {
+            "name": "located",
+            "in": "query",
+            "description": "Used to retrieve service points based on location placement\n* **indoor** \n* **outdoor**\n* **all**",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "all"
+            }
+          },
+          {
+            "name": "callback",
+            "in": "query",
+            "description": "JSONP enables making cross domain calls by generating script tags in the current document and expecting a result back to calls a specified callback handler.          ",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fileUrlResponse",
+            "in": "query",
+            "description": "Generates a GZIP file containing the reponse for the request, an URL is returned associated with the stored response file. If this parameter is true then the parameters page and perPage will have no effect.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "false"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Page in the paginated list. This feature is activated, when a number is given here.",
+            "required": false,
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "perPage",
+            "in": "query",
+            "description": "Number of results per page. Default and max is 1000.",
+            "required": false,
+            "schema": {
+              "maximum": 1000,
+              "type": "number",
+              "default": 1000
+            }
+          },
+          {
+            "name": "whiteLabelName",
+            "in": "query",
+            "description": "Add a prefix called Postnord to each service point name that defines that it belongs to PostNord.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "false"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseDto"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The server cannot or will not process the request due to something that is perceived to be a client error (e.g., malformed request syntax, invalid request message framing, or deceptive request routing).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication token is missing/invalid ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The server understood the request but refuses to authorize it (e.g. API-key, access-token, JWT)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The origin server did not find a current representation for the target resource or is not willing to disclose that one exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "The method received in the request-line is known by the origin server but not supported by the target resource."
+          },
+          "429": {
+            "description": "The user has sent too many requests in a given amount of time."
+          },
+          "499": {
+            "description": "The server does not support the functionality required to fulfill the request."
+          },
+          "503": {
+            "description": "The server is currently unable to handle the request due to a temporary overload or scheduled maintenance, which will likely be alleviated after some delay."
+          },
+          "504": {
+            "description": "The server, while acting as a gateway or proxy, did not receive a timely response from an upstream server it needed to access in order to complete the request."
+          }
+        }
+      }
+    },
+    "/v5/servicepoints/counts": {
+      "get": {
+        "tags": [
+          "Service Points Information"
+        ],
+        "summary": "Count query by parameter keys",
+        "description": "**Description** \n- Query the enables applications to discover service points using  defined parameter keys. ",
+        "operationId": "ServicePointCounts",
+        "parameters": [
+          {
+            "name": "countryCode",
+            "in": "query",
+            "description": "Defines the country where the service point is located. Country code in ISO 3166-1. \n* Value can be one of SE, NO, FI, DK, DE, BE, NL, LU, EE, LV, LT, AT, FR, ES, AX, PL, PT, CZ, IE, SK, SI",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "typeId",
+            "in": "query",
+            "description": "Defines the type of the service point, used to retreive specified types.\n* **If left empty** - all types are included\n* **2** - Parcel Box Location (Nordic, Europe)\n* **4** - Cancelled (DK)\n* **6** - Pakkeshop med salg (DK)\n* **22** - Letter Office (SE)\n* **24** - Business Centre (SE)\n* **25** - Servicepoint (SE)\n* **37** - Servicepoint (NOR)\n* **38** - Servicepoint (FIN)\n* **44** - Pakkeshop (DK)\n* **46** - Cancelled (DK)\n* **51** - Collect in Store (Nordic)\n* **54** - Delivery Office (SE)\n* **61** - Servicepoint (Europe)\n\nA comma separated list of valid typeIds ",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/countResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/countResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The server cannot or will not process the request due to something that is perceived to be a client error (e.g., malformed request syntax, invalid request message framing, or deceptive request routing).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication token is missing/invalid ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The server understood the request but refuses to authorize it (e.g. API-key, access-token, JWT)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The origin server did not find a current representation for the target resource or is not willing to disclose that one exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "The method received in the request-line is known by the origin server but not supported by the target resource."
+          },
+          "429": {
+            "description": "The user has sent too many requests in a given amount of time."
+          },
+          "499": {
+            "description": "The server does not support the functionality required to fulfill the request."
+          },
+          "503": {
+            "description": "The server is currently unable to handle the request due to a temporary overload or scheduled maintenance, which will likely be alleviated after some delay."
+          },
+          "504": {
+            "description": "The server, while acting as a gateway or proxy, did not receive a timely response from an upstream server it needed to access in order to complete the request."
+          }
+        }
+      }
+    },
+    "/v5/servicepoints/delta/information": {
+      "get": {
+        "tags": [
+          "Service Points Delta Information"
+        ],
+        "summary": "Delta query by parameters keys",
+        "description": "**Description** \n- Delta query enables applications to discover newly created, updated, or deleted service points without performing a full read of the target resource with every request. ",
+        "operationId": "getServicePointsDeltaInfo",
+        "parameters": [
+          {
+            "name": "returnType",
+            "in": "query",
+            "description": "Defines the response message format",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json"
+              ]
+            },
+            "x-default": "json"
+          },
+          {
+            "name": "countryCode",
+            "in": "query",
+            "description": "Defines the country where the service point is located. Country code in ISO 3166-1. \n* Allowed values are SE, NO, FI, DK, DE, BE, NL, LU, EE, LV, LT, AT, FR, ES, AX, PL, PT, CZ, IE, SK, SI\n* If left empty the response contains all available Nordic countries service points (SE,FI,NO,DK)\n\nSeveral countries can be selected via a comma separated list. ",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "SE,FI,NO,DK"
+          },
+          {
+            "name": "agreementCountry",
+            "in": "query",
+            "description": "Used to retreive service points for the countryCode that has an agreement to be used for senders in the agreementCountry. Defined in ISO 3166-1.\n* Value can be one of **(SE,NO,DK,FI)**. If countryCode is one of SE,NO,DK,FI then agreementCountry can be left empty.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "SE"
+          },
+          {
+            "name": "startDate",
+            "in": "query",
+            "description": "Defines the **startDate** of the delta timespan.\n* Supports upto 30 days before the **endDate**",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "2020-08-01"
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "description": "Defines the **endDate** of the delta timespan.\n* If left empty the default value is **current date**",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "2020-08-05"
+          },
+          {
+            "name": "content",
+            "in": "query",
+            "description": "Defines if the response should include the full service point information about added or updated service points.",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "customerKey",
+            "in": "query",
+            "description": "Used to retreive service points belong to a customer key\n* **Collect In Store**",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "context",
+            "in": "query",
+            "description": "A context has the logic of what types of service points to include in the response. \n* **optionalservicepoint** - active service points available for deliveries. (**Recommended value for checkout-solutions and TA-systems**)\n* **earlycollect** - service points available for the addon earlycollect (**F6**)\n* **saturdaydelivery** - returns service points with Saturday delivery. When paired with another context for example 'optionalservicepoint', will return all optional servicepoints with Saturday delivery\n* **all** - returns all service points including service points not eligible for sorting and deliveries. (**Only use if you have a logic for filtering out the not eligible service points from reponse**)\n\nSeveral contexts can be selected via a comma separated list.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "optionalservicepoint"
+            }
+          },
+          {
+            "name": "responseFilter",
+            "in": "query",
+            "description": "Defines the objects/attributes that is included in the response message to the application. \n* **public** - returns objects/attributes nessassary for PostNord Customer requirements (EDI, Delivery Checkouts, Map views, ..)  \n* **internal** - returns all objects/attributes defined in the swagger model",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "public",
+              "enum": [
+                "public",
+                "internal"
+              ]
+            }
+          },
+          {
+            "name": "callback",
+            "in": "query",
+            "description": "JSONP enables making cross domain calls by generating script tags in the current document and expecting a result back to calls a specified callback handler.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeltaResponseDto"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeltaResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The server cannot or will not process the request due to something that is perceived to be a client error (e.g., malformed request syntax, invalid request message framing, or deceptive request routing).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication token is missing/invalid ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The server understood the request but refuses to authorize it (e.g. API-key, access-token, JWT)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The origin server did not find a current representation for the target resource or is not willing to disclose that one exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "The method received in the request-line is known by the origin server but not supported by the target resource."
+          },
+          "429": {
+            "description": "The user has sent too many requests in a given amount of time."
+          },
+          "499": {
+            "description": "The server does not support the functionality required to fulfill the request."
+          },
+          "503": {
+            "description": "The server is currently unable to handle the request due to a temporary overload or scheduled maintenance, which will likely be alleviated after some delay."
+          },
+          "504": {
+            "description": "The server, while acting as a gateway or proxy, did not receive a timely response from an upstream server it needed to access in order to complete the request."
+          }
+        }
+      }
+    },
+    "/v5/servicepoints/file/ALL-SE-FI-DK-NO-{date}.json.gz": {
+      "get": {
+        "tags": [
+          "Service Points File"
+        ],
+        "summary": "Get service point file of all Nordic countries (SE,FI,DK,NO).",
+        "description": "Get service point file of all Nordic countries (SE,FI,DK,NO) from S3 storage. You can download previous service point file upto 7 days from current date. This is equivalent to **/information** endpoint with parameters `countryCode:SE,FI,DK,NO` and `context:ALL` and header `Accept-Encoding:gzip`.\n\nDownload the file using the URL in reponse.",
+        "operationId": "ServicePointFile",
+        "parameters": [
+          {
+            "name": "date",
+            "in": "path",
+            "description": "Date of file you want to download. Format should be **YYYY-MM-DD**.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/gzip": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication token is missing/invalid ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This is usually returned if the file specified is non-existent. (e.g., date specified is out of 7-day range, wrong date format, etc.).",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The origin server did not find a current representation for the target resource or is not willing to disclose that one exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "The method received in the request-line is known by the origin server but not supported by the target resource."
+          },
+          "429": {
+            "description": "The user has sent too many requests in a given amount of time."
+          },
+          "499": {
+            "description": "The server does not support the functionality required to fulfill the request."
+          },
+          "503": {
+            "description": "The server is currently unable to handle the request due to a temporary overload or scheduled maintenance, which will likely be alleviated after some delay."
+          },
+          "504": {
+            "description": "The server, while acting as a gateway or proxy, did not receive a timely response from an upstream server it needed to access in order to complete the request."
+          }
+        }
+      }
+    },
+    "/v5/servicepoints/delta/file/ALL-DELTA-SE-FI-DK-NO-{from_date}.json.gz": {
+      "get": {
+        "tags": [
+          "Service Points File"
+        ],
+        "summary": "Get the changes of service points of all Nordic countries (SE,FI,DK,NO).",
+        "description": "Get the changes of service points of all Nordic countries (SE,FI,DK,NO) from date specified upto current date. File available upto 30 days backward from current date.\n\nDownload the file using the URL in reponse.",
+        "operationId": "ServicePointDeltaFile",
+        "parameters": [
+          {
+            "name": "from_date",
+            "in": "path",
+            "description": "The date of comparison against the current date. Format should be **YYYY-MM-DD**.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeltaResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication token is missing/invalid ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This is usually returned if the file specified is non-existent. (e.g., date specified is out of 30-day range, wrong date format, etc.).",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v5/servicepoints/types": {
+      "get": {
+        "tags": [
+          "Service Points Types"
+        ],
+        "summary": "Get all valid service point types.",
+        "description": "Get all valid service point types and group types for Nordic countries (SE,FI,DK,NO)",
+        "operationId": "ServicePointTypes",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServicePointTypes"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication token is missing/invalid ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "This is usually returned when requester is not allowed to perform the request. ",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The origin server did not find a current representation for the target resource or is not willing to disclose that one exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "The method received in the request-line is known by the origin server but not supported by the target resource."
+          },
+          "429": {
+            "description": "The user has sent too many requests in a given amount of time."
+          },
+          "499": {
+            "description": "The server does not support the functionality required to fulfill the request."
+          },
+          "503": {
+            "description": "The server is currently unable to handle the request due to a temporary overload or scheduled maintenance, which will likely be alleviated after some delay."
+          },
+          "504": {
+            "description": "The server, while acting as a gateway or proxy, did not receive a timely response from an upstream server it needed to access in order to complete the request."
+          }
+        }
+      }
+    },
+    "/v1/servicepoints/blom/sync": {
+      "get": {
+        "tags": [
+          "Service Points Caching"
+        ],
+        "summary": "Imports from BLOM Expose",
+        "description": "Imports from BLOM Expose",
+        "operationId": "getFileListFromBlom",
+        "responses": {
+          "200": {
+            "description": "Successful execution of background process"
+          },
+          "503": {
+            "description": "The server is currently unable to handle the request due to a temporary overload or scheduled maintenance, which will likely be alleviated after some delay."
+          },
+          "504": {
+            "description": "The server, while acting as a gateway or proxy, did not receive a timely response from an upstream server it needed to access in order to complete the request."
+          }
+        }
+      }
+    },
+    "/v1/servicepoints/blom/sync/toggle": {
+      "get": {
+        "tags": [
+          "Service Points Caching"
+        ],
+        "summary": "Gets current state (Enabled/Disabled) of cron schedule for importing from BLOM Expose",
+        "description": "Gets current state (Enabled/Disabled) of cron schedule for importing from BLOM Expose",
+        "operationId": "getBlomExposeSyncToggleState",
+        "responses": {
+          "200": {
+            "description": "ENABLED / DISABLED"
+          },
+          "503": {
+            "description": "The server is currently unable to handle the request due to a temporary overload or scheduled maintenance, which will likely be alleviated after some delay."
+          },
+          "504": {
+            "description": "The server, while acting as a gateway or proxy, did not receive a timely response from an upstream server it needed to access in order to complete the request."
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Service Points Caching"
+        ],
+        "summary": "Enables/Disables cron schedule for importing from BLOM Expose",
+        "description": "Enables/Disables cron schedule for importing from BLOM Expose",
+        "operationId": "toggleBlomExposeSync",
+        "parameters": [
+          {
+            "name": "enable",
+            "in": "query",
+            "description": "the state of cron scheduler to be set",
+            "required": true,
+            "schema": {
+              "type": "boolean"
+            },
+            "x-default": "json"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully enables/disables cron schedule"
+          },
+          "503": {
+            "description": "The server is currently unable to handle the request due to a temporary overload or scheduled maintenance, which will likely be alleviated after some delay."
+          },
+          "504": {
+            "description": "The server, while acting as a gateway or proxy, did not receive a timely response from an upstream server it needed to access in order to complete the request."
+          }
+        }
+      }
+    },
+    "/v1/servicepoints/blom/sync/executions": {
+      "get": {
+        "tags": [
+          "Service Points Caching"
+        ],
+        "summary": "List of BLOM Expose sync executions",
+        "description": "List of BLOM Expose sync executions",
+        "operationId": "getBlomExposeSyncExecutions",
+        "responses": {
+          "200": {
+            "description": "Successful execution of background process"
+          },
+          "503": {
+            "description": "The server is currently unable to handle the request due to a temporary overload or scheduled maintenance, which will likely be alleviated after some delay."
+          },
+          "504": {
+            "description": "The server, while acting as a gateway or proxy, did not receive a timely response from an upstream server it needed to access in order to complete the request."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Address": {
+        "type": "object",
+        "properties": {
+          "countryCode": {
+            "type": "string",
+            "description": "The 2-letter country code",
+            "example": "SE"
+          },
+          "city": {
+            "type": "string",
+            "description": "The city",
+            "example": "SOLNA"
+          },
+          "streetName": {
+            "type": "string",
+            "description": "The street name",
+            "example": "Terminalvägen"
+          },
+          "streetNumber": {
+            "type": "string",
+            "description": "The street number",
+            "example": "24"
+          },
+          "postalCode": {
+            "type": "string",
+            "description": "The postal code",
+            "example": "17173"
+          },
+          "addressType": {
+            "type": "string",
+            "description": "The type of the address",
+            "example": "VISITING"
+          },
+          "additionalDescription": {
+            "type": "string",
+            "example": "The locker box is found on the 2:a floor"
+          }
+        },
+        "description": "Visiting address is where the item is pickuped or dropped off at the service point. \nThe delivery address is used in the EDI for optional service point.\n"
+      },
+      "BoxType": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "The Label for the box type",
+            "example": "MyBox"
+          },
+          "id": {
+            "type": "integer",
+            "description": "The ID of the box type label",
+            "format": "int32",
+            "example": 3
+          },
+          "located": {
+            "type": "string",
+            "description": "Describes if the box is located indoor or outdoor",
+            "example": "indoor"
+          },
+          "pickupRequirements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/pickupRequirement"
+            }
+          }
+        },
+        "description": "Additional information about parcel boxes"
+      },
+      "pickupRequirement": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "ENUM for the pickup requirement",
+            "example": "1"
+          },
+          "label": {
+            "type": "string",
+            "description": "Label associated with the id",
+            "example": "PostNord APP"
+          }
+        },
+        "description": "Defines the requirements to be able to pickup the item"
+      },
+      "CompositeFault": {
+        "type": "object",
+        "properties": {
+          "faults": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Faults"
+            }
+          }
+        },
+        "description": "The composite fault object containing an array of fault objects"
+      },
+      "Faults": {
+        "required": [
+          "explanationText"
+        ],
+        "type": "object",
+        "properties": {
+          "paramValues": {
+            "uniqueItems": true,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ParamValue"
+            }
+          },
+          "explanationText": {
+            "type": "string",
+            "description": "Explanation text message",
+            "example": "Missing parameter"
+          },
+          "faultCode": {
+            "type": "string",
+            "description": "The defined fault code",
+            "example": "API-005"
+          }
+        },
+        "description": "Fault object with the associated code and explanation text"
+      },
+      "Coordinate": {
+        "required": [
+          "easting",
+          "northing",
+          "srId"
+        ],
+        "type": "object",
+        "properties": {
+          "countryCode": {
+            "type": "string",
+            "description": "The 2-letter country code",
+            "example": "SE"
+          },
+          "northing": {
+            "type": "number",
+            "description": "Longitude",
+            "example": 59.35014139999998
+          },
+          "easting": {
+            "type": "number",
+            "description": "Latitude",
+            "example": 18.009889600000005
+          },
+          "srId": {
+            "type": "string",
+            "description": "Geodetic coordinate system",
+            "example": "EPSG:4326"
+          }
+        },
+        "description": "Map coordinates to the service point"
+      },
+      "CustomerSupport": {
+        "required": [
+          "country",
+          "customerSupportPhoneNo"
+        ],
+        "type": "object",
+        "properties": {
+          "customerSupportPhoneNo": {
+            "type": "string",
+            "description": "The customer support phone number",
+            "example": "+46771333310"
+          },
+          "country": {
+            "type": "string",
+            "description": "The 2-letter country code",
+            "example": "SE"
+          }
+        },
+        "description": "Customer support information"
+      },
+      "DropOff": {
+        "type": "object",
+        "properties": {
+          "abroadExport": {
+            "type": "string",
+            "description": "Defines if items can be sent outside the nordic region: [true|false]",
+            "example": "true"
+          },
+          "amountLimit": {
+            "type": "string",
+            "description": "Defines the amount limit for value items",
+            "example": "100000"
+          },
+          "customerFacing": {
+            "type": "string",
+            "description": "Defines the type of supported customers meeting: [B2B | B2C]",
+            "example": "B2B"
+          },
+          "prepaidOnly": {
+            "type": "string",
+            "description": "Defines if prepaid items can be dropped off at the service point: [true|false]",
+            "example": "true"
+          },
+          "agreementOnly": {
+            "type": "string",
+            "description": "Defines if only customers with an agreement can drop off items: [true|false]",
+            "example": "false"
+          },
+          "products": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductDropOff"
+            }
+          }
+        },
+        "description": "Defines the PostNord capabilities associated with/what a recipient can drop off at a service point"
+      },
+      "ProductDropOff": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Product name",
+            "example": "PARCELS"
+          },
+          "timeSlots": {
+            "type": "array",
+            "description": "Time slots concerning drop offs",
+            "items": {
+              "$ref": "#/components/schemas/dropOffTimeslots"
+            }
+          }
+        },
+        "description": "List of products"
+      },
+      "NotificationArea": {
+        "type": "object",
+        "properties": {
+          "postalCodes": {
+            "type": "array",
+            "xml": {
+              "wrapped": true
+            },
+            "items": {
+              "type": "string",
+              "description": "Postal code",
+              "example": "17173",
+              "xml": {
+                "name": "string"
+              }
+            }
+          }
+        },
+        "description": "Defines the postal codes which are covered by the service point"
+      },
+      "Popularity": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "string",
+            "description": "Weekday",
+            "example": "MONDAY"
+          },
+          "percent": {
+            "type": "number",
+            "description": "The percentage of visits the associated day",
+            "format": "integer",
+            "example": 16
+          },
+          "hours": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Hours"
+            }
+          }
+        },
+        "description": "Popularity"
+      },
+      "Hours": {
+        "type": "object",
+        "properties": {
+          "hour": {
+            "type": "string",
+            "description": "Hour of day",
+            "example": "07:00"
+          },
+          "percent": {
+            "type": "number",
+            "description": "The percentage of visits for that hour for the associated day",
+            "format": "integer",
+            "example": 9
+          },
+          "peakHourPercent": {
+            "type": "number",
+            "description": "The value is based on dividing the day-hour percent with the highest day-hour percent for the service point independent on day/hour",
+            "format": "integer",
+            "example": 9
+          }
+        }
+      },
+      "PostalDate": {
+        "type": "object",
+        "properties": {
+          "openDay": {
+            "type": "string",
+            "example": "MONDAY"
+          },
+          "openTime": {
+            "type": "string",
+            "example": "07:00"
+          },
+          "closeDay": {
+            "type": "string",
+            "example": "MONDAY"
+          },
+          "closeTime": {
+            "type": "string",
+            "example": "07:00"
+          },
+          "note": {
+            "type": "string",
+            "example": "Ordinary opening hours"
+          }
+        }
+      },
+      "countResponse": {
+        "type": "object",
+        "properties": {
+          "typeId": {
+            "type": "string",
+            "description": "The typeId",
+            "example": "2"
+          },
+          "countryCode": {
+            "type": "string",
+            "description": "2-letter country code",
+            "example": "SE"
+          },
+          "count": {
+            "type": "integer",
+            "description": "Number of service points",
+            "example": 1200
+          },
+          "detailedCount": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/countEligibleParcelOutlet"
+            }
+          }
+        },
+        "description": ""
+      },
+      "countEligibleParcelOutlet": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The name",
+            "example": "OptionalServicePoint"
+          },
+          "value": {
+            "type": "string",
+            "description": "",
+            "example": "true"
+          },
+          "count": {
+            "type": "integer",
+            "description": "Number of service points",
+            "example": 1200
+          }
+        },
+        "description": ""
+      },
+      "ParamValue": {
+        "required": [
+          "param",
+          "value"
+        ],
+        "type": "object",
+        "properties": {
+          "param": {
+            "type": "string",
+            "description": "The parameter",
+            "example": "countryCode"
+          },
+          "value": {
+            "type": "string",
+            "description": "The value for for the parameter",
+            "example": "SE"
+          }
+        },
+        "description": "Name value pair object"
+      },
+      "ResponseDto": {
+        "required": [
+          "servicePointInformationResponse"
+        ],
+        "type": "object",
+        "properties": {
+          "servicePointInformationResponse": {
+            "$ref": "#/components/schemas/servicePointInformationResponse"
+          }
+        }
+      },
+      "DeltaResponseDto": {
+        "required": [
+          "servicePointInformationResponse"
+        ],
+        "type": "object",
+        "properties": {
+          "servicePointInformationResponse": {
+            "$ref": "#/components/schemas/servicePointInformationDeltaResponse"
+          }
+        }
+      },
+      "ServicePointInformationStore": {
+        "type": "object",
+        "properties": {
+          "servicePointId": {
+            "type": "string",
+            "description": "The unique ID used in the EDI for optional service point",
+            "example": "020001"
+          },
+          "name": {
+            "type": "string",
+            "description": "Refers to the name of location",
+            "example": "PostNord Service Point"
+          },
+          "routingCode": {
+            "type": "string",
+            "description": "Information used for labels in Finland",
+            "example": "TUR"
+          },
+          "handlingOffice": {
+            "type": "string",
+            "description": "Information used for labels in Finland",
+            "example": "AKAA MH-ASIAMIES"
+          },
+          "locationDetail": {
+            "type": "string",
+            "description": "Additional information about the servicepoint",
+            "nullable": true,
+            "example": "detailed information"
+          },
+          "phoneNoToCashRegister": {
+            "type": "string",
+            "description": "Phone number to the cash register",
+            "nullable": true
+          },
+          "routeDistance": {
+            "type": "integer",
+            "description": "The distance in meter to service point from a given address",
+            "format": "int32",
+            "example": 1017
+          },
+          "supplier": {
+            "type": "string",
+            "description": "Supplier name",
+            "example": "SBClassic"
+          },
+          "eligibleParcelOutlet": {
+            "$ref": "#/components/schemas/eligibleParcelOutlet"
+          },
+          "dropOff": {
+            "$ref": "#/components/schemas/DropOff"
+          },
+          "pickup": {
+            "$ref": "#/components/schemas/Pickup"
+          },
+          "buy": {
+            "$ref": "#/components/schemas/Buy"
+          },
+          "visitingAddress": {
+            "$ref": "#/components/schemas/Address"
+          },
+          "deliveryAddress": {
+            "$ref": "#/components/schemas/Address"
+          },
+          "notificationArea": {
+            "$ref": "#/components/schemas/NotificationArea"
+          },
+          "coordinates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Coordinate"
+            }
+          },
+          "openingHours": {
+            "$ref": "#/components/schemas/OpeningHours"
+          },
+          "popularTimes": {
+            "$ref": "#/components/schemas/popularTimes"
+          },
+          "type": {
+            "$ref": "#/components/schemas/type"
+          }
+        }
+      },
+      "type": {
+        "type": "object",
+        "properties": {
+          "groupTypeId": {
+            "type": "integer",
+            "description": "Type ID",
+            "example": 2
+          },
+          "groupTypeName": {
+            "type": "string",
+            "description": "Type ID name",
+            "example": "Service Box"
+          },
+          "typeId": {
+            "type": "integer",
+            "description": "Detailed type ID",
+            "example": 2
+          },
+          "typeName": {
+            "type": "string",
+            "description": "Deailed type name",
+            "example": "Parcel Box Location"
+          },
+          "boxType": {
+            "$ref": "#/components/schemas/BoxType"
+          }
+        },
+        "description": "Service point type information"
+      },
+      "SpecialDate": {
+        "type": "object",
+        "properties": {
+          "startDate": {
+            "type": "string",
+            "description": "Start date",
+            "example": "2020-12-25"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Reason",
+            "example": "Christmas Day"
+          },
+          "openTime": {
+            "type": "string",
+            "description": "Opening time",
+            "example": "08:00"
+          },
+          "isClosed": {
+            "type": "boolean",
+            "description": "Is closed:  [true|false]",
+            "example": false
+          },
+          "endDate": {
+            "type": "string",
+            "description": "End date",
+            "example": "2020-12-25"
+          },
+          "closeTime": {
+            "type": "string",
+            "description": "Close time",
+            "example": "12:00"
+          }
+        },
+        "description": "Special Date"
+      },
+      "servicePointInformationDeltaResponse": {
+        "type": "object",
+        "properties": {
+          "compositeFault": {
+            "$ref": "#/components/schemas/CompositeFault"
+          },
+          "countries": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/countries"
+            },
+            "example": {
+              "SE": {
+                "added": [
+                  "734084"
+                ],
+                "changed": [
+                  "293593",
+                  "695894"
+                ],
+                "removed": [
+                  "734063"
+                ]
+              }
+            }
+          },
+          "customerSupports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CustomerSupport"
+            }
+          },
+          "servicePoints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServicePointInformationStore"
+            }
+          }
+        }
+      },
+      "countries": {
+        "type": "object",
+        "properties": {
+          "added": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "changed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "endSize": {
+            "type": "string"
+          },
+          "removed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "startSize": {
+            "type": "string"
+          }
+        }
+      },
+      "servicePointInformationResponse": {
+        "type": "object",
+        "properties": {
+          "compositeFault": {
+            "$ref": "#/components/schemas/CompositeFault"
+          },
+          "paging": {
+            "$ref": "#/components/schemas/Paging"
+          },
+          "urls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/urlsv2"
+            }
+          },
+          "customerSupports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CustomerSupport"
+            }
+          },
+          "servicePoints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServicePointInformationStore"
+            }
+          }
+        }
+      },
+      "OpeningHours": {
+        "type": "object",
+        "properties": {
+          "postalServices": {
+            "type": "array",
+            "description": "Date/times when the service point handles postal services  ",
+            "items": {
+              "$ref": "#/components/schemas/PostalDate"
+            }
+          },
+          "specialDates": {
+            "type": "array",
+            "description": "Special date/times when the service point doesn't handle postal services",
+            "items": {
+              "$ref": "#/components/schemas/SpecialDate"
+            }
+          }
+        },
+        "description": "The service point opening hours"
+      },
+      "popularTimes": {
+        "type": "object",
+        "properties": {
+          "popularity": {
+            "type": "array",
+            "description": "Defines the popularity of the location. Gives a weekly (by day and hour) how popular\nthat particular location is based on a count factor.\n",
+            "items": {
+              "$ref": "#/components/schemas/Popularity"
+            }
+          }
+        }
+      },
+      "Paging": {
+        "type": "object",
+        "properties": {
+          "perPage": {
+            "type": "number",
+            "description": "Number of results per page",
+            "example": 1000
+          },
+          "totalEntries": {
+            "type": "number",
+            "description": "Total entries of results",
+            "example": 2500
+          },
+          "totalPages": {
+            "type": "number",
+            "description": "Total pages in the results",
+            "example": 3
+          },
+          "currentPage": {
+            "type": "number",
+            "description": "Current page in the results",
+            "example": 1
+          }
+        }
+      },
+      "Pickup": {
+        "type": "object",
+        "properties": {
+          "cashOnDelivery": {
+            "type": "string",
+            "description": "Items with cash on delivery can be picked up:  [true|false]",
+            "example": "true"
+          },
+          "heavyGoodsProducts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Product"
+            }
+          },
+          "products": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductPickup"
+            }
+          }
+        },
+        "description": "PostNord delivery capabilities e.g products, timeslots, features, heavy goods,etc"
+      },
+      "Buy": {
+        "type": "object",
+        "properties": {
+          "products": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Product"
+            }
+          }
+        },
+        "description": "Defines the PostNord capabilities with regards to the customer meeting at the service point"
+      },
+      "ProductPickup": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Product name",
+            "example": "PARCELS"
+          },
+          "timeSlots": {
+            "$ref": "#/components/schemas/Timeslots"
+          }
+        },
+        "description": "List of products"
+      },
+      "Product": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Product name",
+            "example": "PARCELS"
+          }
+        }
+      },
+      "dropOffTimeslots": {
+        "type": "object",
+        "properties": {
+          "guaranteedDropOffTime": {
+            "type": "array",
+            "description": "A dropped off before this time will be pickup by PostNord the same day",
+            "items": {
+              "$ref": "#/components/schemas/dropOffDay"
+            }
+          }
+        }
+      },
+      "dropOffDay": {
+        "type": "object",
+        "properties": {
+          "latestTime": {
+            "type": "string",
+            "description": "Time",
+            "example": "08:30"
+          },
+          "day": {
+            "type": "string",
+            "description": "Day",
+            "example": "SATURDAY",
+            "enum": [
+              "ALLWEEK",
+              "MONDAY",
+              "TUESDAY",
+              "WEDNESDAY",
+              "THURSDAY",
+              "FRIDAY",
+              "SATURDAY",
+              "SUNDAY"
+            ]
+          }
+        },
+        "description": "Day"
+      },
+      "eligibleParcelOutlet": {
+        "type": "array",
+        "description": "Defines the rules when the service point is eligible to, select as optional service point",
+        "items": {
+          "$ref": "#/components/schemas/eligible"
+        }
+      },
+      "eligible": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Eligible Parcel Outlet ID",
+            "example": "1"
+          },
+          "name": {
+            "type": "string",
+            "description": "Eligible Parcel Outlet Name",
+            "example": "Optional Service Point"
+          },
+          "value": {
+            "type": "string",
+            "description": "Eligible Parcel Outlet Value (true/false)",
+            "example": "true"
+          }
+        }
+      },
+      "pickupDay": {
+        "type": "object",
+        "properties": {
+          "earliestTime": {
+            "type": "string",
+            "description": "Time",
+            "example": "08:30"
+          },
+          "day": {
+            "type": "string",
+            "description": "Day",
+            "example": "SATURDAY",
+            "enum": [
+              "ALLWEEK",
+              "MONDAY",
+              "TUESDAY",
+              "WEDNESDAY",
+              "THURSDAY",
+              "FRIDAY",
+              "SATURDAY",
+              "SUNDAY"
+            ]
+          }
+        },
+        "description": "Day"
+      },
+      "Timeslots": {
+        "type": "object",
+        "properties": {
+          "availableForPickupStandard": {
+            "type": "array",
+            "description": "Standard: defines the days when PostNord delivers to the service point and the time when it is available for pickup",
+            "items": {
+              "$ref": "#/components/schemas/pickupDay"
+            }
+          },
+          "availableForPickupEarlyCollect": {
+            "type": "array",
+            "description": "Early Collect: defines the days when PostNord delivers to the service point and the time when it is available for pickup",
+            "items": {
+              "$ref": "#/components/schemas/pickupDay"
+            }
+          }
+        }
+      },
+      "ServicePointTypes": {
+        "type": "object",
+        "properties": {
+          "DK": {
+            "type": "array",
+            "description": "defines the DK service points types",
+            "items": {
+              "$ref": "#/components/schemas/ServicePointTypeId"
+            }
+          },
+          "FI": {
+            "type": "array",
+            "description": "defines the FI service points types",
+            "items": {
+              "$ref": "#/components/schemas/ServicePointTypeId"
+            }
+          },
+          "false": {
+            "type": "array",
+            "description": "defines the NO service points types",
+            "items": {
+              "$ref": "#/components/schemas/ServicePointTypeId"
+            }
+          },
+          "SE": {
+            "type": "array",
+            "description": "defines the SE service points types",
+            "items": {
+              "$ref": "#/components/schemas/ServicePointTypeId"
+            }
+          }
+        }
+      },
+      "ServicePointTypeId": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "2"
+          },
+          "name": {
+            "type": "string",
+            "example": "Parcel Box Location"
+          },
+          "groupTypeId": {
+            "type": "string",
+            "example": "2"
+          },
+          "groupTypeName": {
+            "type": "string",
+            "example": "Service box"
+          }
+        }
+      },
+      "errorResponse": {
+        "required": [
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "compositeFault": {
+            "$ref": "#/components/schemas/compositeFault"
+          },
+          "message": {
+            "type": "string",
+            "description": "High level error message.",
+            "example": "Query parameter missing"
+          }
+        },
+        "description": "PostNord standard error response message"
+      },
+      "compositeFault": {
+        "type": "object",
+        "properties": {
+          "faults": {
+            "uniqueItems": true,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/fault"
+            }
+          }
+        },
+        "description": "The composite fault object containing an array of fault objects"
+      },
+      "fault": {
+        "required": [
+          "explanationText"
+        ],
+        "type": "object",
+        "properties": {
+          "paramValues": {
+            "uniqueItems": true,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/paramValue_2"
+            }
+          },
+          "explanationText": {
+            "type": "string",
+            "example": "Missing parameter"
+          },
+          "faultCode": {
+            "type": "string",
+            "example": "API-005"
+          }
+        },
+        "description": "Fault object with the associated code and explanation text"
+      },
+      "paramValue_2": {
+        "type": "object",
+        "properties": {
+          "param": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "description": "A parameter value pair is a set of two linked data items"
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "Code": {
+            "type": "string"
+          },
+          "Message": {
+            "type": "string"
+          },
+          "RequestId": {
+            "type": "string"
+          },
+          "HostId": {
+            "type": "string"
+          }
+        },
+        "description": "Error returned from S3 storage"
+      },
+      "urlsv2": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Defines the type of URL (TRACKING, BOOKPICKUP, SERVICEPOINTFILE, etc).",
+            "example": "SERVICEPOINTFILE"
+          },
+          "url": {
+            "type": "string",
+            "description": "The url",
+            "example": "https://api2.postnord.com/file/servicepoints/xdradsgsvs.json"
+          }
+        },
+        "description": "A value pair of URLs"
+      }
+    },
+    "securitySchemes": {
+      "apiKey": {
+        "type": "apiKey",
+        "description": "Provide the apikey you got after signup on portal",
+        "name": "apikey",
+        "in": "query"
+      }
+    }
+  }
+}
