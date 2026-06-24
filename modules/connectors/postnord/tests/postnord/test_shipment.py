@@ -188,7 +188,7 @@ ShipmentRequest = {
                     "numberOfPackageTypeCodeItems": {"value": 1},
                     "items": [
                         {
-                            "itemIdentification": {"itemId": "ORDER-77881"},
+                            "itemIdentification": {"itemId": "0"},
                             "grossWeight": {"value": 1.5, "unit": "KGM"},
                             "dimensions": {
                                 "height": {"value": 10.0, "unit": "CMT"},
