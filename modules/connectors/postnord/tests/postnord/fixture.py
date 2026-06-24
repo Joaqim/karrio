@@ -13,11 +13,29 @@ gateway = karrio.gateway["postnord"].create(
         customer_number="00000000",
         application_id="2458",
         account_country_code="SE",
-        config=dict(
-            rate_table={
-                "18": {"amount": 89.0, "currency": "SEK"},
-                "17": {"amount": 99.0, "currency": "SEK"},
-            },
-        ),
+        # PostNord has no live rate API: per-merchant contract prices arrive via
+        # Karrio's server-side RateSheet, modeled here as service-level zones.
+        services=[
+            dict(
+                service_name="PostNord Parcel",
+                service_code="postnord_parcel",
+                carrier_service_code="18",
+                currency="SEK",
+                transit_days=2,
+                domicile=True,
+                international=False,
+                zones=[dict(label="Sweden", rate=89.0, country_codes=["SE"])],
+            ),
+            dict(
+                service_name="PostNord MyPack Home",
+                service_code="postnord_mypack_home",
+                carrier_service_code="17",
+                currency="SEK",
+                transit_days=2,
+                domicile=True,
+                international=False,
+                zones=[dict(label="Sweden", rate=99.0, country_codes=["SE"])],
+            ),
+        ],
     )
 )

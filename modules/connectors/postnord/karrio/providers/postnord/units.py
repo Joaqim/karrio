@@ -1,14 +1,11 @@
+import typing
 import karrio.lib as lib
 import karrio.core.units as units
+import karrio.core.models as models
 
 
 class ConnectionConfig(lib.Enum):
     """PostNord connection configuration options."""
-
-    # Static rate table backing config-driven rating (D1, Q3 per-connection).
-    # Maps a basicServiceCode to its price, e.g.
-    #   {"18": {"amount": 89.0, "currency": "SEK"}, "17": {...}}
-    rate_table = lib.OptionEnum("rate_table", dict)
 
     label_type = lib.OptionEnum("label_type", str, "PDF")
     label_format = lib.OptionEnum("label_format", str, "A4")
@@ -101,3 +98,77 @@ class TrackingStatus(lib.Enum):
     """
 
     in_transit = ["IN_TRANSIT"]
+
+
+# PostNord publishes no live money-rate API; prices are per-merchant contract
+# rates supplied server-side via Karrio's RateSheet. These defaults seed the
+# rate-sheet catalog with the carrier's service levels and zones; the rate=0.0
+# placeholders are overridden by the merchant's negotiated prices at runtime.
+DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
+    models.ServiceLevel(
+        service_name="PostNord MyPack Home",
+        service_code="postnord_mypack_home",
+        carrier_service_code="17",
+        currency="SEK",
+        transit_days=2,
+        domicile=True,
+        international=False,
+        zones=[models.ServiceZone(label="Sweden", rate=0.0, country_codes=["SE"])],
+    ),
+    models.ServiceLevel(
+        service_name="PostNord Parcel",
+        service_code="postnord_parcel",
+        carrier_service_code="18",
+        currency="SEK",
+        transit_days=2,
+        domicile=True,
+        international=False,
+        zones=[models.ServiceZone(label="Sweden", rate=0.0, country_codes=["SE"])],
+    ),
+    models.ServiceLevel(
+        service_name="PostNord MyPack Collect",
+        service_code="postnord_mypack_collect",
+        carrier_service_code="19",
+        currency="SEK",
+        transit_days=3,
+        domicile=True,
+        international=False,
+        zones=[models.ServiceZone(label="Sweden", rate=0.0, country_codes=["SE"])],
+    ),
+    models.ServiceLevel(
+        service_name="PostNord Return Pickup",
+        service_code="postnord_return_pickup",
+        carrier_service_code="20",
+        currency="SEK",
+        transit_days=3,
+        domicile=True,
+        international=False,
+        zones=[models.ServiceZone(label="Sweden", rate=0.0, country_codes=["SE"])],
+    ),
+    models.ServiceLevel(
+        service_name="PostNord Pallet",
+        service_code="postnord_pallet",
+        carrier_service_code="52",
+        currency="SEK",
+        transit_days=3,
+        domicile=True,
+        international=False,
+        zones=[
+            models.ServiceZone(
+                label="Nordic",
+                rate=0.0,
+                country_codes=["SE", "NO", "DK", "FI"],
+            )
+        ],
+    ),
+    models.ServiceLevel(
+        service_name="PostNord Postpaket Utrikes",
+        service_code="postnord_postpaket_utrikes",
+        carrier_service_code="91",
+        currency="SEK",
+        transit_days=5,
+        domicile=False,
+        international=True,
+        zones=[models.ServiceZone(label="International", rate=0.0)],
+    ),
+]
