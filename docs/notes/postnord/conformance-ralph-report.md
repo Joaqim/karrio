@@ -24,3 +24,4 @@ Iterative measure→fix→commit loop driving the PostNord carrier integration t
 |-------|--------|--------|---------------|-------|
 | baseline | — | — | 4 | 18 pass |
 | 1 | D1 | `parse_shipment_cancel_response` returns `None` + explicit `cancellation_unsupported` message; never reports success on an empty body | 3 | 17 pass |
+| 2 | D2 | `return_shipment` delegates to the `create` flow (PostNord returns are bookings with a return service code), replacing the `{}` stub | 2 | 17 pass |
