@@ -205,31 +205,7 @@ ShipmentRequest = {
 }
 
 ShipmentCancelRequest = {
-    "application": {"name": "Karrio", "applicationId": 2458},
-    "messageDate": ANY,
-    "testIndicator": True,
-    "updateIndicator": "Deletion",
-    "shipment": [
-        {
-            "shipmentIdentification": {"shipmentId": "SHIP-0001"},
-            "parties": {
-                "consignor": {
-                    "issuerCode": "Z12",
-                    "partyIdentification": {
-                        "partyId": "00000000",
-                        "partyIdType": "160",
-                    },
-                },
-            },
-            "goodsItem": [
-                {
-                    "items": [
-                        {"itemIdentification": {"itemId": "SHIP-0001"}},
-                    ],
-                }
-            ],
-        }
-    ],
+    "ids": [{"id": "SHIP-0001"}],
 }
 
 ShipmentResponse = """{

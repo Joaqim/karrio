@@ -46,8 +46,12 @@ def _extract_details(
         if _id.value
     ]
 
-    references = getattr(response.references, "shipment", None) or []
-    reference_nos = [ref.referenceNo for ref in references if ref.referenceNo]
+    reference_nos = [
+        ref.referenceNo
+        for info in informations
+        for ref in (getattr(info.references, "shipment", None) or [])
+        if ref.referenceNo
+    ]
 
     return models.ManifestDetails(
         carrier_id=settings.carrier_id,

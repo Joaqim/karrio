@@ -109,11 +109,11 @@ def shipment_request(
 
     additional_service_codes = [option.code for _, option in options.items()]
 
-    # PostNord matches a Deletion (cancellation) against the original booking's
-    # shipmentIdentification.shipmentId. Assigning a client shipmentId here lets
-    # the cancel call reference it; without one PostNord auto-allocates and the
-    # Deletion finds 0 items. Prefer the caller reference; fall back to a
-    # generated id (unit tests always set a reference).
+    # Assign a client-controlled shipmentId from the merchant reference so the
+    # booking carries a searchable Track & Trace id; without one PostNord
+    # auto-allocates an opaque id. Prefer the caller reference; fall back to a
+    # generated id (unit tests always set a reference). Cancellation is not
+    # performed via this id (see shipment/cancel.py).
     shipment_id = payload.reference or uuid.uuid4().hex[:12].upper()
 
     def _party(address, *, with_consignor_id: bool) -> postnord_req.ConsignType:
