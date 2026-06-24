@@ -209,7 +209,25 @@ ShipmentCancelRequest = {
     "testIndicator": True,
     "updateIndicator": "Deletion",
     "shipment": [
-        {"shipmentIdentification": {"shipmentId": "SHIP-0001"}},
+        {
+            "shipmentIdentification": {"shipmentId": "SHIP-0001"},
+            "parties": {
+                "consignor": {
+                    "issuerCode": "Z12",
+                    "partyIdentification": {
+                        "partyId": "00000000",
+                        "partyIdType": "160",
+                    },
+                },
+            },
+            "goodsItem": [
+                {
+                    "items": [
+                        {"itemIdentification": {"itemId": "SHIP-0001"}},
+                    ],
+                }
+            ],
+        },
     ],
 }
 

@@ -16,6 +16,7 @@ import typing
 import karrio.lib as lib
 import karrio.core.models as models
 import karrio.providers.postnord.error as error
+import karrio.providers.postnord.units as provider_units
 import karrio.providers.postnord.utils as provider_utils
 
 
@@ -62,6 +63,26 @@ def manifest_request(
 ) -> lib.Serializable:
     address = lib.to_address(payload.address) if payload.address else None
     options = payload.options or {}
+    identifiers = payload.shipment_identifiers or []
+
+    # The pickup endpoint (POST /rest/shipment/v3/pickups) takes a
+    # pickupBooking whose shipment[] elements reuse the booking schema
+    # (shipmentCustomsv2), so each shipment REQUIRES service, parties, and a
+    # goodsItem with at least one items[] entry. The booked parcels to be
+    # collected map to items keyed by their parcel/tracking id; when no
+    # identifiers are supplied, PostNord allocates an id from itemId "0".
+    items = [
+        postnord_req.ItemType(
+            itemIdentification=postnord_req.ItemIdentificationType(
+                itemId=identifier,
+            ),
+        )
+        for identifier in identifiers
+    ] or [
+        postnord_req.ItemType(
+            itemIdentification=postnord_req.ItemIdentificationType(itemId="0"),
+        )
+    ]
 
     party = lib.identity(
         postnord_req.PartyType(
@@ -104,6 +125,9 @@ def manifest_request(
                     or options.get("latest_pickup_date")
                     else None
                 ),
+                service=postnord_req.ServiceType(
+                    basicServiceCode=provider_units.ShippingService.postnord_return_pickup.value,
+                ),
                 parties=lib.identity(
                     postnord_req.PartiesType(
                         consignor=postnord_req.ConsignorType(
@@ -127,6 +151,7 @@ def manifest_request(
                     if party is not None or settings.customer_number
                     else None
                 ),
+                goodsItem=[postnord_req.GoodsItemType(items=items)],
             )
         ],
     )
