@@ -128,6 +128,7 @@ ShipmentRequest = {
     "updateIndicator": "Original",
     "shipment": [
         {
+            "shipmentIdentification": {"shipmentId": "ORDER-7788"},
             "service": {
                 "basicServiceCode": "18",
                 "additionalServiceCode": ["A5"],
@@ -204,8 +205,30 @@ ShipmentRequest = {
 }
 
 ShipmentCancelRequest = {
-    "ids": [
-        {"id": "SHIP-0001"},
+    "application": {"name": "Karrio", "applicationId": 2458},
+    "messageDate": ANY,
+    "testIndicator": True,
+    "updateIndicator": "Deletion",
+    "shipment": [
+        {
+            "shipmentIdentification": {"shipmentId": "SHIP-0001"},
+            "parties": {
+                "consignor": {
+                    "issuerCode": "Z12",
+                    "partyIdentification": {
+                        "partyId": "00000000",
+                        "partyIdType": "160",
+                    },
+                },
+            },
+            "goodsItem": [
+                {
+                    "items": [
+                        {"itemIdentification": {"itemId": "SHIP-0001"}},
+                    ],
+                }
+            ],
+        }
     ],
 }
 
@@ -258,7 +281,7 @@ ParsedShipmentResponse = [
         "carrier_id": "postnord",
         "carrier_name": "postnord",
         "tracking_number": "00373500454541020957",
-        "shipment_identifier": "SHIP-0001",
+        "shipment_identifier": "ORDER-7788",
         "label_type": "PDF",
         "docs": {"label": "JVBERi0xLjQK"},
         "meta": {
