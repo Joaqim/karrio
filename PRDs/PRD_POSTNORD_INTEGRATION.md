@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | Project | Karrio |
-| Version | 1.2 |
+| Version | 1.3 |
 | Date | 2026-06-24 |
 | Status | Planning |
 | Owner | Joaqim Planstedt |
@@ -15,6 +15,8 @@
 > **v1.1 revision note:** Revised after analyzing the authoritative specs `postnord-booking.swagger.json` and `postnord-servicepoints-v5.swagger.json`. The Booking (EDI) and Service Points APIs are **apikey-only (query param), not OAuth2** — superseding v1.0's dual-credential/OAuth2 design. This resolves the prior open question on API generation. Tracking awaits a Track & Trace spec; Service Points is documented but deferred.
 >
 > **v1.2 revision note:** Analyzed `postnord-tracking.swagger.json`. It is a `Track Shipment URL` API (`GET /rest/links/v1/tracking/{country}/{id}`) that returns only a tracking **URL string**, not events/status. Tracking is therefore implemented **link-only** (D7): `get_tracking` populates `tracking_url` plus a single generic status, no events. A future enhancement upgrades to the Track & Trace v5/v7 `findByIdentifier` events API.
+>
+> **v1.3 revision note:** The connector was validated end-to-end against the PostNord sandbox (`atapi2.postnord.com`). Book+label, tracking, rating, and manifest/pickup are **live-validated**. Cancellation is **blocked**: the REST `/rest/shipment/v3/edi` endpoint ignores `updateIndicator: "Deletion"` and re-posting a complete `ediInstruction` with Deletion returns HTTP 201 and books a **duplicate** shipment (verified live). REST cannot cancel; the real mechanism is the swagger's id-based `deleteEdiRequest {ids:[{id}]}` endpoint, which is absent from the available swagger. The connector now sends a safe `{ids:[{id}]}` placeholder body (which `/v3/edi` rejects without booking) pending PostNord's v3 REST reference manual (D8).
 
 ---
 
@@ -45,7 +47,7 @@ The authoritative Booking (EDI) spec resolves the central design question: every
 
 1. **Direct-carrier connector at `modules/connectors/postnord/`**: PostNord operates its own first-party API, so it follows the standard direct-carrier pattern (not the `community/plugins/` hub pattern).
 2. **Single `apikey` credential (query param)**: the Booking (EDI) and Service Points specs are `SECURED: False` and take `?apikey=...` on every call. One `apikey` setting authorizes Booking, Manifest-as-Pickup, Service Points, and Tracking. The OAuth2/dual-credential design from v1.0 is removed.
-3. **Shipping via the Booking EDI API**: `POST /rest/shipment/v3/edi/labels/{pdf,zpl}` books and returns the label in one call; cancellation re-POSTs the `ediInstruction` with `updateIndicator: "Deletion"` (no DELETE endpoint exists).
+3. **Shipping via the Booking EDI API**: `POST /rest/shipment/v3/edi/labels/{pdf,zpl}` books and returns the label in one call. Cancellation is **blocked** (D8): the REST `/v3/edi` endpoint ignores `updateIndicator: "Deletion"` and re-posting a complete `ediInstruction` with Deletion books a duplicate shipment (verified live). The real cancel mechanism is the swagger's id-based `deleteEdiRequest {ids:[{id}]}` endpoint, which is absent from the available swagger; the connector sends that safe `{ids:[{id}]}` body as a placeholder (rejected by `/v3/edi` without booking) pending PostNord's v3 REST reference manual.
 4. **Rating via merchant-configured static rates** (D1): PostNord exposes no money-rate API, so `get_rates` returns rates from a merchant-supplied `ConnectionConfig` rate table keyed by service code rather than calling the carrier.
 5. **Manifest mapped to the Booking API's `/v3/pickups`** (D2): PostNord has no manifest/scan-form endpoint, so `Manifest.create()` books a physical pickup via `POST /rest/shipment/v3/pickups` — an endpoint within the same Booking spec. Semantics differ from a true manifest document; documented as a limitation.
 6. **Service Points documented but deferred** (D6): the supplied Service Points v5 spec (pickup-location lookup for MyPack Collect) is mapped in this PRD as a planned carrier-specific helper, not implemented in the first pass.
@@ -56,12 +58,13 @@ The authoritative Booking (EDI) spec resolves the central design question: every
 | In Scope | Out of Scope |
 |----------|--------------|
 | Shipping: book + label (PDF/ZPL/SVG/QR) via Booking EDI `/v3/edi/labels/*` | Real-time money-rate quoting (no public PostNord API) |
-| Shipment cancellation via `updateIndicator: "Deletion"` | True end-of-day scan-form manifest document |
-| Rating: static/config-driven rate table per service (D1) | Service-point lookup *implementation* (documented/deferred, D6) |
-| Manifest: pickup booking via `/v3/pickups` (D2) | Event-based tracking (status/locations/events) until a Track & Trace v5/v7 spec is supplied |
-| Tracking: link-only (`tracking_url` + generic status, D7) | Customs CN22/CN23/invoice & dangerous-goods declarations (future) |
-| Service & additional-service / package / issuer enums in `units.py` | Digital/QR returns flow (future enhancement) |
-| Sandbox (`atapi2`) + production (`api2`) switching | Dashboard/UI carrier-connection form changes |
+| Rating: static/config-driven rate table per service (D1) | Shipment cancellation (D8 — blocked: REST cannot cancel; needs id-based delete endpoint absent from the swagger) |
+| Manifest: pickup booking via `/v3/pickups` (D2) | True end-of-day scan-form manifest document |
+| Tracking: link-only (`tracking_url` + generic status, D7) | Service-point lookup *implementation* (documented/deferred, D6) |
+| Service & additional-service / package / issuer enums in `units.py` | Event-based tracking (status/locations/events) until a Track & Trace v5/v7 spec is supplied |
+| Sandbox (`atapi2`) + production (`api2`) switching | Customs CN22/CN23/invoice & dangerous-goods declarations (future) |
+| | Digital/QR returns flow (future enhancement) |
+| | Dashboard/UI carrier-connection form changes |
 
 ---
 
@@ -71,7 +74,7 @@ The authoritative Booking (EDI) spec resolves the central design question: every
 
 | # | Question | Context | Options | Status |
 |---|----------|---------|---------|--------|
-| Q2 | Sandbox apikey availability | Tests are mocked and need no live key, but end-to-end validation against `atapi2.postnord.com` does. | A) Obtain partner sandbox apikey before live validation; B) mock-only | ✅ Resolved — apikey + customer agreement obtained; tracking and **shipment book+label validated live** (2026-06-24). Manifest/pickup not yet exercised live. |
+| Q2 | Sandbox apikey availability | Tests are mocked and need no live key, but end-to-end validation against `atapi2.postnord.com` does. | A) Obtain partner sandbox apikey before live validation; B) mock-only | ✅ Resolved — apikey + customer agreement obtained; **book+label, tracking, rating, and manifest/pickup all validated live** (2026-06-24). Cancel is blocked (D8). |
 | Q3 | Static rate table location | D1 chose static/config rates; this sub-decision sets whether each merchant configures rates or a default ships. | A) `ConnectionConfig.rate_table` per connection; B) config over shipped default | ⏳ Pending |
 | Q4 | Label-by-id token (`id` vs `printId`) | Booking response returns both `assignedIds.value` and `assignedIds.printId`; the `/v3/labels/ids/*` body schema (`ids_inner`) only has `{id, labelType}`. Which token the retrieval keys on is ambiguous in the spec. Only relevant if the two-step (book then fetch label) path is used; the one-shot `/v3/edi/labels/*` path avoids it. | A) Use one-shot path (avoids the question) — **recommended**; B) confirm with PostNord | ⏳ Pending |
 
@@ -86,13 +89,14 @@ The authoritative Booking (EDI) spec resolves the central design question: every
 | D5 | Reference carriers | SEKO (auth) + USPS (structure) | SEKO models apikey auth; USPS models JSON provider/test/manifest layout. | 2026-06-24 |
 | D6 | Service Points v5 scope | Document, defer implementation | Pickup-location lookup for MyPack Collect; no unified Karrio service-point contract exists. Mapped here; implemented later. | 2026-06-24 |
 | D7 | Tracking depth | Link-only (no events) | Supplied `postnord-tracking.swagger.json` returns only a tracking URL, not events. `get_tracking` populates `tracking_url` + generic status; events deferred to a future Track & Trace v5/v7 integration. | 2026-06-24 |
+| D8 | Cancellation | Blocked (safe placeholder) | REST `/v3/edi` ignores `updateIndicator: "Deletion"` and books a duplicate (verified live); real cancel needs the id-based `deleteEdiRequest` endpoint absent from the swagger. Connector sends a safe `{ids:[{id}]}` placeholder (rejected without booking) pending PostNord's v3 REST reference manual. | 2026-06-24 |
 
 ### Edge Cases Requiring Input
 
 | Edge Case | Impact | Proposed Handling | Needs Input? |
 |-----------|--------|-------------------|--------------|
 | Rate requested for a service absent from the static table | `get_rates` returns empty | Return `[]` + informational `Message`; never raise | ❌ No |
-| Cancellation has no DELETE endpoint | Void flow unclear | Re-POST `ediInstruction` with `updateIndicator: "Deletion"` to `/v3/edi` | ❌ No (spec-confirmed pattern) |
+| Cancellation cannot be done via REST (D8) | Void flow blocked | REST `/v3/edi` ignores `updateIndicator: "Deletion"` and books a duplicate (verified live); send a safe `{ids:[{id}]}` placeholder (rejected without booking) pending the id-based `deleteEdiRequest` endpoint, absent from the swagger | ✅ Yes (needs PostNord v3 REST reference manual) |
 | Two-step label retrieval token ambiguity | Wrong/empty label | Prefer one-shot `/v3/edi/labels/*`; if two-step needed, resolve Q4 | ✅ Yes (Q4) |
 | Partial item failure (some `idInformation` FAIL) | Mixed success reported inline, not as HTTP error | Parse per-item `errorResponse` inside `bookingResponse`; surface as `Message`s alongside details | ❌ No |
 | MyPack Collect (service 19) needs a delivery service point | Cannot complete service-point delivery without point id | Document Service Points helper (D6); for now require `partyIdType 156` service-point id supplied by merchant | ❌ No |
@@ -151,7 +155,7 @@ karrio.Tracking.fetch(tracking_request).from_(gateway)
 ### Goals
 
 1. Ship a registered `postnord` connector discoverable via `./bin/cli plugins list | grep postnord`.
-2. Implement shipping (book + cancel + label), rating (static), manifest (pickup-mapped), and tracking (link-only), each with the mandatory 4-method test suite.
+2. Implement shipping (book + label; cancel blocked per D8), rating (static), manifest (pickup-mapped), and tracking (link-only), each with the mandatory 4-method test suite.
 3. Keep `mapper.py` and all `karrio/schemas/postnord/*.py` generated — never hand-edited.
 4. Pass the full SDK suite (`./bin/run-sdk-tests`) with no regressions.
 
@@ -165,24 +169,27 @@ karrio.Tracking.fetch(tracking_request).from_(gateway)
 | Schema regeneration reproducible | `./bin/run-generate-on modules/connectors/postnord` idempotent | Must-have |
 | Error responses parsed to `Message` | All error paths covered | Must-have |
 | Tracking upgraded to events | Once a v5/v7 events spec is supplied | Nice-to-have |
-| Live sandbox round-trip (book) | 1 successful end-to-end (gated on Q2) | Nice-to-have |
+| Live sandbox round-trip (book) | ✅ Done — book+label, tracking, rating, manifest/pickup validated live (2026-06-24) | Nice-to-have |
 
 ### Launch Criteria
 
 **Must-have (P0):**
 - [ ] CLI scaffolding committed unmodified where generated (esp. `mapper.py`)
 - [ ] `schemas/*.json` source files derived from `postnord-booking.swagger.json`; `karrio/schemas/postnord/*.py` regenerated
-- [ ] Shipping create + cancel (`updateIndicator: "Deletion"`) implemented and tested
+- [ ] Shipping create (book + label) implemented and tested
 - [ ] Rating (static) implemented and tested
 - [ ] Manifest (pickup-mapped, `/v3/pickups`) implemented and tested
 - [ ] Tracking (link-only) implemented and tested
 - [ ] `python -m unittest discover -v -f modules/connectors/postnord/tests` passes
 - [ ] `./bin/run-sdk-tests` passes
 
+**Blocked (out of P0, D8):**
+- [ ] Shipment cancellation — REST `/v3/edi` cannot cancel (ignores `updateIndicator: "Deletion"`, books a duplicate); the connector ships a safe `{ids:[{id}]}` placeholder pending the id-based `deleteEdiRequest` endpoint, absent from the swagger
+
 **Nice-to-have (P1):**
 - [ ] Tracking upgraded to events (Track & Trace v5/v7)
 - [ ] Service Points helper implemented (D6)
-- [ ] Live sandbox validation against `atapi2.postnord.com`
+- [x] Live sandbox validation against `atapi2.postnord.com` (book+label, tracking, rating, manifest/pickup)
 - [ ] README documenting rating/manifest adaptations and apikey setup
 
 ---
@@ -200,7 +207,7 @@ karrio.Tracking.fetch(tracking_request).from_(gateway)
 
 ### Trade-off Analysis
 
-The supplied `postnord-booking.swagger.json` is authoritative and apikey-based, so D3 follows the spec rather than the earlier web research that described an OAuth2 SAO variant — the spec wins on provenance. Choosing the one-shot `/v3/edi/labels/{pdf,zpl}` book-and-label path sidesteps the `id`-vs-`printId` retrieval ambiguity (Q4) and matches Karrio's single-call `create_shipment` contract. Rating-as-static and manifest-as-pickup keep rate-driven label flows and handover scheduling functional without fabricating carrier responses; both are documented limitations. Cancellation uses the spec-confirmed `updateIndicator: "Deletion"` re-POST since no DELETE route exists.
+The supplied `postnord-booking.swagger.json` is authoritative and apikey-based, so D3 follows the spec rather than the earlier web research that described an OAuth2 SAO variant — the spec wins on provenance. Choosing the one-shot `/v3/edi/labels/{pdf,zpl}` book-and-label path sidesteps the `id`-vs-`printId` retrieval ambiguity (Q4) and matches Karrio's single-call `create_shipment` contract. Rating-as-static and manifest-as-pickup keep rate-driven label flows and handover scheduling functional without fabricating carrier responses; both are documented limitations. Cancellation is blocked (D8): live testing showed REST `/v3/edi` ignores `updateIndicator: "Deletion"` and re-posting a complete `ediInstruction` with Deletion books a duplicate shipment rather than voiding the original, so the connector sends a safe `{ids:[{id}]}` placeholder (rejected without booking) pending the id-based `deleteEdiRequest` endpoint, which is absent from the available swagger.
 
 ---
 
@@ -368,7 +375,7 @@ class Proxy(proxy.Proxy):
 | Method | Endpoint | Karrio op | Notes |
 |--------|----------|-----------|-------|
 | POST | `/v3/edi/labels/pdf` (or `/zpl`) | `create_shipment` | One-shot book + label; body `ediInstruction` |
-| POST | `/v3/edi` | `cancel_shipment` | Re-POST with `updateIndicator: "Deletion"` |
+| POST | `/v3/edi` | `cancel_shipment` (blocked, D8) | Sends a safe `{ids:[{id}]}` placeholder (rejected without booking); REST cannot cancel — re-posting `updateIndicator: "Deletion"` books a duplicate. Needs id-based `deleteEdiRequest`, absent from the swagger |
 | POST | `/v3/pickups` | `create_manifest` (mapped, D2) | Books physical pickup |
 | GET | `/v1/tracking/{country}/{id}` (base `/rest/links`) | `get_tracking` (link-only, D7) | Returns `LinksResponse{ url, faults[] }`; `country` ∈ SE/NO/FI/DK, `id` 10–35 chars |
 | GET | `/v5/servicepoints/nearest/byaddress` (base `/rest/businesslocation`) | `get_service_points` (D6, deferred) | Service-point lookup |
@@ -379,7 +386,7 @@ class Proxy(proxy.Proxy):
 ```json
 {
   "messageDate": "2026-06-24T10:00:00",
-  "updateIndicator": "Original",            // "Deletion" to cancel
+  "updateIndicator": "Original",            // "Deletion" is ignored by /v3/edi — does NOT cancel (D8)
   "application": { "name": "Karrio" },
   "shipment": [{
     "service": { "basicServiceCode": "18", "additionalServiceCode": ["A1"] },
@@ -441,7 +448,7 @@ class Proxy(proxy.Proxy):
 | Scenario | Expected Behavior | Handling |
 |----------|-------------------|----------|
 | Rate requested for service absent from static table | Empty rate list, no crash | Return `[]` + informational `Message` (D1) |
-| Cancellation (no DELETE route) | Booking voided | Re-POST `ediInstruction` `updateIndicator: "Deletion"` to `/v3/edi` |
+| Cancellation (REST cannot cancel, D8) | Booking NOT voided; duplicate risk | Do not re-POST `ediInstruction` with `updateIndicator: "Deletion"` (books a duplicate); send a safe `{ids:[{id}]}` placeholder (rejected without booking) pending the id-based `deleteEdiRequest` endpoint |
 | Partial item failure | Mixed OK/FAIL reported inline | Parse per-item `idInformation[].errorResponse` → `Message`s |
 | `testIndicator` requested | Validate-only, no booking | Map a Karrio test/validation flag to `ediInstruction.testIndicator` |
 | Empty/null booking response | No crash | Guard truthiness before extracting `ids`/`labelPrintout` |
@@ -483,7 +490,7 @@ class Proxy(proxy.Proxy):
 |------|-------|--------|--------|
 | apikey query-param proxy (book/cancel/pickup) | `.../mappers/postnord/proxy.py` | Pending | M |
 | Service / option / status / package / issuer enums | `.../providers/postnord/units.py` | Pending | M |
-| Shipping create (one-shot label) + cancel (Deletion) | `.../providers/postnord/shipment/{create,cancel}.py` | Pending | L |
+| Shipping create (one-shot label); cancel placeholder (`{ids:[{id}]}`, blocked D8) | `.../providers/postnord/shipment/{create,cancel}.py` | Pending | L |
 | Rating (static table from `ConnectionConfig`) | `.../providers/postnord/rate.py` | Pending | M |
 | Manifest → `/v3/pickups` | `.../providers/postnord/manifest.py` | Pending | M |
 | Tracking (link-only: `tracking_url` + generic status, D7) | `.../providers/postnord/tracking.py` | Pending | S |
@@ -584,10 +591,11 @@ python -m unittest discover -v -f modules/connectors/postnord/tests
 
 | Risk | Impact | Probability | Mitigation |
 |------|--------|-------------|------------|
+| Cancellation unavailable via REST (D8) | High | High (by design) | REST `/v3/edi` ignores `updateIndicator: "Deletion"` and books a duplicate (verified live); ship a safe `{ids:[{id}]}` placeholder rejected without booking; do not re-POST Deletion; await the id-based `deleteEdiRequest` endpoint / PostNord v3 REST reference manual |
 | Link-only tracking has no events (D7) | Medium | High (by design) | Document the limitation; populate `tracking_url` + generic status; upgrade path to v5/v7 events |
-| No sandbox apikey (Q2) | Medium | Medium | Mock-driven tests need no key; defer live round-trip to P1 |
+| No sandbox apikey (Q2) | Low | Resolved | apikey + customer agreement obtained; live round-trip completed for book+label, tracking, rating, manifest/pickup (2026-06-24) |
 | Rating-as-static misread as carrier rates | Medium | Medium | Document in README + `Message` annotations |
-| Manifest-as-pickup semantic mismatch | Medium | Medium | Document mapping; cancel routes to pickup cancel |
+| Manifest-as-pickup semantic mismatch | Medium | Medium | Document mapping; manifest = Return Pickup (service `20`), a return shipment requiring full route (consignor + consignee, SMS both parties); `references` surfaced from `idInformation[]` in meta |
 | Label-by-id token ambiguity (Q4) | Low | Low | Use one-shot label path; avoid two-step retrieval |
 | apikey leakage via query-string traces | High | Low | Mark sensitive; verify trace redaction covers URL params |
 | SDK suite regression | Medium | Low | Run `./bin/run-sdk-tests` before merge |
@@ -615,7 +623,7 @@ python -m unittest discover -v -f modules/connectors/postnord/tests
 
 ### Appendix A: Resolved design decisions
 
-D1 rating=static/config; D2 manifest=`/v3/pickups`; D3 auth=apikey EDI generation (per supplied spec); D4 direct-carrier location; D5 SEKO(auth)+USPS(structure) references; D6 Service Points documented/deferred; D7 tracking link-only (no events).
+D1 rating=static/config; D2 manifest=`/v3/pickups`; D3 auth=apikey EDI generation (per supplied spec); D4 direct-carrier location; D5 SEKO(auth)+USPS(structure) references; D6 Service Points documented/deferred; D7 tracking link-only (no events); D8 cancellation blocked (safe `{ids:[{id}]}` placeholder; REST cannot cancel — needs id-based `deleteEdiRequest` endpoint absent from the swagger).
 
 ### Appendix B: Environments
 
@@ -636,8 +644,10 @@ D1 rating=static/config; D2 manifest=`/v3/pickups`; D3 auth=apikey EDI generatio
 
 **Live sandbox validation (2026-06-24):**
 - *Tracking* — exercised against `atapi2.postnord.com` with a real apikey; returned a `tracking.postnord.com/se/?id=…` URL with no faults. apikey query-param auth works; lowercase country segment (`se`) accepted; URL-only response with no events, consistent with D7.
-- *Shipment (book + label)* — `POST /rest/shipment/v3/edi/labels/pdf` succeeded: returned a base64 PDF label and a PostNord-allocated 20-digit tracking number. Findings folded into the connector: `applicationId` must be an **integer**; each item requires `itemIdentification`, and `itemId="0"` makes PostNord allocate the parcel id (an arbitrary value triggers "unable to determine id type"); the consignor must be the **account-registered sender address** (origin validation), so the sender address is supplied by the merchant, not defaulted; the response carries a `printoutComposition` block (now modeled).
-- *Manifest/pickup* — not yet exercised live.
+- *Rating* — validated; static/config rate table per service (D1), no carrier call.
+- *Shipment (book + label)* — `POST /rest/shipment/v3/edi/labels/pdf` succeeded: returned a base64 PDF label and a PostNord-allocated 20-digit tracking number. Findings folded into the connector: `applicationId` must be an **integer** and is required by the label-printing endpoints; each item requires `itemIdentification`, and `itemId="0"` makes PostNord allocate the parcel id (returned as the tracking number) — an arbitrary value triggers "unable to determine id type"; the consignor must be the **account-registered sender address** (origin validation), so the sender address is merchant-supplied, not defaulted; the booking assigns a client `shipmentIdentification.shipmentId` from `payload.reference` (merchant-controlled, Track&Trace-searchable); the response carries a `printoutComposition` block (now modeled).
+- *Manifest/pickup* — validated. PostNord has no manifest; it maps to a Return Pickup (service `20`), which is a return **shipment** requiring a full route — both consignor **and** consignee, with SMS on both parties. The pickup response carries `references` nested in `idInformation[]` (now modeled and surfaced in meta).
+- *Cancellation (D8)* — **blocked**. Re-posting a complete `ediInstruction` with `updateIndicator: "Deletion"` to `/rest/shipment/v3/edi` returns HTTP 201 and **books a duplicate** shipment (new `bookingId` + new tracking ids); `/v3/edi` ignores the Deletion indicator entirely. The real cancel mechanism is the swagger's id-based `deleteEdiRequest {ids:[{id}]}`, whose endpoint is absent from the available swagger. The connector sends the safe `{ids:[{id}]}` body (rejected by `/v3/edi` without booking) as a placeholder pending PostNord's v3 REST reference manual.
 
 **Codes (free-form strings in the spec; enumerate in `units.py` from PostNord General Descriptions):**
 
@@ -659,5 +669,5 @@ D1 rating=static/config; D2 manifest=`/v3/pickups`; D3 auth=apikey EDI generatio
 | options | `service.additionalServiceCode[]` | `ShippingOption` enum |
 | `recipient`/`shipper` | `parties.consignee`/`consignor` | `issuerCode` + `partyIdentification` |
 | `label` | `labelPrintout[].printout.data` | base64 PDF/ZPL/SVG; or `uriResource` URL |
-| cancel | `updateIndicator: "Deletion"` | no DELETE route |
+| cancel | `{ids:[{id}]}` placeholder (blocked, D8) | REST `/v3/edi` cannot cancel — `updateIndicator: "Deletion"` is ignored and books a duplicate; needs the id-based `deleteEdiRequest` endpoint, absent from the swagger |
 ```
