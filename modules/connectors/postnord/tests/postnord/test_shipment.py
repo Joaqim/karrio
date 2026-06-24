@@ -73,6 +73,19 @@ class TestPostNordShipment(unittest.TestCase):
             )
             self.assertListEqual(lib.to_dict(parsed_response), ParsedErrorResponse)
 
+    def test_parse_partial_failure_response(self):
+        # A mixed 200/201 booking: one parcel is allocated ids + label, another
+        # fails inline. The successful shipment details must be preserved and the
+        # inline fault surfaced as a message alongside them (PRD edge case).
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = PartialFailureResponse
+            parsed_response = (
+                karrio.Shipment.create(self.ShipmentRequest).from_(gateway).parse()
+            )
+            self.assertListEqual(
+                lib.to_dict(parsed_response), ParsedPartialFailureResponse
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
@@ -311,5 +324,73 @@ ParsedErrorResponse = [
                 }
             },
         },
+    ],
+]
+
+PartialFailureResponse = """{
+  "bookingResponse": {
+    "bookingId": "BOOK-456",
+    "idInformation": [
+      {
+        "status": "OK",
+        "ids": [
+          {"idType": "itemId", "value": "00373500454541020958", "printId": "P1"},
+          {"idType": "shipmentId", "value": "ORDER-7788", "printId": "P2"}
+        ],
+        "urls": [
+          {"type": "TRACKING", "url": "https://tracking.postnord.com/se/?id=00373500454541020958"}
+        ],
+        "errorResponse": null
+      },
+      {
+        "status": "ERROR",
+        "ids": null,
+        "urls": null,
+        "errorResponse": {
+          "compositeFault": {
+            "faults": [
+              {
+                "explanationText": "grossWeight exceeds maximum for service",
+                "faultReferences": [
+                  {"key": "CustomerValidationError.subType", "value": "WEIGHT_LIMIT"}
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "labelPrintout": [{
+    "printout": {"type": "LABEL", "labelFormat": "PDF", "encoding": "base64", "data": "JVBERi0xLjQK"}
+  }]
+}"""
+
+ParsedPartialFailureResponse = [
+    {
+        "carrier_id": "postnord",
+        "carrier_name": "postnord",
+        "tracking_number": "00373500454541020958",
+        "shipment_identifier": "ORDER-7788",
+        "label_type": "PDF",
+        "docs": {"label": "JVBERi0xLjQK"},
+        "meta": {
+            "booking_id": "BOOK-456",
+            "tracking_url": "https://tracking.postnord.com/se/?id=00373500454541020958",
+            "carrier_tracking_link": "https://tracking.postnord.com/se/?id=00373500454541020958",
+        },
+    },
+    [
+        {
+            "carrier_id": "postnord",
+            "carrier_name": "postnord",
+            "code": "WEIGHT_LIMIT",
+            "message": "grossWeight exceeds maximum for service",
+            "details": {
+                "references": {
+                    "CustomerValidationError.subType": "WEIGHT_LIMIT",
+                }
+            },
+        }
     ],
 ]
