@@ -45,7 +45,10 @@ def shipment_cancel_request(
         messageDate=datetime.datetime.now().isoformat(timespec="seconds"),
         updateIndicator="Deletion",
         testIndicator=settings.test_mode,
-        application=postnord_req.ApplicationType(name="Karrio"),
+        application=postnord_req.ApplicationType(
+            name="Karrio",
+            applicationId=settings.application_id,
+        ),
         shipment=[
             postnord_req.ShipmentType(
                 shipmentIdentification=postnord_req.ShipmentIdentificationType(
