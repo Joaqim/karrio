@@ -20,10 +20,10 @@ METADATA = PluginMetadata(
     Settings=Settings,
     # Data Units
     is_hub=False,
-    # options=units.ShippingOption,
-    # services=units.ShippingService,
+    options=units.ShippingOption,
+    services=units.ShippingService,
     connection_configs=units.ConnectionConfig,
     # Extra info
-    website="",
-    documentation="",
+    website="https://www.postnord.com",
+    documentation="https://developer.postnord.com",
 )

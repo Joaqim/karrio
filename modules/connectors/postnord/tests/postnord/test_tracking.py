@@ -24,7 +24,7 @@ class TestPostNordTracking(unittest.TestCase):
             karrio.Tracking.fetch(self.TrackingRequest).from_(gateway)
             self.assertEqual(
                 mock.call_args[1]["url"],
-                f"{gateway.settings.server_url}/tracking"
+                f"{gateway.settings.server_url}/rest/links/v1/tracking/se/00373500454541020957?apikey=TEST_API_KEY&language=en",
             )
 
     def test_parse_tracking_response(self):
@@ -33,7 +33,9 @@ class TestPostNordTracking(unittest.TestCase):
             parsed_response = (
                 karrio.Tracking.fetch(self.TrackingRequest).from_(gateway).parse()
             )
-            self.assertListEqual(lib.to_dict(parsed_response), ParsedTrackingResponse)
+            self.assertListEqual(
+                lib.to_dict(parsed_response), ParsedTrackingResponse
+            )
 
     def test_parse_error_response(self):
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
@@ -49,43 +51,25 @@ if __name__ == "__main__":
 
 
 TrackingPayload = {
-    "tracking_numbers": ["TRACK123"],
-    "reference": "ORDER123"
+    "tracking_numbers": ["00373500454541020957"],
 }
 
-TrackingRequest = {
-  "trackingNumbers": [
-    "TRACK123"
-  ],
-  "reference": "ORDER123"
-}
+TrackingRequest = [
+    {
+        "country": "se",
+        "id": "00373500454541020957",
+        "language": "en",
+    }
+]
 
 TrackingResponse = """{
-  "trackingInfo": [
-    {
-      "trackingNumber": "TRACK123",
-      "status": "in_transit",
-      "statusDetails": "Package is in transit",
-      "estimatedDelivery": "2024-04-15",
-      "events": [
-        {
-          "date": "2024-04-12",
-          "time": "14:30:00",
-          "code": "PU",
-          "description": "Package picked up",
-          "location": "San Francisco, CA"
-        }
-      ]
-    }
-  ]
+  "url": "https://tracking.postnord.com/se/?id=00373500454541020957"
 }"""
 
 ErrorResponse = """{
-  "error": {
-    "code": "tracking_error",
-    "message": "Unable to track shipment",
-    "details": "Invalid tracking number"
-  }
+  "faults": [
+    {"explanationText": "Identifier not found", "faultCode": "PNCS-404"}
+  ]
 }"""
 
 ParsedTrackingResponse = [
@@ -93,21 +77,18 @@ ParsedTrackingResponse = [
         {
             "carrier_id": "postnord",
             "carrier_name": "postnord",
-            "tracking_number": "TRACK123",
-            "events": [
-                {
-                    "date": "2024-04-12",
-                    "time": "14:30:00",
-                    "code": "PU",
-                    "description": "Package picked up",
-                    "location": "San Francisco, CA"
-                }
-            ],
-            "estimated_delivery": "2024-04-15",
-            "status": "in_transit"
+            "tracking_number": "00373500454541020957",
+            "delivered": False,
+            "status": "in_transit",
+            "info": {
+                "carrier_tracking_link": "https://tracking.postnord.com/se/?id=00373500454541020957",
+            },
+            "meta": {
+                "tracking_url": "https://tracking.postnord.com/se/?id=00373500454541020957",
+            },
         }
     ],
-    []
+    [],
 ]
 
 ParsedErrorResponse = [
@@ -116,11 +97,9 @@ ParsedErrorResponse = [
         {
             "carrier_id": "postnord",
             "carrier_name": "postnord",
-            "code": "tracking_error",
-            "message": "Unable to track shipment",
-            "details": {
-                "details": "Invalid tracking number"
-            }
+            "code": "PNCS-404",
+            "message": "Identifier not found",
+            "details": {"tracking_number": "00373500454541020957"},
         }
-    ]
+    ],
 ]

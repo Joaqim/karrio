@@ -1,14 +1,14 @@
-"""Karrio PostNord shipment API implementation."""
+"""Karrio PostNord shipment (Booking EDI) API implementation.
 
-# IMPLEMENTATION INSTRUCTIONS:
-# 1. Uncomment the imports when the schema types are generated
-# 2. Import the specific request and response types you need
-# 3. Create a request instance with the appropriate request type
-# 4. Extract shipment details from the response
-#
-# NOTE: JSON schema types are generated with "Type" suffix (e.g., ShipmentRequestType),
-# while XML schema types don't have this suffix (e.g., ShipmentRequest).
+Booking and label retrieval happen in one call against
+``/rest/shipment/v3/edi/labels/pdf``. The request body is an
+``ediInstruction`` (``ShipmentRequestType``) with ``updateIndicator``
+``"Original"``; the response is an ``ediLabelResponse`` carrying a
+``bookingResponse`` (ids, tracking urls, per-item errors) and one or more
+``labelPrintout`` entries with base64 label data.
+"""
 
+import datetime
 import karrio.schemas.postnord.shipment_request as postnord_req
 import karrio.schemas.postnord.shipment_response as postnord_res
 
@@ -28,11 +28,8 @@ def parse_shipment_response(
     response = _response.deserialize()
     messages = error.parse_error_response(response, settings)
 
-    # Check if we have valid shipment data
-    
-    has_shipment = "shipment" in response if hasattr(response, 'get') else False
-    
-
+    booking = response.get("bookingResponse") or {}
+    has_shipment = any(booking.get("idInformation") or []) and not any(messages)
     shipment = _extract_details(response, settings) if has_shipment else None
 
     return shipment, messages
@@ -42,64 +39,49 @@ def _extract_details(
     data: dict,
     settings: provider_utils.Settings,
 ) -> models.ShipmentDetails:
-    """
-    Extract shipment details from carrier response data
+    response = lib.to_object(postnord_res.ShipmentResponseType, data)
+    booking = response.bookingResponse
+    informations = booking.idInformation or []
 
-    data: The carrier-specific shipment data structure
-    settings: The carrier connection settings
+    ids = [_id for info in informations for _id in (info.ids or [])]
+    urls = [url for info in informations for url in (info.urls or [])]
 
-    Returns a ShipmentDetails object with extracted shipment information
-    """
-    # Convert the carrier data to a proper object for easy attribute access
-    
-    # For JSON APIs, convert dict to proper response object
-    response_obj = lib.to_object(postnord_res.ShipmentResponseType, data)
-
-    # Access the shipment data
-    shipment = response_obj.shipment if hasattr(response_obj, 'shipment') else None
-
-    if shipment:
-        # Extract tracking info
-        tracking_number = shipment.trackingNumber if hasattr(shipment, 'trackingNumber') else ""
-        shipment_id = shipment.shipmentId if hasattr(shipment, 'shipmentId') else ""
-
-        # Extract label info
-        label_data = shipment.labelData if hasattr(shipment, 'labelData') else None
-        label_format = label_data.format if label_data and hasattr(label_data, 'format') else "PDF"
-        label_base64 = label_data.image if label_data and hasattr(label_data, 'image') else ""
-
-        # Extract optional invoice
-        invoice_base64 = shipment.invoiceImage if hasattr(shipment, 'invoiceImage') else ""
-
-        # Extract service code for metadata
-        service_code = shipment.serviceCode if hasattr(shipment, 'serviceCode') else ""
-    else:
-        tracking_number = ""
-        shipment_id = ""
-        label_format = "PDF"
-        label_base64 = ""
-        invoice_base64 = ""
-        service_code = ""
-    
-
-    documents = models.Documents(
-        label=label_base64,
+    tracking_number = next(
+        (_id.value for _id in ids if _id.idType == "itemId"), None
+    )
+    shipment_identifier = lib.identity(
+        next((_id.value for _id in ids if _id.idType == "shipmentId"), None)
+        or booking.bookingId
+        or tracking_number
+    )
+    tracking_url = next(
+        (url.url for url in urls if (url.type or "").upper() == "TRACKING"), None
     )
 
-    # Add invoice if present
-    if invoice_base64:
-        documents.invoice = invoice_base64
+    printouts = response.labelPrintout or []
+    label_format = next(
+        (p.printout.labelFormat for p in printouts if p.printout), "PDF"
+    )
+    label_data = [
+        p.printout.data for p in printouts if p.printout and p.printout.data
+    ]
+    label = lib.identity(
+        label_data[0]
+        if len(label_data) == 1
+        else lib.bundle_base64(label_data, label_format) if label_data else None
+    )
 
     return models.ShipmentDetails(
         carrier_id=settings.carrier_id,
         carrier_name=settings.carrier_name,
         tracking_number=tracking_number,
-        shipment_identifier=shipment_id,
+        shipment_identifier=shipment_identifier,
         label_type=label_format,
-        docs=documents,
+        docs=models.Documents(label=label),
         meta=dict(
-            service_code=service_code,
-            # Add any other relevant metadata from the carrier's response
+            booking_id=booking.bookingId,
+            tracking_url=tracking_url,
+            carrier_tracking_link=tracking_url,
         ),
     )
 
@@ -108,15 +90,6 @@ def shipment_request(
     payload: models.ShipmentRequest,
     settings: provider_utils.Settings,
 ) -> lib.Serializable:
-    """
-    Create a shipment request for the carrier API
-
-    payload: The standardized ShipmentRequest from karrio
-    settings: The carrier connection settings
-
-    Returns a Serializable object that can be sent to the carrier API
-    """
-    # Convert karrio models to carrier-specific format
     shipper = lib.to_address(payload.shipper)
     recipient = lib.to_address(payload.recipient)
     packages = lib.to_packages(payload.parcels)
@@ -127,55 +100,91 @@ def shipment_request(
         initializer=provider_units.shipping_options_initializer,
     )
 
-    # Create the carrier-specific request object
-    
-    # For JSON API request
+    additional_service_codes = [option.code for _, option in options.items()]
+
+    def _party(address, *, with_consignor_id: bool) -> postnord_req.ConsignType:
+        return postnord_req.ConsignType(
+            issuerCode=settings.issuer_code,
+            partyIdentification=lib.identity(
+                postnord_req.PartyIdentificationType(
+                    partyId=settings.customer_number,
+                    partyIdType="160",
+                )
+                if with_consignor_id and settings.customer_number
+                else None
+            ),
+            party=postnord_req.PartyType(
+                nameIdentification=postnord_req.NameIdentificationType(
+                    name=address.person_name or address.company_name,
+                    companyName=address.company_name,
+                ),
+                address=postnord_req.AddressType(
+                    streets=[_ for _ in [address.address_line1, address.address_line2] if _],
+                    postalCode=address.postal_code,
+                    city=address.city,
+                    state=address.state_code,
+                    countryCode=address.country_code,
+                ),
+                contact=postnord_req.ContactType(
+                    contactName=address.person_name,
+                    emailAddress=address.email,
+                    phoneNo=address.phone_number,
+                    smsNo=address.phone_number,
+                ),
+            ),
+        )
+
     request = postnord_req.ShipmentRequestType(
-        # Map shipper details
-        shipper={
-            "addressLine1": shipper.address_line1,
-            "city": shipper.city,
-            "postalCode": shipper.postal_code,
-            "countryCode": shipper.country_code,
-            "stateCode": shipper.state_code,
-            "personName": shipper.person_name,
-            "companyName": shipper.company_name,
-            "phoneNumber": shipper.phone_number,
-            "email": shipper.email,
-        },
-        # Map recipient details
-        recipient={
-            "addressLine1": recipient.address_line1,
-            "city": recipient.city,
-            "postalCode": recipient.postal_code,
-            "countryCode": recipient.country_code,
-            "stateCode": recipient.state_code,
-            "personName": recipient.person_name,
-            "companyName": recipient.company_name,
-            "phoneNumber": recipient.phone_number,
-            "email": recipient.email,
-        },
-        # Map package details
-        packages=[
-            {
-                "weight": package.weight.value,
-                "weightUnit": provider_units.WeightUnit[package.weight.unit].value,
-                "length": package.length.value if package.length else None,
-                "width": package.width.value if package.width else None,
-                "height": package.height.value if package.height else None,
-                "dimensionUnit": provider_units.DimensionUnit[package.dimension_unit].value if package.dimension_unit else None,
-                "packagingType": provider_units.PackagingType[package.packaging_type or 'your_packaging'].value,
-            }
-            for package in packages
+        messageDate=datetime.datetime.now().isoformat(timespec="seconds"),
+        updateIndicator="Original",
+        testIndicator=settings.test_mode,
+        application=postnord_req.ApplicationType(name="Karrio"),
+        shipment=[
+            postnord_req.ShipmentType(
+                service=postnord_req.ServiceType(
+                    basicServiceCode=service,
+                    additionalServiceCode=additional_service_codes or None,
+                ),
+                parties=postnord_req.PartiesType(
+                    consignor=_party(shipper, with_consignor_id=True),
+                    consignee=_party(recipient, with_consignor_id=False),
+                ),
+                goodsItem=[
+                    postnord_req.GoodsItemType(
+                        packageTypeCode=provider_units.PackagingType.map(
+                            package.packaging_type or "your_packaging"
+                        ).value,
+                        numberOfPackageTypeCodeItems=postnord_req.NumberOfPackageType(
+                            value=1,
+                        ),
+                        items=[
+                            postnord_req.ItemType(
+                                grossWeight=postnord_req.TotalGrossWeightType(
+                                    value=package.weight.KG,
+                                    unit="KGM",
+                                ),
+                                dimensions=lib.identity(
+                                    postnord_req.DimensionsType(
+                                        height=postnord_req.TotalGrossWeightType(
+                                            value=package.height.CM, unit="CMT"
+                                        ),
+                                        width=postnord_req.TotalGrossWeightType(
+                                            value=package.width.CM, unit="CMT"
+                                        ),
+                                        length=postnord_req.TotalGrossWeightType(
+                                            value=package.length.CM, unit="CMT"
+                                        ),
+                                    )
+                                    if any([package.height, package.width, package.length])
+                                    else None
+                                ),
+                            )
+                        ],
+                    )
+                    for package in packages
+                ],
+            )
         ],
-        # Add service code
-        serviceCode=service,
-        # Add account information
-        customerNumber=settings.customer_number,
-        # Add label details
-        labelFormat=payload.label_type or "PDF",
-        # Add any other required fields for this carrier's API
     )
-    
 
     return lib.Serializable(request, lib.to_dict)
