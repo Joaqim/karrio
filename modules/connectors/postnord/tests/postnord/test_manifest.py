@@ -69,7 +69,7 @@ ManifestPayload = {
 }
 
 ManifestRequest = {
-    "application": {"name": "Karrio", "applicationId": "2458"},
+    "application": {"name": "Karrio", "applicationId": 2458},
     "messageDate": ANY,
     "testIndicator": True,
     "updateIndicator": "Original",
