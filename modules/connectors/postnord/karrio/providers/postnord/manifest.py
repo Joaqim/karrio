@@ -84,27 +84,43 @@ def manifest_request(
         )
     ]
 
-    party = lib.identity(
-        postnord_req.PartyType(
-            nameIdentification=postnord_req.NameIdentificationType(
-                name=address.person_name or address.company_name,
-                companyName=address.company_name,
-            ),
-            address=postnord_req.AddressType(
-                streets=[_ for _ in [address.address_line1, address.address_line2] if _],
-                postalCode=address.postal_code,
-                city=address.city,
-                countryCode=address.country_code,
-            ),
-            contact=postnord_req.ContactType(
-                contactName=address.person_name,
-                emailAddress=address.email,
-                phoneNo=address.phone_number,
-            ),
+    # Best-effort Return-Pickup probe: PostNord Return Pickup (basicServiceCode
+    # "20") is a return SHIPMENT requiring a full consignor->consignee route
+    # with SMS (smsNo) on both contacts, not a bare pickup. ManifestRequest
+    # carries no recipient, so the consignee destination is taken from
+    # options["destination"] when provided, otherwise it falls back to the
+    # pickup address (a degenerate SE->SE route). A proper pickup likely needs a
+    # real destination via the karrio Pickup API, pending the PostNord v3
+    # reference manual.
+    def _party(addr) -> typing.Optional[postnord_req.PartyType]:
+        return lib.identity(
+            postnord_req.PartyType(
+                nameIdentification=postnord_req.NameIdentificationType(
+                    name=addr.person_name or addr.company_name,
+                    companyName=addr.company_name,
+                ),
+                address=postnord_req.AddressType(
+                    streets=[_ for _ in [addr.address_line1, addr.address_line2] if _],
+                    postalCode=addr.postal_code,
+                    city=addr.city,
+                    countryCode=addr.country_code,
+                ),
+                contact=postnord_req.ContactType(
+                    contactName=addr.person_name,
+                    emailAddress=addr.email,
+                    phoneNo=addr.phone_number,
+                    smsNo=addr.phone_number,
+                ),
+            )
+            if addr is not None
+            else None
         )
-        if address is not None
-        else None
-    )
+
+    destination = options.get("destination")
+    consignee_address = lib.to_address(destination) if destination else address
+
+    party = _party(address)
+    consignee_party = _party(consignee_address)
 
     request = postnord_req.ManifestRequestType(
         messageDate=datetime.datetime.now().isoformat(timespec="seconds"),
@@ -141,6 +157,14 @@ def manifest_request(
                                 else None
                             ),
                             party=party,
+                        ),
+                        consignee=lib.identity(
+                            postnord_req.ConsigneeType(
+                                issuerCode=settings.issuer_code,
+                                party=consignee_party,
+                            )
+                            if consignee_party is not None
+                            else None
                         ),
                         pickupParty=lib.identity(
                             postnord_req.PickupPartyType(party=party)

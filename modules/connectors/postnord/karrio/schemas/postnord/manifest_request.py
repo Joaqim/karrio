@@ -65,6 +65,7 @@ class ContactType:
     contactName: typing.Optional[str] = None
     emailAddress: typing.Optional[str] = None
     phoneNo: typing.Optional[str] = None
+    smsNo: typing.Optional[str] = None
 
 
 @attr.s(auto_attribs=True)
@@ -78,6 +79,12 @@ class PartyType:
     nameIdentification: typing.Optional[NameIdentificationType] = jstruct.JStruct[NameIdentificationType]
     address: typing.Optional[AddressType] = jstruct.JStruct[AddressType]
     contact: typing.Optional[ContactType] = jstruct.JStruct[ContactType]
+
+
+@attr.s(auto_attribs=True)
+class ConsigneeType:
+    issuerCode: typing.Optional[str] = None
+    party: typing.Optional[PartyType] = jstruct.JStruct[PartyType]
 
 
 @attr.s(auto_attribs=True)
@@ -108,6 +115,7 @@ class PickupPartyType:
 @attr.s(auto_attribs=True)
 class PartiesType:
     consignor: typing.Optional[ConsignorType] = jstruct.JStruct[ConsignorType]
+    consignee: typing.Optional[ConsigneeType] = jstruct.JStruct[ConsigneeType]
     pickupParty: typing.Optional[PickupPartyType] = jstruct.JStruct[PickupPartyType]
 
 

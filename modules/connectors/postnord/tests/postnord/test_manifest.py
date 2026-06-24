@@ -110,6 +110,28 @@ ManifestRequest = {
                             "contactName": "John Sender",
                             "emailAddress": "sender@example.com",
                             "phoneNo": "+46701234567",
+                            "smsNo": "+46701234567",
+                        },
+                    },
+                },
+                "consignee": {
+                    "issuerCode": "Z12",
+                    "party": {
+                        "nameIdentification": {
+                            "name": "John Sender",
+                            "companyName": "ACME Sender AB",
+                        },
+                        "address": {
+                            "streets": ["Sandhamnsgatan 61"],
+                            "postalCode": "11528",
+                            "city": "Stockholm",
+                            "countryCode": "SE",
+                        },
+                        "contact": {
+                            "contactName": "John Sender",
+                            "emailAddress": "sender@example.com",
+                            "phoneNo": "+46701234567",
+                            "smsNo": "+46701234567",
                         },
                     },
                 },
@@ -129,6 +151,7 @@ ManifestRequest = {
                             "contactName": "John Sender",
                             "emailAddress": "sender@example.com",
                             "phoneNo": "+46701234567",
+                            "smsNo": "+46701234567",
                         },
                     }
                 },
