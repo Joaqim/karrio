@@ -28,3 +28,7 @@ from karrio.providers.postnord.manifest import (
     parse_manifest_response,
     manifest_request,
 )
+from karrio.providers.postnord.service_points import (
+    parse_service_points_response,
+    service_points_request,
+)
