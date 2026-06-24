@@ -3,10 +3,15 @@
 import karrio.lib as lib
 import karrio.api.proxy as proxy
 import karrio.mappers.postnord.settings as provider_settings
+from karrio.universal.mappers.rating_proxy import RatingMixinProxy
 
 
 class Proxy(proxy.Proxy):
     settings: provider_settings.Settings
+
+    # PostNord has no live rate API; rating resolves the server-side RateSheet
+    # via the universal rating mixin rather than an HTTP call.
+    get_rates = RatingMixinProxy.get_rates
 
     def _url(self, path: str, **params) -> str:
         """Build a PostNord URL with the apikey appended as a query parameter.
@@ -19,12 +24,6 @@ class Proxy(proxy.Proxy):
             {"apikey": self.settings.apikey, **{k: v for k, v in params.items() if v is not None}}
         )
         return f"{self.settings.server_url}{path}?{query}"
-
-    def get_rates(self, request: lib.Serializable) -> lib.Deserializable[str]:
-        # PostNord exposes no money-rate API; rating is static/config-driven (D1).
-        # The serialized request is handed straight to the rate provider, which
-        # synthesizes RateDetails from the ConnectionConfig rate table.
-        return lib.Deserializable(request.serialize(), lib.to_dict)
 
     def create_shipment(self, request: lib.Serializable) -> lib.Deserializable[str]:
         response = lib.request(

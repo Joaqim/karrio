@@ -1,4 +1,10 @@
-"""PostNord carrier rate tests."""
+"""PostNord carrier rate tests.
+
+PostNord has no live rate API; rating is served from Karrio's first-class
+static-rate mechanism (universal rating mixin) against the connection's
+service levels, whose per-merchant prices arrive via the server-side RateSheet
+(modeled here by the fixture's ``services``).
+"""
 
 import unittest
 from unittest.mock import patch, ANY
@@ -14,12 +20,8 @@ class TestPostNordRating(unittest.TestCase):
         self.maxDiff = None
         self.RateRequest = models.RateRequest(**RatePayload)
 
-    def test_create_rate_request(self):
-        request = gateway.mapper.create_rate_request(self.RateRequest)
-        self.assertEqual(lib.to_dict(request.serialize()), RateRequest)
-
-    def test_get_rates(self):
-        # Rating is static/config-driven (D1); no carrier HTTP call is made.
+    def test_get_rates_makes_no_http_call(self):
+        # Rating resolves the static RateSheet locally; no carrier HTTP call.
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
             karrio.Rating.fetch(self.RateRequest).from_(gateway)
             mock.assert_not_called()
@@ -70,10 +72,6 @@ RatePayload = {
     "services": ["postnord_parcel"],
 }
 
-RateRequest = {
-    "services": ["18"],
-}
-
 ParsedRateResponse = [
     [
         {
@@ -82,11 +80,21 @@ ParsedRateResponse = [
             "currency": "SEK",
             "service": "postnord_parcel",
             "total_charge": 89.0,
+            "transit_days": 2,
+            "extra_charges": [
+                {
+                    "amount": 89.0,
+                    "currency": "SEK",
+                    "name": "Base Charge",
+                }
+            ],
             "meta": {
-                "rate_provider": "postnord",
-                "service_name": "postnord_parcel",
+                "carrier_service_code": "18",
+                "service_name": "PostNord Parcel",
+                "shipping_charges": 89.0,
+                "shipping_currency": "SEK",
             },
-        },
+        }
     ],
     [],
 ]
