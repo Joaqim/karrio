@@ -93,12 +93,18 @@ def _normalize_service_point(point: dict) -> dict:
     address = point.get("deliveryAddress") or point.get("visitingAddress") or {}
     coordinate = next(iter(point.get("coordinates") or []), {})
     point_type = point.get("type") or {}
+    type_id = point_type.get("typeId")
+    # Keep ``type`` a string: typeId is numeric in the spec, so coerce the
+    # fallback rather than emit a mixed str/int field.
+    type_label = point_type.get("typeName") or (
+        str(type_id) if type_id is not None else None
+    )
 
     return lib.to_dict(
         {
             "id": point.get("servicePointId"),
             "name": point.get("name"),
-            "type": point_type.get("typeName") or point_type.get("typeId"),
+            "type": type_label,
             "address": lib.to_dict(
                 {
                     "address_line1": lib.text(

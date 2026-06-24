@@ -144,6 +144,22 @@ ServicePointsResponse = """{
           "typeId": 2,
           "typeName": "Parcel Box Location"
         }
+      },
+      {
+        "servicePointId": "1003371",
+        "name": "Locker Odenplan",
+        "routeDistance": 1200,
+        "deliveryAddress": {
+          "countryCode": "SE",
+          "city": "STOCKHOLM",
+          "streetName": "Odengatan",
+          "streetNumber": "1",
+          "postalCode": "11322"
+        },
+        "coordinates": [],
+        "type": {
+          "typeId": 51
+        }
       }
     ]
   }
@@ -184,6 +200,19 @@ ParsedServicePoints = [
                 "country_code": "SE",
             },
             "distance": 850,
+        },
+        {
+            # No typeName: the numeric typeId is coerced to a string.
+            "id": "1003371",
+            "name": "Locker Odenplan",
+            "type": "51",
+            "address": {
+                "address_line1": "Odengatan 1",
+                "city": "STOCKHOLM",
+                "postal_code": "11322",
+                "country_code": "SE",
+            },
+            "distance": 1200,
         },
     ],
     [],
