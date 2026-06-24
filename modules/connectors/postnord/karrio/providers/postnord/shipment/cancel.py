@@ -1,15 +1,21 @@
 """Karrio PostNord shipment cancellation API implementation.
 
-PostNord exposes no DELETE route; cancellation re-POSTs the booking
-``ediInstruction`` (``ShipmentRequestType``) with ``updateIndicator``
-``"Deletion"`` to ``/rest/shipment/v3/edi``. PostNord matches the original
-shipment by ``shipmentIdentification.shipmentId`` (the client id assigned at
-booking), so the Deletion references that id on both the shipment and its
-item. Success is the absence of faults in the response.
-"""
+PostNord's REST ``/rest/shipment/v3/edi`` does NOT support cancellation via an
+``ediInstruction`` with ``updateIndicator`` ``"Deletion"``: re-POSTing a complete
+booking instruction with that indicator is ignored and books a NEW shipment
+(verified live -- the response is HTTP 201 with a fresh ``bookingId`` and new
+tracking ids). Sending a Deletion-shaped booking would therefore silently create
+duplicate shipments, so this connector never does so.
 
-import datetime
-import karrio.schemas.postnord.shipment_request as postnord_req
+Real id-based cancellation uses the swagger ``deleteEdiRequest`` shape
+(``{"ids": [{"id": <string>}], "minItems": 1}``), but its endpoint is absent from
+the available ``vendor/booking.swagger.json``. Pending the delete endpoint URL
+from PostNord's v3 REST reference manual, ``shipment_cancel_request`` emits the
+correct ``{"ids": [{"id": ...}]}`` body and the proxy POSTs it to ``/v3/edi`` as a
+placeholder: ``/v3/edi`` cannot mis-read this body as a booking and safely rejects
+it ("edi.shipment is not iterable"). Success is the absence of faults in the
+response.
+"""
 
 import typing
 import karrio.lib as lib
@@ -44,47 +50,6 @@ def shipment_cancel_request(
     payload: models.ShipmentCancelRequest,
     settings: provider_utils.Settings,
 ) -> lib.Serializable:
-    shipment_id = payload.shipment_identifier
-
-    request = postnord_req.ShipmentRequestType(
-        messageDate=datetime.datetime.now().isoformat(timespec="seconds"),
-        updateIndicator="Deletion",
-        testIndicator=settings.test_mode,
-        application=postnord_req.ApplicationType(
-            name="Karrio",
-            applicationId=lib.to_int(settings.application_id),
-        ),
-        shipment=[
-            postnord_req.ShipmentType(
-                shipmentIdentification=postnord_req.ShipmentIdentificationType(
-                    shipmentId=shipment_id,
-                ),
-                parties=postnord_req.PartiesType(
-                    consignor=postnord_req.ConsignType(
-                        issuerCode=settings.issuer_code,
-                        partyIdentification=lib.identity(
-                            postnord_req.PartyIdentificationType(
-                                partyId=settings.customer_number,
-                                partyIdType="160",
-                            )
-                            if settings.customer_number
-                            else None
-                        ),
-                    ),
-                ),
-                goodsItem=[
-                    postnord_req.GoodsItemType(
-                        items=[
-                            postnord_req.ItemType(
-                                itemIdentification=postnord_req.ItemIdentificationType(
-                                    itemId=shipment_id,
-                                ),
-                            )
-                        ],
-                    )
-                ],
-            )
-        ],
-    )
+    request = dict(ids=[dict(id=payload.shipment_identifier)])
 
     return lib.Serializable(request, lib.to_dict)
