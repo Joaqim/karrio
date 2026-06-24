@@ -8,6 +8,7 @@ Booking and label retrieval happen in one call against
 ``labelPrintout`` entries with base64 label data.
 """
 
+import uuid
 import datetime
 import karrio.schemas.postnord.shipment_request as postnord_req
 import karrio.schemas.postnord.shipment_response as postnord_res
@@ -30,7 +31,11 @@ def parse_shipment_response(
 
     booking = response.get("bookingResponse") or {}
     has_shipment = any(booking.get("idInformation") or []) and not any(messages)
-    shipment = _extract_details(response, settings) if has_shipment else None
+    shipment = (
+        _extract_details(response, settings, _response.ctx)
+        if has_shipment
+        else None
+    )
 
     return shipment, messages
 
@@ -38,6 +43,7 @@ def parse_shipment_response(
 def _extract_details(
     data: dict,
     settings: provider_utils.Settings,
+    ctx: dict = {},
 ) -> models.ShipmentDetails:
     response = lib.to_object(postnord_res.ShipmentResponseType, data)
     booking = response.bookingResponse
@@ -50,7 +56,8 @@ def _extract_details(
         (_id.value for _id in ids if _id.idType == "itemId"), None
     )
     shipment_identifier = lib.identity(
-        next((_id.value for _id in ids if _id.idType == "shipmentId"), None)
+        ctx.get("shipment_id")
+        or next((_id.value for _id in ids if _id.idType == "shipmentId"), None)
         or booking.bookingId
         or tracking_number
     )
@@ -102,6 +109,13 @@ def shipment_request(
 
     additional_service_codes = [option.code for _, option in options.items()]
 
+    # PostNord matches a Deletion (cancellation) against the original booking's
+    # shipmentIdentification.shipmentId. Assigning a client shipmentId here lets
+    # the cancel call reference it; without one PostNord auto-allocates and the
+    # Deletion finds 0 items. Prefer the caller reference; fall back to a
+    # generated id (unit tests always set a reference).
+    shipment_id = payload.reference or uuid.uuid4().hex[:12].upper()
+
     def _party(address, *, with_consignor_id: bool) -> postnord_req.ConsignType:
         return postnord_req.ConsignType(
             issuerCode=settings.issuer_code,
@@ -144,6 +158,9 @@ def shipment_request(
         ),
         shipment=[
             postnord_req.ShipmentType(
+                shipmentIdentification=postnord_req.ShipmentIdentificationType(
+                    shipmentId=shipment_id,
+                ),
                 service=postnord_req.ServiceType(
                     basicServiceCode=service,
                     additionalServiceCode=additional_service_codes or None,
@@ -198,4 +215,4 @@ def shipment_request(
         ],
     )
 
-    return lib.Serializable(request, lib.to_dict)
+    return lib.Serializable(request, lib.to_dict, dict(shipment_id=shipment_id))
