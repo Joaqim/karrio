@@ -5,7 +5,7 @@
   "application": {
     "name": "Karrio",
     "version": "1.0",
-    "applicationId": "0000"
+    "applicationId": 0
   },
   "shipment": [
     {

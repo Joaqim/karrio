@@ -140,7 +140,7 @@ def shipment_request(
         testIndicator=settings.test_mode,
         application=postnord_req.ApplicationType(
             name="Karrio",
-            applicationId=settings.application_id,
+            applicationId=lib.to_int(settings.application_id),
         ),
         shipment=[
             postnord_req.ShipmentType(
@@ -162,6 +162,12 @@ def shipment_request(
                         ),
                         items=[
                             postnord_req.ItemType(
+                                itemIdentification=postnord_req.ItemIdentificationType(
+                                    itemId=lib.identity(
+                                        package.reference_number
+                                        or f"{payload.reference or 'KARRIO'}{index}"
+                                    ),
+                                ),
                                 grossWeight=postnord_req.TotalGrossWeightType(
                                     value=package.weight.KG,
                                     unit="KGM",
@@ -184,7 +190,7 @@ def shipment_request(
                             )
                         ],
                     )
-                    for package in packages
+                    for index, package in enumerate(packages, start=1)
                 ],
             )
         ],
