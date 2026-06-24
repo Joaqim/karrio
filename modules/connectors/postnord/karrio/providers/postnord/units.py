@@ -105,6 +105,45 @@ def shipping_options_initializer(
     return units.ShippingOptions(options, ShippingOption, items_filter=items_filter)
 
 
+class ServicePointType(lib.StrEnum):
+    """PostNord Service Points v5 ``typeId`` values.
+
+    Values are the documented service-point typeIds from the
+    ``servicepoints-v5`` spec (``/v5/servicepoints/nearest/byaddress``
+    ``typeId`` parameter). Used as a comma-separated filter on the lookup.
+    """
+
+    parcel_box = "2"
+    cancelled_dk = "4"
+    pakkeshop_med_salg_dk = "6"
+    letter_office_se = "22"
+    business_centre_se = "24"
+    servicepoint_se = "25"
+    servicepoint_no = "37"
+    servicepoint_fi = "38"
+    pakkeshop_dk = "44"
+    collect_in_store = "51"
+    delivery_office_se = "54"
+    servicepoint_europe = "61"
+    terminal_pickup_se = "73"
+    letter_terminal_drop_off_se = "74"
+
+
+class ServicePointContext(lib.StrEnum):
+    """PostNord Service Points v5 ``context`` values.
+
+    A context defines which kinds of service points the lookup returns
+    (``context`` parameter on the nearest-servicepoints operations).
+    """
+
+    optional_service_point = "optionalservicepoint"
+    early_collect = "earlycollect"
+    labelless = "labelless"
+    saturday_delivery = "saturdaydelivery"
+    mypack_small = "mypacksmall"
+    all = "all"
+
+
 class TrackingStatus(lib.Enum):
     """Maps carrier tracking status codes to normalized Karrio statuses.
 
