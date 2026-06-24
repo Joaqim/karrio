@@ -70,5 +70,21 @@ pkgs.mkShell {
       fi
     done
     export PYTHONPATH="$extra:$PYTHONPATH"
+
+    # This nix shell is an alternative entry point alongside the standard
+    # bin/activate-env virtualenv workflow; it does not replace it. Surface the
+    # constraints that differ from the venv so codegen and scaffolding behave
+    # predictably here.
+    cat >&2 <<'KARRIO_ENV_NOTE'
+karrio nix dev shell active (alternative to `source bin/activate-env`).
+  - The `kcli` console script is not installed in this env. Invoke the CLI as
+    `./bin/cli ...` instead. For schema codegen, the connector `generate`
+    scripts and `bin/run-generate-on` call `kcli`; run codegen directly with
+    `./bin/cli codegen generate <schema.json> <out.py>` until a `kcli` wrapper
+    is added here.
+  - Local sources (sdk, soap, cli, connectors, plugins) are on PYTHONPATH with
+    no pip/virtualenv step; a newly scaffolded connector joins PYTHONPATH on the
+    next shell entry (e.g. `direnv reload`).
+KARRIO_ENV_NOTE
   '';
 }
