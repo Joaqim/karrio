@@ -79,6 +79,15 @@ ManifestRequest = {
                 "earliestPickupDate": "2026-06-25T08:00:00",
                 "latestPickupDate": "2026-06-25T16:00:00",
             },
+            "service": {"basicServiceCode": "20"},
+            "goodsItem": [
+                {
+                    "items": [
+                        {"itemIdentification": {"itemId": "SHIP-0001"}},
+                        {"itemIdentification": {"itemId": "SHIP-0002"}},
+                    ],
+                }
+            ],
             "parties": {
                 "consignor": {
                     "issuerCode": "Z12",
