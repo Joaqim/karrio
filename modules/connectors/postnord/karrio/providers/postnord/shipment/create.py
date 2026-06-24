@@ -163,10 +163,12 @@ def shipment_request(
                         items=[
                             postnord_req.ItemType(
                                 itemIdentification=postnord_req.ItemIdentificationType(
-                                    itemId=lib.identity(
-                                        package.reference_number
-                                        or f"{payload.reference or 'KARRIO'}{index}"
-                                    ),
+                                    # "0" tells PostNord to allocate the parcel id
+                                    # (returned as the tracking number). An arbitrary
+                                    # value triggers "unable to determine id type",
+                                    # since PostNord infers the id scheme (SSCC/S10/…)
+                                    # from the value.
+                                    itemId="0",
                                 ),
                                 grossWeight=postnord_req.TotalGrossWeightType(
                                     value=package.weight.KG,
@@ -190,7 +192,7 @@ def shipment_request(
                             )
                         ],
                     )
-                    for index, package in enumerate(packages, start=1)
+                    for package in packages
                 ],
             )
         ],
