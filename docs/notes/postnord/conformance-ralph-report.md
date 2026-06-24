@@ -25,3 +25,13 @@ Iterative measure→fix→commit loop driving the PostNord carrier integration t
 | baseline | — | — | 4 | 18 pass |
 | 1 | D1 | `parse_shipment_cancel_response` returns `None` + explicit `cancellation_unsupported` message; never reports success on an empty body | 3 | 17 pass |
 | 2 | D2 | `return_shipment` delegates to the `create` flow (PostNord returns are bookings with a return service code), replacing the `{}` stub | 2 | 17 pass |
+| 3 | D3 | First-class Pickup API (`models.PickupRequest.address` → `/v3/pickups`, swagger-confirmed no-consignee courier-collection — no SE→SE fallback); manifest neutered to an explicit `not_supported` message. Removed orphaned manifest schema files. | 1 | 20 pass (subagent-verified; not re-run — nix builds deferred) |
+
+## Status: paused for hand-off (1 defect remaining)
+
+The ZFS pool filled during cycle 3; nix builds/test runs are deferred to a machine with disk space. Cycles 1–2 are on `origin/develop`; cycle 3 + cleanup are committed but **not re-verified locally** (subagent reported 20 tests pass before the disk filled).
+
+Remaining (resume on the build machine):
+- **Cycle 4 (D4):** add a rate error-handling/edge test (rate request for a destination with no matching zone → empty rates, no crash) to satisfy the DoD "rate quote + error handling".
+- **Re-verify:** run `nix develop .#default --command bash -c 'export PYTHONPATH=modules/connectors/postnord:$PYTHONPATH; python -m unittest discover -f modules/connectors/postnord/tests'` (expect 20→21 pass) and the full `./bin/run-sdk-tests`.
+- **Wrap-up:** final defect count (target 0), this report's final table, push.
