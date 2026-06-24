@@ -58,6 +58,18 @@ class ShippingService(lib.StrEnum):
     postnord_pallet = "52"
     postnord_postpaket_utrikes = "91"
 
+    # Codes 11 and 86 appear as serviceCode values in worked bookingInstructions
+    # example payloads in delivery-options.swagger.json (mailbox, express-mailbox),
+    # the same instructions the Booking API consumes.
+    postnord_mailbox = "11"
+    postnord_express_mailbox = "86"
+
+    # Codes 30 and 83 are documented in the delivery-options DeliveryType narrative
+    # (home-small, groupage) and are not contradicted by the booking spec, which
+    # accepts any basicServiceCode string.
+    postnord_home_small = "30"
+    postnord_groupage = "83"
+
 
 class ShippingOption(lib.Enum):
     """PostNord additionalServiceCode values."""
@@ -68,6 +80,10 @@ class ShippingOption(lib.Enum):
     postnord_flexchange = lib.OptionEnum("C7", bool)
     postnord_collect_in_store = lib.OptionEnum("E4", bool)
     postnord_early_collect = lib.OptionEnum("F6", bool)
+
+    # Code 65 is documented in the delivery-options DeliveryType narrative as the
+    # additional service code carried by pallet (52) and groupage (83) options.
+    postnord_pallet_groupage = lib.OptionEnum("65", bool, meta=dict(category="HANDLING"))
 
     """ Unified Option type mapping """
     cash_on_delivery = postnord_cod
