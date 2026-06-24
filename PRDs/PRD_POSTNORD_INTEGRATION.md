@@ -5,7 +5,7 @@
 | Field | Value |
 |-------|-------|
 | Project | Karrio |
-| Version | 1.3 |
+| Version | 1.4 |
 | Date | 2026-06-24 |
 | Status | Planning |
 | Owner | Joaqim Planstedt |
@@ -17,6 +17,8 @@
 > **v1.2 revision note:** Analyzed `postnord-tracking.swagger.json`. It is a `Track Shipment URL` API (`GET /rest/links/v1/tracking/{country}/{id}`) that returns only a tracking **URL string**, not events/status. Tracking is therefore implemented **link-only** (D7): `get_tracking` populates `tracking_url` plus a single generic status, no events. A future enhancement upgrades to the Track & Trace v5/v7 `findByIdentifier` events API.
 >
 > **v1.3 revision note:** The connector was validated end-to-end against the PostNord sandbox (`atapi2.postnord.com`). Book+label, tracking, rating, and manifest/pickup are **live-validated**. Cancellation is **blocked**: the REST `/rest/shipment/v3/edi` endpoint ignores `updateIndicator: "Deletion"` and re-posting a complete `ediInstruction` with Deletion returns HTTP 201 and books a **duplicate** shipment (verified live). REST cannot cancel; the real mechanism is the swagger's id-based `deleteEdiRequest {ids:[{id}]}` endpoint, which is absent from the available swagger. The connector now sends a safe `{ids:[{id}]}` placeholder body (which `/v3/edi` rejects without booking) pending PostNord's v3 REST reference manual (D8).
+>
+> **v1.4 revision note:** Two design changes after a deeper codebase investigation. **Rating** is redesigned (D9, supersedes the v1.0 bespoke `ConnectionConfig.rate_table`): it now uses Karrio's first-class static-rate mechanism — `Settings` inherits `karrio.universal.mappers.rating_proxy.RatingMixinSettings` and the proxy calls `RatingMixinProxy.get_rates` (no carrier HTTP call), exactly the `generic` carrier pattern. `DEFAULT_SERVICES` in `units.py` ships as the seed catalog and per-merchant contract prices live in the server-side `RateSheet` entity attached to `CarrierConnection.rate_sheet`. **Service Points** deferral (D6) is confirmed against the codebase: Karrio has **no** unified service-point/pickup-location contract (no SDK proxy op, no `CarrierCapabilities` entry, no Django REST route, no GraphQL query, no frontend type); the only related construct is the duck-typed LSP plugin pattern. Service Points remains out of scope.
 
 ---
 
@@ -48,7 +50,7 @@ The authoritative Booking (EDI) spec resolves the central design question: every
 1. **Direct-carrier connector at `modules/connectors/postnord/`**: PostNord operates its own first-party API, so it follows the standard direct-carrier pattern (not the `community/plugins/` hub pattern).
 2. **Single `apikey` credential (query param)**: the Booking (EDI) and Service Points specs are `SECURED: False` and take `?apikey=...` on every call. One `apikey` setting authorizes Booking, Manifest-as-Pickup, Service Points, and Tracking. The OAuth2/dual-credential design from v1.0 is removed.
 3. **Shipping via the Booking EDI API**: `POST /rest/shipment/v3/edi/labels/{pdf,zpl}` books and returns the label in one call. Cancellation is **blocked** (D8): the REST `/v3/edi` endpoint ignores `updateIndicator: "Deletion"` and re-posting a complete `ediInstruction` with Deletion books a duplicate shipment (verified live). The real cancel mechanism is the swagger's id-based `deleteEdiRequest {ids:[{id}]}` endpoint, which is absent from the available swagger; the connector sends that safe `{ids:[{id}]}` body as a placeholder (rejected by `/v3/edi` without booking) pending PostNord's v3 REST reference manual.
-4. **Rating via merchant-configured static rates** (D1): PostNord exposes no money-rate API, so `get_rates` returns rates from a merchant-supplied `ConnectionConfig` rate table keyed by service code rather than calling the carrier.
+4. **Rating via Karrio's universal static-rate mechanism** (D1/D9): PostNord exposes no money-rate API, so rating uses Karrio's first-class static-rate engine — the `generic` carrier pattern — instead of calling the carrier. `Settings` inherits `RatingMixinSettings` (exposing `services: List[models.ServiceLevel]`) and the proxy calls `RatingMixinProxy.get_rates`, which matches zones/weights and emits `RateDetails` with no HTTP call. `DEFAULT_SERVICES` in `units.py` is the seed catalog (services 17/18/19/20/52/91, `currency="SEK"`, `rate=0.0` placeholders); per-merchant contract prices live in the server-side `RateSheet` entity attached to `CarrierConnection.rate_sheet`. The bespoke `ConnectionConfig.rate_table` from v1.0 is removed.
 5. **Manifest mapped to the Booking API's `/v3/pickups`** (D2): PostNord has no manifest/scan-form endpoint, so `Manifest.create()` books a physical pickup via `POST /rest/shipment/v3/pickups` — an endpoint within the same Booking spec. Semantics differ from a true manifest document; documented as a limitation.
 6. **Service Points documented but deferred** (D6): the supplied Service Points v5 spec (pickup-location lookup for MyPack Collect) is mapped in this PRD as a planned carrier-specific helper, not implemented in the first pass.
 7. **Tracking is link-only** (D7): the supplied tracking spec returns only a tracking URL, so `get_tracking` populates `TrackingDetails.tracking_url` and a single generic status — no events. Upgrading to the Track & Trace v5/v7 events API is a future enhancement.
@@ -58,7 +60,7 @@ The authoritative Booking (EDI) spec resolves the central design question: every
 | In Scope | Out of Scope |
 |----------|--------------|
 | Shipping: book + label (PDF/ZPL/SVG/QR) via Booking EDI `/v3/edi/labels/*` | Real-time money-rate quoting (no public PostNord API) |
-| Rating: static/config-driven rate table per service (D1) | Shipment cancellation (D8 — blocked: REST cannot cancel; needs id-based delete endpoint absent from the swagger) |
+| Rating: Karrio universal static-rate engine + server `RateSheet` per service (D1/D9) | Shipment cancellation (D8 — blocked: REST cannot cancel; needs id-based delete endpoint absent from the swagger) |
 | Manifest: pickup booking via `/v3/pickups` (D2) | True end-of-day scan-form manifest document |
 | Tracking: link-only (`tracking_url` + generic status, D7) | Service-point lookup *implementation* (documented/deferred, D6) |
 | Service & additional-service / package / issuer enums in `units.py` | Event-based tracking (status/locations/events) until a Track & Trace v5/v7 spec is supplied |
@@ -75,27 +77,28 @@ The authoritative Booking (EDI) spec resolves the central design question: every
 | # | Question | Context | Options | Status |
 |---|----------|---------|---------|--------|
 | Q2 | Sandbox apikey availability | Tests are mocked and need no live key, but end-to-end validation against `atapi2.postnord.com` does. | A) Obtain partner sandbox apikey before live validation; B) mock-only | ✅ Resolved — apikey + customer agreement obtained; **book+label, tracking, rating, and manifest/pickup all validated live** (2026-06-24). Cancel is blocked (D8). |
-| Q3 | Static rate table location | D1 chose static/config rates; this sub-decision sets whether each merchant configures rates or a default ships. | A) `ConnectionConfig.rate_table` per connection; B) config over shipped default | ⏳ Pending |
+| Q3 | Static rate location | D1 chose static rates; this sub-decision sets where per-merchant rates live and what seeds the catalog. | A) bespoke `ConnectionConfig.rate_table`; B) server-side `RateSheet` + `DEFAULT_SERVICES` seed | ✅ Resolved (D9) — per-merchant prices live in the server `RateSheet` entity attached to `CarrierConnection.rate_sheet` (CSV/XLSX import + admin/GraphQL CRUD), not a `ConnectionConfig` dict; `DEFAULT_SERVICES` is the seed catalog. The bespoke `rate_table` is removed. |
 | Q4 | Label-by-id token (`id` vs `printId`) | Booking response returns both `assignedIds.value` and `assignedIds.printId`; the `/v3/labels/ids/*` body schema (`ids_inner`) only has `{id, labelType}`. Which token the retrieval keys on is ambiguous in the spec. Only relevant if the two-step (book then fetch label) path is used; the one-shot `/v3/edi/labels/*` path avoids it. | A) Use one-shot path (avoids the question) — **recommended**; B) confirm with PostNord | ⏳ Pending |
 
 ### Resolved Decisions
 
 | # | Decision | Choice | Rationale | Date |
 |---|----------|--------|-----------|------|
-| D1 | Rating given no public rate API | Static/config rates | Prices are contract-specific and unexposed. Merchant-configured flat rates per service keep rate-driven flows working without fabricating carrier data. | 2026-06-24 |
+| D1 | Rating given no public rate API | Static rates via Karrio's universal engine (see D9) | Prices are contract-specific and unexposed. Static, no carrier call: `RatingMixinSettings`/`RatingMixinProxy.get_rates` match zones/weights and emit `RateDetails`; per-merchant prices live in the server `RateSheet`, seeded by `DEFAULT_SERVICES`. Keeps rate-driven flows working without fabricating carrier data. | 2026-06-24 |
 | D2 | Manifest given no manifest API | Map to Booking `/v3/pickups` | No native manifest/EOD endpoint (EDI file flow retired 2024). The Booking spec's `createPickups` is the nearest physical-handover mechanism and lives in the same API. | 2026-06-24 |
 | D3 | API generation / auth | apikey EDI generation (per supplied spec) | `postnord-booking.swagger.json` is `SECURED: False`, apikey query param. Authoritative spec supersedes the web-sourced OAuth2 claim. Resolves v1.0's Q1. | 2026-06-24 |
 | D4 | Connector location/pattern | `modules/connectors/postnord/`, direct carrier | First-party carrier with its own API, not an aggregator. | 2026-06-24 |
 | D5 | Reference carriers | SEKO (auth) + USPS (structure) | SEKO models apikey auth; USPS models JSON provider/test/manifest layout. | 2026-06-24 |
-| D6 | Service Points v5 scope | Document, defer implementation | Pickup-location lookup for MyPack Collect; no unified Karrio service-point contract exists. Mapped here; implemented later. | 2026-06-24 |
+| D6 | Service Points v5 scope | Document, defer implementation (deferral confirmed against the codebase) | Pickup-location lookup for MyPack Collect. Codebase investigation confirms Karrio has **no** unified service-point/pickup-location contract — no SDK proxy operation, no `CarrierCapabilities` entry, no Django REST route, no GraphQL query, no frontend type. The only related construct is the duck-typed LSP plugin pattern (e.g. `googlegeocoding` adds `validate_address`, recognized via `is_address_validator()` method-presence checking). The future path is either an LSP-style plugin (add a `find_service_points` proxy method + an `is_service_point_provider` detector) or a new unified op (model pair + capability + API surface); none exist yet. Mapped here; implemented later. See Appendix C. | 2026-06-24 |
 | D7 | Tracking depth | Link-only (no events) | Supplied `postnord-tracking.swagger.json` returns only a tracking URL, not events. `get_tracking` populates `tracking_url` + generic status; events deferred to a future Track & Trace v5/v7 integration. | 2026-06-24 |
 | D8 | Cancellation | Blocked (safe placeholder) | REST `/v3/edi` ignores `updateIndicator: "Deletion"` and books a duplicate (verified live); real cancel needs the id-based `deleteEdiRequest` endpoint absent from the swagger. Connector sends a safe `{ids:[{id}]}` placeholder (rejected without booking) pending PostNord's v3 REST reference manual. | 2026-06-24 |
+| D9 | Rating mechanism | Karrio universal RatingMixin + server RateSheet | Replaces the bespoke `ConnectionConfig.rate_table`; reuses zone/weight matching, surcharges, CSV import, and rate-sheet CRUD; verified against the `generic` carrier | 2026-06-24 |
 
 ### Edge Cases Requiring Input
 
 | Edge Case | Impact | Proposed Handling | Needs Input? |
 |-----------|--------|-------------------|--------------|
-| Rate requested for a service absent from the static table | `get_rates` returns empty | Return `[]` + informational `Message`; never raise | ❌ No |
+| Rate requested for a service/zone absent from the rate sheet | No matching `RateDetails` | Handled by the universal `RatingMixinProxy`: zone/weight matching yields no row, so the engine returns an empty rate set (no fabricated price, never raises) | ❌ No |
 | Cancellation cannot be done via REST (D8) | Void flow blocked | REST `/v3/edi` ignores `updateIndicator: "Deletion"` and books a duplicate (verified live); send a safe `{ids:[{id}]}` placeholder (rejected without booking) pending the id-based `deleteEdiRequest` endpoint, absent from the swagger | ✅ Yes (needs PostNord v3 REST reference manual) |
 | Two-step label retrieval token ambiguity | Wrong/empty label | Prefer one-shot `/v3/edi/labels/*`; if two-step needed, resolve Q4 | ✅ Yes (Q4) |
 | Partial item failure (some `idInformation` FAIL) | Mixed success reported inline, not as HTTP error | Parse per-item `errorResponse` inside `bookingResponse`; surface as `Message`s alongside details | ❌ No |
@@ -132,7 +135,7 @@ gateway = karrio.gateway["postnord"].create(
 # Shipping — Booking EDI, returns PDF/ZPL label inline (base64)
 karrio.Shipment.create(shipment_request).from_(gateway)
 
-# Rating — static/config rate table (no carrier call)
+# Rating — Karrio universal static-rate engine over the server RateSheet (no carrier call)
 karrio.Rating.fetch(rate_request).from_(gateway)
 
 # Manifest — pickup booking via /v3/pickups
@@ -177,7 +180,7 @@ karrio.Tracking.fetch(tracking_request).from_(gateway)
 - [ ] CLI scaffolding committed unmodified where generated (esp. `mapper.py`)
 - [ ] `schemas/*.json` source files derived from `postnord-booking.swagger.json`; `karrio/schemas/postnord/*.py` regenerated
 - [ ] Shipping create (book + label) implemented and tested
-- [ ] Rating (static) implemented and tested
+- [ ] Rating (universal static-rate engine + `DEFAULT_SERVICES` seed, D9) implemented and tested
 - [ ] Manifest (pickup-mapped, `/v3/pickups`) implemented and tested
 - [ ] Tracking (link-only) implemented and tested
 - [ ] `python -m unittest discover -v -f modules/connectors/postnord/tests` passes
@@ -223,7 +226,7 @@ The supplied `postnord-booking.swagger.json` is authoritative and apikey-based, 
 | Base `Settings` + `server_url` test/prod switch | `modules/connectors/usps/karrio/providers/usps/utils.py` | `atapi2` vs `api2` switching; single `apikey` field |
 | Enum patterns (`StrEnum`, `OptionEnum`, list-of-codes `TrackingStatus`) | `modules/connectors/usps/karrio/providers/usps/units.py` | Source for `ShippingService`, `ShippingOption`, `PackagingType`, `TrackingStatus` |
 | Manifest request/response + `ManifestDetails` | `modules/connectors/usps/karrio/providers/usps/manifest.py` | Reference shape; adapt target to `/v3/pickups` |
-| Static service catalog (`DEFAULT_SERVICES`) | `modules/connectors/usps/karrio/providers/usps/units.py` (`load_services_from_csv`) | Optional pattern for static rate table (Q3) |
+| Universal static-rate engine (`RatingMixinSettings`/`RatingMixinProxy`, `DEFAULT_SERVICES`) | `modules/connectors/generic/` (`karrio.universal.mappers.rating_proxy`) | Rating mechanism (D9): `Settings` inherits `RatingMixinSettings`; proxy calls `RatingMixinProxy.get_rates`; `DEFAULT_SERVICES` seeds the server `RateSheet` |
 | 4-method test + `cached`/fixture | `modules/connectors/usps/tests/usps/` | Template for `tests/postnord/test_*.py`, `fixture.py` |
 | Plugin registration metadata | `modules/connectors/usps/karrio/plugins/usps/__init__.py` | Template for `karrio/plugins/postnord/__init__.py` |
 | Scaffolding command | `modules/cli/karrio_cli/commands/sdk.py` (`add-extension`) | Generates the whole tree; never hand-create files |
@@ -239,7 +242,7 @@ The supplied `postnord-booking.swagger.json` is authoritative and apikey-based, 
               ┌─────────────┼──────────┐  │    /v3/pickups  (manifest=D2)   │
               │             │          │  │  Track URL    /rest/links (D7)  │
         ┌─────▼────┐  ┌─────▼────┐  ┌──▼──────┐ Service Points (D6, defer)  │
-        │ settings │  │  proxy   │  │  units  │ (rating: none — static, D1) │
+        │ settings │  │  proxy   │  │  units  │ (rating: static D1/D9)      │
         │ (apikey) │  │ (?apikey)│  │ (enums) │ └───────────────────────────┘
         └──────────┘  └──────────┘  └─────────┘
 ```
@@ -285,8 +288,8 @@ The supplied `postnord-booking.swagger.json` is authoritative and apikey-based, 
 │  │ Response│    │  (parse)    │    │ ids[] + label b64│  │ EDI  │ │
 │  └─────────┘    └─────────────┘    └──────────────────┘  └──────┘ │
 ├──────────────────────────────────────────────────────────────────┤
-│  RATING uses NO carrier call — Provider reads static rate table  │
-│  from ConnectionConfig and synthesizes RateDetails (D1).         │
+│  RATING uses NO carrier call — the universal RatingMixinProxy    │
+│  matches zones/weights over the server RateSheet (D1/D9).        │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -297,6 +300,8 @@ The supplied `postnord-booking.swagger.json` is authoritative and apikey-based, 
 import attr
 import karrio.core as core
 import karrio.lib as lib
+import karrio.core.models as models
+import karrio.universal.mappers.rating_proxy as rating_proxy
 
 
 class IssuerCode(lib.Enum):
@@ -310,16 +315,23 @@ class IssuerCode(lib.Enum):
 
 
 @attr.s(auto_attribs=True)
-class Settings(core.Settings):
+class Settings(core.Settings, rating_proxy.RatingMixinSettings):
     """PostNord connection settings — single apikey credential.
 
     The Booking (EDI) and Service Points APIs are SECURED: False and take
     `apikey` as a query parameter on every request.
+
+    Inherits `RatingMixinSettings` so the universal static-rate engine can
+    match zones/weights against `services` and emit `RateDetails` with no
+    carrier HTTP call (D9). At the SDK layer `services` is seeded from
+    `DEFAULT_SERVICES`; in a full-server deployment per-merchant prices are
+    sourced from the `RateSheet` attached to `CarrierConnection.rate_sheet`.
     """
 
     apikey: str = None          # query param — Booking, Pickup, Tracking, Service Points
     issuer_code: str = "Z12"    # market: Z11 DK / Z12 SE / Z13 NO / Z14 FI
     customer_number: str = None # consignor partyId (partyIdType 160)
+    services: list = []         # List[models.ServiceLevel] — static rate catalog (D9)
 
     id: str = None
     test_mode: bool = False
@@ -379,7 +391,7 @@ class Proxy(proxy.Proxy):
 | POST | `/v3/pickups` | `create_manifest` (mapped, D2) | Books physical pickup |
 | GET | `/v1/tracking/{country}/{id}` (base `/rest/links`) | `get_tracking` (link-only, D7) | Returns `LinksResponse{ url, faults[] }`; `country` ∈ SE/NO/FI/DK, `id` 10–35 chars |
 | GET | `/v5/servicepoints/nearest/byaddress` (base `/rest/businesslocation`) | `get_service_points` (D6, deferred) | Service-point lookup |
-| — | (no endpoint) | `get_rates` | Static table (D1) |
+| — | (no endpoint) | `get_rates` | No carrier call — universal `RatingMixinProxy.get_rates` over the server `RateSheet`, seeded by `DEFAULT_SERVICES` (D1/D9) |
 
 **Request — `ediInstruction` (booking body, key shape):**
 
@@ -447,7 +459,7 @@ class Proxy(proxy.Proxy):
 
 | Scenario | Expected Behavior | Handling |
 |----------|-------------------|----------|
-| Rate requested for service absent from static table | Empty rate list, no crash | Return `[]` + informational `Message` (D1) |
+| Rate requested for service/zone absent from the rate sheet | Empty rate list, no crash | Universal `RatingMixinProxy` zone/weight matching yields no row → empty rate set, no fabricated price (D1/D9) |
 | Cancellation (REST cannot cancel, D8) | Booking NOT voided; duplicate risk | Do not re-POST `ediInstruction` with `updateIndicator: "Deletion"` (books a duplicate); send a safe `{ids:[{id}]}` placeholder (rejected without booking) pending the id-based `deleteEdiRequest` endpoint |
 | Partial item failure | Mixed OK/FAIL reported inline | Parse per-item `idInformation[].errorResponse` → `Message`s |
 | `testIndicator` requested | Validate-only, no booking | Map a Karrio test/validation flag to `ediInstruction.testIndicator` |
@@ -460,7 +472,7 @@ class Proxy(proxy.Proxy):
 |-------------------|--------|------------|
 | `apikey` invalid/expired | All ops fail | Parse `errorResponse` → `Message`; `test_parse_error_response` covers it |
 | Two-step label token mismatch (Q4) | Label fetch fails | Use one-shot `/v3/edi/labels/*` path in first pass |
-| Static rate table stale vs contract | Wrong rate shown | Document as merchant responsibility; rates are config, not carrier truth (D1) |
+| Server `RateSheet` stale vs contract | Wrong rate shown | Document as merchant responsibility; rates are merchant-maintained (CSV/XLSX import + CRUD), not carrier truth (D1/D9) |
 | Pickup slots unavailable for manifest | Manifest "fails" | Surface Pickups error as `Message` |
 | Merchants expect rich tracking events from PostNord | Medium | Document link-only limitation in README; offer v5/v7 events upgrade path |
 
@@ -491,7 +503,7 @@ class Proxy(proxy.Proxy):
 | apikey query-param proxy (book/cancel/pickup) | `.../mappers/postnord/proxy.py` | Pending | M |
 | Service / option / status / package / issuer enums | `.../providers/postnord/units.py` | Pending | M |
 | Shipping create (one-shot label); cancel placeholder (`{ids:[{id}]}`, blocked D8) | `.../providers/postnord/shipment/{create,cancel}.py` | Pending | L |
-| Rating (static table from `ConnectionConfig`) | `.../providers/postnord/rate.py` | Pending | M |
+| Rating: re-export universal `rate_request`/`parse_rate_response`; `DEFAULT_SERVICES` seed in `units.py` (D9) | `.../providers/postnord/rate.py`, `.../providers/postnord/units.py` | Pending | M |
 | Manifest → `/v3/pickups` | `.../providers/postnord/manifest.py` | Pending | M |
 | Tracking (link-only: `tracking_url` + generic status, D7) | `.../providers/postnord/tracking.py` | Pending | S |
 | Error parsing (`errorResponse`/`compositeFault`, `LinksResponse.faults`) | `.../providers/postnord/error.py` | Pending | S |
@@ -594,7 +606,7 @@ python -m unittest discover -v -f modules/connectors/postnord/tests
 | Cancellation unavailable via REST (D8) | High | High (by design) | REST `/v3/edi` ignores `updateIndicator: "Deletion"` and books a duplicate (verified live); ship a safe `{ids:[{id}]}` placeholder rejected without booking; do not re-POST Deletion; await the id-based `deleteEdiRequest` endpoint / PostNord v3 REST reference manual |
 | Link-only tracking has no events (D7) | Medium | High (by design) | Document the limitation; populate `tracking_url` + generic status; upgrade path to v5/v7 events |
 | No sandbox apikey (Q2) | Low | Resolved | apikey + customer agreement obtained; live round-trip completed for book+label, tracking, rating, manifest/pickup (2026-06-24) |
-| Rating-as-static misread as carrier rates | Medium | Medium | Document in README + `Message` annotations |
+| Rating-as-static misread as carrier rates | Medium | Medium | Document in README + `Message` annotations; rates come from the merchant-maintained server `RateSheet`, not the carrier (D9) |
 | Manifest-as-pickup semantic mismatch | Medium | Medium | Document mapping; manifest = Return Pickup (service `20`), a return shipment requiring full route (consignor + consignee, SMS both parties); `references` surfaced from `idInformation[]` in meta |
 | Label-by-id token ambiguity (Q4) | Low | Low | Use one-shot label path; avoid two-step retrieval |
 | apikey leakage via query-string traces | High | Low | Mark sensitive; verify trace redaction covers URL params |
@@ -623,7 +635,7 @@ python -m unittest discover -v -f modules/connectors/postnord/tests
 
 ### Appendix A: Resolved design decisions
 
-D1 rating=static/config; D2 manifest=`/v3/pickups`; D3 auth=apikey EDI generation (per supplied spec); D4 direct-carrier location; D5 SEKO(auth)+USPS(structure) references; D6 Service Points documented/deferred; D7 tracking link-only (no events); D8 cancellation blocked (safe `{ids:[{id}]}` placeholder; REST cannot cancel — needs id-based `deleteEdiRequest` endpoint absent from the swagger).
+D1 rating=static (via Karrio's universal engine, see D9); D2 manifest=`/v3/pickups`; D3 auth=apikey EDI generation (per supplied spec); D4 direct-carrier location; D5 SEKO(auth)+USPS(structure) references; D6 Service Points documented/deferred (deferral confirmed against the codebase — no unified Karrio service-point contract exists); D7 tracking link-only (no events); D8 cancellation blocked (safe `{ids:[{id}]}` placeholder; REST cannot cancel — needs id-based `deleteEdiRequest` endpoint absent from the swagger); D9 rating mechanism=Karrio universal RatingMixin + server `RateSheet` (replaces the bespoke `ConnectionConfig.rate_table`; verified against the `generic` carrier).
 
 ### Appendix B: Environments
 
@@ -644,10 +656,12 @@ D1 rating=static/config; D2 manifest=`/v3/pickups`; D3 auth=apikey EDI generatio
 
 **Live sandbox validation (2026-06-24):**
 - *Tracking* — exercised against `atapi2.postnord.com` with a real apikey; returned a `tracking.postnord.com/se/?id=…` URL with no faults. apikey query-param auth works; lowercase country segment (`se`) accepted; URL-only response with no events, consistent with D7.
-- *Rating* — validated; static/config rate table per service (D1), no carrier call.
+- *Rating* — validated; no carrier call. Rating uses Karrio's universal static-rate engine (the `generic` carrier pattern): `RatingMixinProxy.get_rates` matches zones/weights over the merchant-maintained server `RateSheet`, seeded by `DEFAULT_SERVICES` (D1/D9).
 - *Shipment (book + label)* — `POST /rest/shipment/v3/edi/labels/pdf` succeeded: returned a base64 PDF label and a PostNord-allocated 20-digit tracking number. Findings folded into the connector: `applicationId` must be an **integer** and is required by the label-printing endpoints; each item requires `itemIdentification`, and `itemId="0"` makes PostNord allocate the parcel id (returned as the tracking number) — an arbitrary value triggers "unable to determine id type"; the consignor must be the **account-registered sender address** (origin validation), so the sender address is merchant-supplied, not defaulted; the booking assigns a client `shipmentIdentification.shipmentId` from `payload.reference` (merchant-controlled, Track&Trace-searchable); the response carries a `printoutComposition` block (now modeled).
 - *Manifest/pickup* — validated. PostNord has no manifest; it maps to a Return Pickup (service `20`), which is a return **shipment** requiring a full route — both consignor **and** consignee, with SMS on both parties. The pickup response carries `references` nested in `idInformation[]` (now modeled and surfaced in meta).
 - *Cancellation (D8)* — **blocked**. Re-posting a complete `ediInstruction` with `updateIndicator: "Deletion"` to `/rest/shipment/v3/edi` returns HTTP 201 and **books a duplicate** shipment (new `bookingId` + new tracking ids); `/v3/edi` ignores the Deletion indicator entirely. The real cancel mechanism is the swagger's id-based `deleteEdiRequest {ids:[{id}]}`, whose endpoint is absent from the available swagger. The connector sends the safe `{ids:[{id}]}` body (rejected by `/v3/edi` without booking) as a placeholder pending PostNord's v3 REST reference manual.
+
+**Service Points deferral evidence (D6, confirmed 2026-06-24):** a codebase investigation confirms Karrio has **no** unified service-point/pickup-location contract. There is no SDK proxy operation, no `CarrierCapabilities` entry, no Django REST route, no GraphQL query, and no frontend type for service points. The only related construct is the duck-typed LSP (location service provider) plugin pattern — for example `googlegeocoding` adds a `validate_address` method and is recognized via `is_address_validator()`, which checks for method presence rather than a declared capability. Two future paths exist, neither implemented yet: (1) an LSP-style plugin that adds a `find_service_points` proxy method plus an `is_service_point_provider` detector mirroring the address-validator pattern, or (2) a new unified operation (a request/response model pair, a `CarrierCapabilities` entry, and the corresponding API/GraphQL surface). Until one exists, Service Points stays out of scope and the supplied v5 spec remains documented-only.
 
 **Codes (free-form strings in the spec; enumerate in `units.py` from PostNord General Descriptions):**
 
