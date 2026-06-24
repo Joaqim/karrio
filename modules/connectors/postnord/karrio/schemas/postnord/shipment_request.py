@@ -7,7 +7,7 @@ import typing
 class ApplicationType:
     name: typing.Optional[str] = None
     version: typing.Optional[str] = None
-    applicationId: typing.Optional[str] = None
+    applicationId: typing.Optional[int] = None
 
 
 @attr.s(auto_attribs=True)
