@@ -32,6 +32,14 @@ class TestPostNordRating(unittest.TestCase):
         )
         self.assertListEqual(lib.to_dict(parsed_response), ParsedRateResponse)
 
+    def test_parse_rate_response_no_matching_zone(self):
+        # A destination outside every service zone yields empty rates and no
+        # crash (DoD: rate quote + error handling). The fixture's zones only
+        # cover SE, so a US recipient matches no zone.
+        request = models.RateRequest(**NoZoneRatePayload)
+        parsed_response = karrio.Rating.fetch(request).from_(gateway).parse()
+        self.assertListEqual(lib.to_dict(parsed_response), NoZoneParsedRateResponse)
+
 
 if __name__ == "__main__":
     unittest.main()
@@ -96,5 +104,25 @@ ParsedRateResponse = [
             },
         }
     ],
+    [],
+]
+
+NoZoneRatePayload = {
+    **RatePayload,
+    "recipient": {
+        "address_line1": "350 5th Ave",
+        "city": "New York",
+        "postal_code": "10118",
+        "country_code": "US",
+        "person_name": "Jane Receiver",
+        "company_name": "Receiver Co",
+        "phone_number": "+12125551234",
+        "email": "receiver@example.com",
+    },
+    "services": [],
+}
+
+NoZoneParsedRateResponse = [
+    [],
     [],
 ]
