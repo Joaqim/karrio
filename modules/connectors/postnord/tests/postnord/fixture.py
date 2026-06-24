@@ -11,6 +11,7 @@ gateway = karrio.gateway["postnord"].create(
         apikey="TEST_API_KEY",
         issuer_code="Z12",
         customer_number="00000000",
+        application_id="2458",
         account_country_code="SE",
         config=dict(
             rate_table={

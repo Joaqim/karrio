@@ -23,6 +23,7 @@ class Settings(core.Settings):
     apikey: str
     issuer_code: str = "Z12"
     customer_number: str = None
+    application_id: str = None
 
     @property
     def carrier_name(self):

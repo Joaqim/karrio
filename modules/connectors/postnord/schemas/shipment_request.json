@@ -4,7 +4,8 @@
   "testIndicator": false,
   "application": {
     "name": "Karrio",
-    "version": "1.0"
+    "version": "1.0",
+    "applicationId": "0000"
   },
   "shipment": [
     {

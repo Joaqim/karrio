@@ -121,7 +121,7 @@ ShipmentCancelPayload = {
 }
 
 ShipmentRequest = {
-    "application": {"name": "Karrio"},
+    "application": {"name": "Karrio", "applicationId": "2458"},
     "messageDate": ANY,
     "testIndicator": True,
     "updateIndicator": "Original",
@@ -202,7 +202,7 @@ ShipmentRequest = {
 }
 
 ShipmentCancelRequest = {
-    "application": {"name": "Karrio"},
+    "application": {"name": "Karrio", "applicationId": "2458"},
     "messageDate": ANY,
     "testIndicator": True,
     "updateIndicator": "Deletion",
