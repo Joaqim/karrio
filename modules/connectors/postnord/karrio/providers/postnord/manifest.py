@@ -91,7 +91,7 @@ def manifest_request(
         testIndicator=settings.test_mode,
         application=postnord_req.ApplicationType(
             name="Karrio",
-            applicationId=settings.application_id,
+            applicationId=lib.to_int(settings.application_id),
         ),
         shipment=[
             postnord_req.ShipmentType(

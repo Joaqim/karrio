@@ -13,10 +13,13 @@ def parse_error_response(
 ) -> typing.List[models.Message]:
     """Parse PostNord error shapes into Karrio Messages.
 
-    PostNord surfaces faults in three places, all sharing the same Fault shape
-    (``explanationText``, ``faultCode``, ``paramValues``):
+    PostNord surfaces faults in several places, all sharing the same Fault
+    shape (``explanationText``, optional ``faultCode``/``paramValues``, and a
+    ``faultReferences`` key/value list):
 
-    * a top-level ``errorResponse`` (booking/pickup HTTP error bodies);
+    * a top-level body carrying ``message``/``compositeFault`` directly
+      (booking/pickup HTTP 4xx error bodies);
+    * a top-level ``errorResponse`` wrapper (alternate error envelope);
     * a per-item ``idInformation[].errorResponse`` (partial failures reported
       inline at HTTP 200/201);
     * a top-level ``faults[]`` list on the tracking ``LinksResponse``.
@@ -26,7 +29,14 @@ def parse_error_response(
     error_bodies = [
         # tracking LinksResponse: faults at top level
         *[res for res in responses if res.get("faults")],
-        # booking/pickup: top-level errorResponse
+        # booking/pickup 4xx: message/compositeFault directly on the body
+        *[
+            res
+            for res in responses
+            if not isinstance(res.get("errorResponse"), dict)
+            and (res.get("compositeFault") or res.get("message"))
+        ],
+        # booking/pickup: top-level errorResponse wrapper
         *[
             res["errorResponse"]
             for res in responses
@@ -50,11 +60,11 @@ def parse_error_response(
         for fault in _faults(body)
     ]
 
-    return [
+    messages = [
         models.Message(
             carrier_id=settings.carrier_id,
             carrier_name=settings.carrier_name,
-            code=fault.get("faultCode"),
+            code=lib.identity(fault.get("faultCode") or _sub_type(fault)),
             message=lib.identity(
                 fault.get("explanationText") or body.get("message")
             ),
@@ -66,17 +76,55 @@ def parse_error_response(
                         for param in (fault.get("paramValues") or [])
                     }
                     or None,
+                    "references": {
+                        ref.get("key"): ref.get("value")
+                        for ref in (fault.get("faultReferences") or [])
+                    }
+                    or None,
                 }
             ),
         )
         for body, fault in faults
     ]
 
+    # A failed request with an unrecognized non-empty body must still surface
+    # a message rather than being silently swallowed.
+    has_unparsed_error = bool(error_bodies) and not any(faults)
+    if has_unparsed_error:
+        return [
+            models.Message(
+                carrier_id=settings.carrier_id,
+                carrier_name=settings.carrier_name,
+                code=None,
+                message=lib.identity(
+                    next(
+                        (body.get("message") for body in error_bodies if body.get("message")),
+                        "An error occurred",
+                    )
+                ),
+                details=lib.to_dict(kwargs) or None,
+            )
+        ]
+
+    return messages
+
 
 def _faults(body: dict) -> typing.List[dict]:
     """Return the fault entries inside an error body (compositeFault or faults)."""
     composite = body.get("compositeFault") or {}
     return composite.get("faults") or body.get("faults") or []
+
+
+def _sub_type(fault: dict) -> typing.Optional[str]:
+    """Derive a fault code from the ``...subType`` faultReference when present."""
+    return next(
+        (
+            ref.get("value")
+            for ref in (fault.get("faultReferences") or [])
+            if (ref.get("key") or "").endswith("subType")
+        ),
+        None,
+    )
 
 
 def _has_fault(error_response: dict) -> bool:
