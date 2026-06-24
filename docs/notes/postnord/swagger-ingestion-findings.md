@@ -1,7 +1,7 @@
 # PostNord connector — swagger ingestion findings
 
 Synthesis of a four-agent ingestion pass over the PostNord API specifications, mapped against the connector's known integration gaps.
-Sources ingested: `postnord-track-and-trace-api-v7-findbyreference.swagger.json`, `postnord-servicepoints-v5.swagger.json`, `postnord-delivery-options.swagger.json`, `postnord-transit-time-calculation-v1-and-v2.swagger.json`, `postnord-assign-items-to-loadcarriers.swagger.json` (all currently at repo root), plus a definitive re-scan of the vendored `modules/connectors/postnord/vendor/booking.swagger.json`.
+Sources ingested, now vendored under `modules/connectors/postnord/vendor/`: `track-and-trace-v7-findbyreference.swagger.json`, `delivery-options.swagger.json`, `transit-time-v1-v2.swagger.json`, `assign-items-to-loadcarriers.swagger.json`, plus a definitive re-scan of `booking.swagger.json` and the existing `servicepoints-v5.swagger.json`.
 All specs authenticate with a single `apikey` query parameter, consistent with the connector's existing model.
 
 ## Classification at a glance
@@ -46,7 +46,7 @@ The endpoint itself (`POST /v1/deliveryoptions/bywarehouse`) is a checkout/dashb
 Service Points (D6) remains the LSP-plugin shape, confirmed.
 `servicepoints v5` offers three lookups — `GET /v5/servicepoints/{nearest/bycoordinates, bypostalcode, nearest/byaddress}` — returning a service-point model (id, name, visiting/delivery address, opening hours, easting/northing coordinates + SRID, `routeDistance`, drop-off/pickup/buy capabilities).
 The convention-consistent path is a `find_service_points` proxy method plus an `is_service_point_provider()` detector mirroring `googlegeocoding`'s `is_address_validator()`, kept self-contained in the connector with no new core/Django/GraphQL contract — consistent with D6's deferral of a unified contract.
-Note: the root `postnord-servicepoints-v5.swagger.json` differs from the vendored `vendor/servicepoints-v5.swagger.json` (same byte size, divergence at byte 38890); authoritative version needs confirmation before either is treated as canonical.
+The previously-flagged byte difference between the root and vendored `servicepoints-v5` copies was pure formatting — both are v5.0.14 and semantically identical (normalized `jq -S` diff is empty), so the redundant root copy was removed.
 
 ## Tracking events (D7) — blocked on the correct surface
 
@@ -66,8 +66,7 @@ The booking spec scan surfaced operations not currently used by the connector:
 - Pickup cutoff lookup: `POST /v4/sac/pickup/stopdate` returns the next valid pickup/booking cutoff datetime — useful to validate a pickup-ready date before `createPickups`.
 - Customs and dangerous goods: `POST /v3/customs/declaration{,/pdf}`, `/v3/customs/consolidation`, `/v3/dangerousgoods` for international/DG declarations.
 
-## Open file-handling question
+## Spec file handling (resolved)
 
-The five root-level `*.swagger.json` files are untracked and pollute the repo root.
-Four are new reference specs (track-and-trace v7, delivery-options, transit-time, assign-items-to-loadcarriers); the fifth (servicepoints v5) differs from the vendored copy.
-Decision pending: vendor the applicable new specs into `modules/connectors/postnord/vendor/` (canonical home), reconcile the two servicepoints versions, and delete any genuine surplus.
+The four new reference specs (track-and-trace v7, delivery-options, transit-time, assign-items-to-loadcarriers) were vendored into `modules/connectors/postnord/vendor/` alongside the existing booking/servicepoints/tracking-url specs, clearing the repo root.
+The redundant root `servicepoints-v5` copy (identical to the vendored one modulo formatting) was removed.
