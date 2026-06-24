@@ -91,6 +91,19 @@
         "encoding": "base64",
         "uriResource": "https://api2.postnord.com/rest/shipment/v3/labels/ids/pdf/1",
         "data": "JVBERi0xLjQK"
+      },
+      "printoutComposition": {
+        "label": 1,
+        "cn22": 0,
+        "cn23": 0,
+        "customsInvoice": 0,
+        "securityDeclarations": 0,
+        "loadList": 0,
+        "dpc": 0,
+        "dangerousGoods": 0,
+        "fraktsedel": 0,
+        "routingDocument": 0,
+        "datametrixbarcode": 0
       }
     }
   ]
