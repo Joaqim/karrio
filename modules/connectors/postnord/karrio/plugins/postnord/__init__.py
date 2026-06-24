@@ -23,6 +23,7 @@ METADATA = PluginMetadata(
     options=units.ShippingOption,
     services=units.ShippingService,
     connection_configs=units.ConnectionConfig,
+    service_levels=units.DEFAULT_SERVICES,
     # Extra info
     website="https://www.postnord.com",
     documentation="https://developer.postnord.com",
