@@ -45,12 +45,23 @@ let
       ps.django-constance
     ]
   );
+
+  # `kcli` is the modules/cli console entry point (pyproject `kcli =
+  # "karrio_cli.__main__:app"`). The local CLI source is not pip-installed in
+  # this env, so reproduce the script as a wrapper that runs the pinned
+  # interpreter against the editable source carried on PYTHONPATH by the
+  # shellHook below. This lets connector `generate` scripts and
+  # `bin/run-generate-on` (which invoke `kcli`) work unmodified.
+  kcli = pkgs.writeShellScriptBin "kcli" ''
+    exec ${pythonEnv}/bin/python3 -m karrio_cli "$@"
+  '';
 in
 pkgs.mkShell {
   name = "karrio-dev";
 
   packages = [
     pythonEnv
+    kcli
     pkgs.uv
   ];
 
@@ -77,14 +88,12 @@ pkgs.mkShell {
     # predictably here.
     cat >&2 <<'KARRIO_ENV_NOTE'
 karrio nix dev shell active (alternative to `source bin/activate-env`).
-  - The `kcli` console script is not installed in this env. Invoke the CLI as
-    `./bin/cli ...` instead. For schema codegen, the connector `generate`
-    scripts and `bin/run-generate-on` call `kcli`; run codegen directly with
-    `./bin/cli codegen generate <schema.json> <out.py>` until a `kcli` wrapper
-    is added here.
-  - Local sources (sdk, soap, cli, connectors, plugins) are on PYTHONPATH with
-    no pip/virtualenv step; a newly scaffolded connector joins PYTHONPATH on the
-    next shell entry (e.g. `direnv reload`).
+  - `kcli` and `./bin/cli` both run the editable local CLI source with no
+    pip/virtualenv step (kcli is provided here as a wrapper around the pinned
+    interpreter), so connector `generate` scripts and `bin/run-generate-on` work.
+  - Local sources (sdk, soap, cli, connectors, plugins) are on PYTHONPATH; a
+    newly scaffolded connector joins PYTHONPATH on the next shell entry (e.g.
+    `direnv reload`).
 KARRIO_ENV_NOTE
   '';
 }
