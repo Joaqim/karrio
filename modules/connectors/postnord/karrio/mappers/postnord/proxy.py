@@ -4,166 +4,84 @@ import karrio.lib as lib
 import karrio.api.proxy as proxy
 import karrio.mappers.postnord.settings as provider_settings
 
-# IMPLEMENTATION INSTRUCTIONS:
-# 1. Import the schema types specific to your carrier API
-# 2. Uncomment and adapt the request examples below to work with your carrier API
-# 3. Replace the stub responses with actual API calls once you've tested with the example data
-# 4. Update URLs, headers, and authentication methods as required by your carrier API
-
 
 class Proxy(proxy.Proxy):
     settings: provider_settings.Settings
 
+    def _url(self, path: str, **params) -> str:
+        """Build a PostNord URL with the apikey appended as a query parameter.
+
+        Every PostNord endpoint is apikey-authenticated via the query string
+        (the Booking/Pickup/Tracking specs are ``SECURED: False``), so the
+        credential always travels in the URL rather than a header.
+        """
+        query = lib.to_query_string(
+            {"apikey": self.settings.apikey, **{k: v for k, v in params.items() if v is not None}}
+        )
+        return f"{self.settings.server_url}{path}?{query}"
+
     def get_rates(self, request: lib.Serializable) -> lib.Deserializable[str]:
-        # REPLACE THIS WITH YOUR ACTUAL API CALL IMPLEMENTATION
-        # ---------------------------------------------------------
-        # Example implementation:
-        # response = lib.request(
-        #     url=f"{self.settings.server_url}/rates",
-        #     data=lib.to_json(request.serialize()),
-        #     trace=self.trace_as("json"),
-        #     method="POST",
-        #     headers={
-        #         "Content-Type": "application/json",
-        #         "Authorization": f"Bearer {self.settings.api_key}"
-        #     },
-        # )
+        # PostNord exposes no money-rate API; rating is static/config-driven (D1).
+        # The serialized request is handed straight to the rate provider, which
+        # synthesizes RateDetails from the ConnectionConfig rate table.
+        return lib.Deserializable(request.serialize(), lib.to_dict)
 
-        # DEVELOPMENT ONLY: Remove this stub response and uncomment the API call above when implementing the real carrier API
-        response = lib.to_json({})
-
-        return lib.Deserializable(response, lib.to_dict)
-    
     def create_shipment(self, request: lib.Serializable) -> lib.Deserializable[str]:
-        # REPLACE THIS WITH YOUR ACTUAL API CALL IMPLEMENTATION
-        # ---------------------------------------------------------
-        # Example implementation:
-        # response = lib.request(
-        #     url=f"{self.settings.server_url}/shipments",
-        #     data=lib.to_json(request.serialize()),
-        #     trace=self.trace_as("json"),
-        #     method="POST",
-        #     headers={
-        #         "Content-Type": "application/json",
-        #         "Authorization": f"Bearer {self.settings.api_key}"
-        #     },
-        # )
+        response = lib.request(
+            url=self._url("/rest/shipment/v3/edi/labels/pdf"),
+            data=lib.to_json(request.serialize()),
+            trace=self.trace_as("json"),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
 
-        # DEVELOPMENT ONLY: Remove this stub response and uncomment the API call above when implementing the real carrier API
-        response = lib.to_json({})
+        return lib.Deserializable(response, lib.to_dict, request.ctx)
 
-        return lib.Deserializable(response, lib.to_dict)
-    
-    def create_return_shipment(self, request: lib.Serializable) -> lib.Deserializable[str]:
-        # REPLACE THIS WITH YOUR ACTUAL API CALL IMPLEMENTATION
-        # ---------------------------------------------------------
-        # For carriers with a dedicated return API, implement the return-specific endpoint here.
-        # For carriers that reuse the same shipment API for returns, you can delegate:
-        #   return self.create_shipment(request)
-
-        # DEVELOPMENT ONLY: Remove this stub response and uncomment the API call above when implementing the real carrier API
-        response = lib.to_json({})
-
-        return lib.Deserializable(response, lib.to_dict)
-    
     def cancel_shipment(self, request: lib.Serializable) -> lib.Deserializable[str]:
-        # REPLACE THIS WITH YOUR ACTUAL API CALL IMPLEMENTATION
-        # ---------------------------------------------------------
-        # Example implementation:
-        # response = lib.request(
-        #     url=f"{self.settings.server_url}/shipments/cancel",
-        #     data=lib.to_json(request.serialize()),
-        #     trace=self.trace_as("json"),
-        #     method="POST",
-        #     headers={
-        #         "Content-Type": "application/json",
-        #         "Authorization": f"Bearer {self.settings.api_key}"
-        #     },
-        # )
-
-        # DEVELOPMENT ONLY: Remove this stub response and uncomment the API call above when implementing the real carrier API
-        response = lib.to_json({})
+        # No DELETE route exists; cancellation re-POSTs the ediInstruction with
+        # updateIndicator "Deletion" to /v3/edi.
+        response = lib.request(
+            url=self._url("/rest/shipment/v3/edi"),
+            data=lib.to_json(request.serialize()),
+            trace=self.trace_as("json"),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
 
         return lib.Deserializable(response, lib.to_dict)
-    
-    def get_tracking(self, request: lib.Serializable) -> lib.Deserializable[str]:
-        # REPLACE THIS WITH YOUR ACTUAL API CALL IMPLEMENTATION
-        # ---------------------------------------------------------
-        # Example implementation:
-        # response = lib.request(
-        #     url=f"{self.settings.server_url}/tracking",
-        #     data=lib.to_json(request.serialize()),
-        #     trace=self.trace_as("json"),
-        #     method="POST",
-        #     headers={
-        #         "Content-Type": "application/json",
-        #         "Authorization": f"Bearer {self.settings.api_key}"
-        #     },
-        # )
 
-        # DEVELOPMENT ONLY: Remove this stub response and uncomment the API call above when implementing the real carrier API
-        response = lib.to_json({})
-
-        return lib.Deserializable(response, lib.to_dict)
-    
     def create_manifest(self, request: lib.Serializable) -> lib.Deserializable[str]:
-        # REPLACE THIS WITH YOUR ACTUAL API CALL IMPLEMENTATION
-        # ---------------------------------------------------------
-        # Example implementation:
-        # response = lib.request(
-        #     url=f"{self.settings.server_url}/manifests",
-        #     data=lib.to_json(request.serialize()),
-        #     trace=self.trace_as("json"),
-        #     method="POST",
-        #     headers={
-        #         "Content-Type": "application/json",
-        #         "Authorization": f"Bearer {self.settings.api_key}"
-        #     },
-        # )
-
-        # During development, use stub response from schema examples
-        response = lib.to_json({})
+        # Manifest is mapped to a physical pickup booking (D2): /v3/pickups.
+        response = lib.request(
+            url=self._url("/rest/shipment/v3/pickups"),
+            data=lib.to_json(request.serialize()),
+            trace=self.trace_as("json"),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
 
         return lib.Deserializable(response, lib.to_dict)
-    
-    def authenticate(self, request: lib.Serializable) -> lib.Deserializable[dict]:
-        # REPLACE THIS WITH YOUR ACTUAL AUTHENTICATION IMPLEMENTATION
-        # ------------------------------------------------------------
-        # Example OAuth2 implementation:
-        # cache_key = f"{self.settings.carrier_name}|{self.settings.client_id}|{self.settings.client_secret}"
-        #
-        # def get_token():
-        #     response = lib.request(
-        #         url=f"{self.settings.server_url}/oauth/token",
-        #         method="POST",
-        #         headers={"content-Type": "application/x-www-form-urlencoded"},
-        #         data=lib.to_query_string({
-        #             "grant_type": "client_credentials",
-        #             "client_id": self.settings.client_id,
-        #             "client_secret": self.settings.client_secret,
-        #         }),
-        #         decoder=lib.to_dict,
-        #         on_error=lib.error_decoder,
-        #     )
-        #
-        #     messages = provider_error.parse_error_response(response, self.settings)
-        #     if any(messages):
-        #         raise errors.ParsedMessagesError(messages)
-        #
-        #     expiry = datetime.datetime.now() + datetime.timedelta(
-        #         seconds=float(response.get("expires_in", 3600))
-        #     )
-        #
-        #     return {**response, "expiry": lib.fdatetime(expiry)}
-        #
-        # token = self.settings.connection_cache.thread_safe(
-        #     refresh_func=get_token,
-        #     cache_key=cache_key,
-        #     buffer_minutes=30,
-        #     token_field="access_token",
-        # )
-        #
-        # return lib.Deserializable(token.get_state())
 
-        # DEVELOPMENT ONLY: Remove this stub and implement actual authentication
-        return lib.Deserializable({"access_token": "STUB_TOKEN", "expires_in": 3600})
+    def get_tracking(self, request: lib.Serializable) -> lib.Deserializable[str]:
+        # Link-only tracking (D7): GET /rest/links/v1/tracking/{country}/{id}.
+        # The tracking provider serializes a list of {country, id, language}
+        # dicts (country and id drive the path; language is an optional query).
+        response = lib.run_asynchronously(
+            lambda query: (
+                query["id"],
+                lib.request(
+                    url=self._url(
+                        f"/rest/links/v1/tracking/{query['country']}/{query['id']}",
+                        language=query.get("language"),
+                    ),
+                    trace=self.trace_as("json"),
+                    method="GET",
+                ),
+            ),
+            request.serialize(),
+        )
+
+        return lib.Deserializable(
+            response,
+            lambda res: [(identifier, lib.to_dict(data)) for identifier, data in res],
+        )

@@ -1,91 +1,58 @@
-"""Karrio PostNord shipment cancellation API implementation."""
+"""Karrio PostNord shipment cancellation API implementation.
+
+PostNord exposes no DELETE route; cancellation re-POSTs an ``ediInstruction``
+with ``updateIndicator`` ``"Deletion"`` referencing the booked shipment id
+(``/rest/shipment/v3/edi``). Success is the absence of faults in the response.
+"""
+
+import datetime
+import karrio.schemas.postnord.shipment_request as postnord_req
+
 import typing
 import karrio.lib as lib
 import karrio.core.models as models
 import karrio.providers.postnord.error as error
 import karrio.providers.postnord.utils as provider_utils
-import karrio.providers.postnord.units as provider_units
 
 
 def parse_shipment_cancel_response(
     _response: lib.Deserializable[dict],
     settings: provider_utils.Settings,
 ) -> typing.Tuple[models.ConfirmationDetails, typing.List[models.Message]]:
-    """
-    Parse shipment cancellation response from carrier API
-
-    _response: The carrier response to deserialize
-    settings: The carrier connection settings
-
-    Returns a tuple with (ConfirmationDetails, List[Message])
-    """
     response = _response.deserialize()
     messages = error.parse_error_response(response, settings)
+    success = not any(messages)
 
-    # Extract success state from the response
-    success = _extract_cancellation_status(response)
-
-    # Create confirmation details if successful
     confirmation = (
         models.ConfirmationDetails(
             carrier_id=settings.carrier_id,
             carrier_name=settings.carrier_name,
             operation="Cancel Shipment",
             success=success,
-        ) if success else None
+        )
+        if success
+        else None
     )
 
     return confirmation, messages
-
-
-def _extract_cancellation_status(
-    response: dict
-) -> bool:
-    """
-    Extract cancellation success status from the carrier response
-
-    response: The deserialized carrier response
-
-    Returns True if cancellation was successful, False otherwise
-    """
-    
-    # Example implementation for JSON response:
-    # return response.get("success", False)
-
-    # For development, always return success
-    return True
-    
 
 
 def shipment_cancel_request(
     payload: models.ShipmentCancelRequest,
     settings: provider_utils.Settings,
 ) -> lib.Serializable:
-    """
-    Create a shipment cancellation request for the carrier API
-
-    payload: The standardized ShipmentCancelRequest from karrio
-    settings: The carrier connection settings
-
-    Returns a Serializable object that can be sent to the carrier API
-    """
-    
-    # Create JSON request for shipment cancellation
-    # Example implementation:
-    # import karrio.schemas.postnord.shipment_cancel_request as postnord_req
-    #
-    # request = postnord_req.ShipmentCancelRequestType(
-    #     shipmentId=payload.shipment_identifier,
-    #     accountNumber=settings.account_number,
-    #     # Add any other required fields
-    # )
-    #
-    # return lib.Serializable(request, lib.to_dict)
-
-    # For development, return a simple JSON request
-    request = {
-        "shipmentId": payload.shipment_identifier
-    }
+    request = postnord_req.ShipmentRequestType(
+        messageDate=datetime.datetime.now().isoformat(timespec="seconds"),
+        updateIndicator="Deletion",
+        testIndicator=settings.test_mode,
+        application=postnord_req.ApplicationType(name="Karrio"),
+        shipment=[
+            postnord_req.ShipmentType(
+                shipmentIdentification=postnord_req.ShipmentIdentificationType(
+                    shipmentId=payload.shipment_identifier,
+                ),
+            )
+        ],
+    )
 
     return lib.Serializable(request, lib.to_dict)
-    

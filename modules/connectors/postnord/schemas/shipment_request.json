@@ -1,43 +1,176 @@
 {
-  "shipmentRequest": {
-    "shipper": {
-      "addressLine1": "123 Main St",
-      "city": "Anytown",
-      "postalCode": "12345",
-      "countryCode": "US",
-      "stateCode": "CA",
-      "personName": "John Doe",
-      "companyName": "ACME Corp",
-      "phoneNumber": "555-123-4567",
-      "email": "john@example.com"
-    },
-    "recipient": {
-      "addressLine1": "456 Oak St",
-      "city": "Somewhere",
-      "postalCode": "67890",
-      "countryCode": "US",
-      "stateCode": "NY",
-      "personName": "Jane Smith",
-      "companyName": "XYZ Inc",
-      "phoneNumber": "555-987-6543",
-      "email": "jane@example.com"
-    },
-    "packages": [
-      {
-        "weight": 10.5,
-        "weightUnit": "KG",
-        "length": 20.0,
-        "width": 15.0,
-        "height": 10.0,
-        "dimensionUnit": "CM",
-        "packagingType": "BOX"
-      }
-    ],
-    "service": "EXPRESS",
-    "options": {
-      "insurance": true,
-      "signature_required": false
-    },
-    "labelType": "PDF"
-  }
+  "messageDate": "2026-06-24T10:00:00",
+  "updateIndicator": "Original",
+  "testIndicator": false,
+  "application": {
+    "name": "Karrio",
+    "version": "1.0"
+  },
+  "shipment": [
+    {
+      "shipmentIdentification": {
+        "shipmentId": "SHIP-0001"
+      },
+      "dateAndTimes": {
+        "loadingDate": "2026-06-24"
+      },
+      "service": {
+        "basicServiceCode": "18",
+        "additionalServiceCode": ["A1", "A5"]
+      },
+      "cashOnDelivery": {
+        "transactionIdentifier": "OCR-12345",
+        "codType": "BANKRECEIPT",
+        "codAmount": {
+          "amount": 100.0,
+          "currency": "SEK"
+        }
+      },
+      "insurance": {
+        "typeOfInsurance": "STANDARD",
+        "insuranceAmount": {
+          "amount": 500.0,
+          "currency": "SEK"
+        }
+      },
+      "goodsValue": {
+        "amount": 500.0,
+        "currency": "SEK"
+      },
+      "freeText": [
+        {
+          "usageCode": "DEL",
+          "text": "Leave at front door"
+        }
+      ],
+      "numberOfPackages": {
+        "value": 1
+      },
+      "totalGrossWeight": {
+        "value": 1.5,
+        "unit": "KGM"
+      },
+      "references": [
+        {
+          "referenceNo": "ORDER-7788",
+          "referenceType": "CU",
+          "referenceDesc": "Customer order number"
+        }
+      ],
+      "parties": {
+        "consignor": {
+          "issuerCode": "Z12",
+          "partyIdentification": {
+            "partyId": "00000000",
+            "partyIdType": "160"
+          },
+          "party": {
+            "nameIdentification": {
+              "name": "ACME Sender AB",
+              "companyName": "ACME Sender AB",
+              "careOfName": "Warehouse"
+            },
+            "address": {
+              "streets": ["Sandhamnsgatan 61"],
+              "postalCode": "11528",
+              "placeName": "Stockholm",
+              "state": "Stockholm",
+              "city": "Stockholm",
+              "countryCode": "SE"
+            },
+            "contact": {
+              "contactName": "John Sender",
+              "emailAddress": "sender@example.com",
+              "phoneNo": "+46701234567",
+              "smsNo": "+46701234567"
+            }
+          }
+        },
+        "consignee": {
+          "issuerCode": "Z12",
+          "partyIdentification": {
+            "partyId": "POINT-156",
+            "partyIdType": "156"
+          },
+          "party": {
+            "nameIdentification": {
+              "name": "Jane Receiver",
+              "companyName": "Receiver Co",
+              "careOfName": "Apartment 3"
+            },
+            "address": {
+              "streets": ["Terminalvagen 24"],
+              "postalCode": "17173",
+              "placeName": "Solna",
+              "state": "Stockholm",
+              "city": "Solna",
+              "countryCode": "SE"
+            },
+            "contact": {
+              "contactName": "Jane Receiver",
+              "emailAddress": "receiver@example.com",
+              "phoneNo": "+46709876543",
+              "smsNo": "+46709876543"
+            }
+          }
+        }
+      },
+      "goodsItem": [
+        {
+          "marking": "FRAGILE",
+          "goodsDescription": "Books",
+          "packageTypeCode": "PC",
+          "numberOfPackageTypeCodeItems": {
+            "value": 1
+          },
+          "references": [
+            {
+              "referenceNo": "PKG-1",
+              "referenceType": "ON"
+            }
+          ],
+          "items": [
+            {
+              "itemIdentification": {
+                "itemId": "00373500454541020957",
+                "itemIdType": "SSCC"
+              },
+              "references": [
+                {
+                  "referenceNo": "ITEM-1",
+                  "referenceType": "ON"
+                }
+              ],
+              "dimensions": {
+                "height": {
+                  "value": 10.0,
+                  "unit": "CMT"
+                },
+                "width": {
+                  "value": 20.0,
+                  "unit": "CMT"
+                },
+                "length": {
+                  "value": 30.0,
+                  "unit": "CMT"
+                }
+              },
+              "grossWeight": {
+                "value": 1.5,
+                "unit": "KGM"
+              },
+              "volume": {
+                "value": 6.0,
+                "unit": "DMQ"
+              },
+              "itemValue": {
+                "amount": 500.0,
+                "currency": "SEK"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }

@@ -1,18 +1,28 @@
-
-import base64
-import datetime
 import karrio.lib as lib
 import karrio.core as core
-import karrio.core.errors as errors
-from karrio.core.utils.caching import ThreadSafeTokenManager
+
+
+class IssuerCode(lib.Enum):
+    """PostNord issuer/market codes identifying the entity holding the agreement."""
+
+    Z11 = "Denmark"
+    Z12 = "Sweden"
+    Z13 = "Norway"
+    Z14 = "Finland"
+    ZDL = "Direct Link"
 
 
 class Settings(core.Settings):
-    """PostNord connection settings."""
+    """PostNord connection settings.
 
-    # Add carrier specific api connection properties here
-    api_key: str
-    account_number: str = None
+    The Booking (EDI), Pickup, Tracking, and Service Points APIs are
+    ``SECURED: False`` and take ``apikey`` as a query parameter on every
+    request, so a single ``apikey`` credential authorizes all operations.
+    """
+
+    apikey: str
+    issuer_code: str = "Z12"
+    customer_number: str = None
 
     @property
     def carrier_name(self):
@@ -21,15 +31,16 @@ class Settings(core.Settings):
     @property
     def server_url(self):
         return (
-            "https://carrier.api"
+            "https://atapi2.postnord.com"
             if self.test_mode
-            else "https://sandbox.carrier.api"
+            else "https://api2.postnord.com"
         )
 
-    # """uncomment the following code block to expose a carrier tracking url."""
-    # @property
-    # def tracking_url(self):
-    #     return "https://www.carrier.com/tracking?tracking-id={}"
+    @property
+    def tracking_url(self):
+        return "https://tracking.postnord.com/{}/?id={}".format(
+            (self.account_country_code or "se").lower(), "{}"
+        )
 
     @property
     def connection_config(self) -> lib.units.Options:

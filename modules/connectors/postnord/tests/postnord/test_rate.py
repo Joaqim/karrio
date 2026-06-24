@@ -3,12 +3,10 @@
 import unittest
 from unittest.mock import patch, ANY
 from .fixture import gateway
-import logging
+
 import karrio.sdk as karrio
 import karrio.lib as lib
 import karrio.core.models as models
-
-logger = logging.getLogger(__name__)
 
 
 class TestPostNordRating(unittest.TestCase):
@@ -21,33 +19,16 @@ class TestPostNordRating(unittest.TestCase):
         self.assertEqual(lib.to_dict(request.serialize()), RateRequest)
 
     def test_get_rates(self):
+        # Rating is static/config-driven (D1); no carrier HTTP call is made.
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
-            mock.return_value = "{}"
             karrio.Rating.fetch(self.RateRequest).from_(gateway)
-            self.assertEqual(
-                mock.call_args[1]["url"],
-                f"{gateway.settings.server_url}/rates"
-            )
+            mock.assert_not_called()
 
     def test_parse_rate_response(self):
-        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
-            mock.return_value = RateResponse
-            parsed_response = (
-                karrio.Rating.fetch(self.RateRequest)
-                .from_(gateway)
-                .parse()
-            )
-            self.assertListEqual(lib.to_dict(parsed_response), ParsedRateResponse)
-
-    def test_parse_error_response(self):
-        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
-            mock.return_value = ErrorResponse
-            parsed_response = (
-                karrio.Rating.fetch(self.RateRequest)
-                .from_(gateway)
-                .parse()
-            )
-            self.assertListEqual(lib.to_dict(parsed_response), ParsedErrorResponse)
+        parsed_response = (
+            karrio.Rating.fetch(self.RateRequest).from_(gateway).parse()
+        )
+        self.assertListEqual(lib.to_dict(parsed_response), ParsedRateResponse)
 
 
 if __name__ == "__main__":
@@ -56,140 +37,56 @@ if __name__ == "__main__":
 
 RatePayload = {
     "shipper": {
-        "address_line1": "123 Test Street",
-        "city": "Test City",
-        "postal_code": "12345",
-        "country_code": "US",
-        "state_code": "CA",
-        "person_name": "Test Person",
-        "company_name": "Test Company",
-        "phone_number": "1234567890",
-        "email": "test@example.com"
+        "address_line1": "Sandhamnsgatan 61",
+        "city": "Stockholm",
+        "postal_code": "11528",
+        "country_code": "SE",
+        "person_name": "John Sender",
+        "company_name": "ACME Sender AB",
+        "phone_number": "+46701234567",
+        "email": "sender@example.com",
     },
     "recipient": {
-        "address_line1": "123 Test Street",
-        "city": "Test City",
-        "postal_code": "12345",
-        "country_code": "US",
-        "state_code": "CA",
-        "person_name": "Test Person",
-        "company_name": "Test Company",
-        "phone_number": "1234567890",
-        "email": "test@example.com"
+        "address_line1": "Terminalvagen 24",
+        "city": "Solna",
+        "postal_code": "17173",
+        "country_code": "SE",
+        "person_name": "Jane Receiver",
+        "company_name": "Receiver Co",
+        "phone_number": "+46709876543",
+        "email": "receiver@example.com",
     },
-    "parcels": [{
-        "weight": 10.0,
-        "width": 10.0,
-        "height": 10.0,
-        "length": 10.0,
-        "weight_unit": "KG",
-        "dimension_unit": "CM",
-        "packaging_type": "BOX"
-    }]
+    "parcels": [
+        {
+            "weight": 1.5,
+            "width": 20.0,
+            "height": 10.0,
+            "length": 30.0,
+            "weight_unit": "KG",
+            "dimension_unit": "CM",
+            "packaging_type": "small_box",
+        }
+    ],
+    "services": ["postnord_parcel"],
 }
 
 RateRequest = {
-    "shipper": {
-        "addressLine1": "123 Test Street",
-        "city": "Test City",
-        "postalCode": "12345",
-        "countryCode": "US",
-        "stateCode": "CA",
-        "personName": "Test Person",
-        "companyName": "Test Company",
-        "phoneNumber": "1234567890",
-        "email": "test@example.com"
-    },
-    "recipient": {
-        "addressLine1": "123 Test Street",
-        "city": "Test City",
-        "postalCode": "12345",
-        "countryCode": "US",
-        "stateCode": "CA",
-        "personName": "Test Person",
-        "companyName": "Test Company",
-        "phoneNumber": "1234567890",
-        "email": "test@example.com"
-    },
-    "packages": [
-        {
-            "weight": 10.0,
-            "weightUnit": "KG",
-            "length": 10.0,
-            "width": 10.0,
-            "height": 10.0,
-            "dimensionUnit": "CM",
-            "packagingType": "BOX"
-        }
-    ]
+    "services": ["18"],
 }
-
-RateResponse = """{
-  "rates": [
-    {
-      "serviceCode": "express",
-      "serviceName": "Express Service",
-      "totalCharge": 25.99,
-      "currency": "USD",
-      "transitDays": 2
-    },
-    {
-      "serviceCode": "ground",
-      "serviceName": "Ground Service",
-      "totalCharge": 12.99,
-      "currency": "USD",
-      "transitDays": 5
-    }
-  ]
-}"""
-
-ErrorResponse = """{
-  "error": {
-    "code": "rate_error",
-    "message": "Unable to get rates",
-    "details": "Invalid address provided"
-  }
-}"""
 
 ParsedRateResponse = [
     [
         {
             "carrier_id": "postnord",
             "carrier_name": "postnord",
-            "service": "express",
-            "currency": "USD",
-            "total_charge": 25.99,
-            "transit_days": 2,
+            "currency": "SEK",
+            "service": "postnord_parcel",
+            "total_charge": 89.0,
             "meta": {
-                "service_name": "Express Service"
-            }
+                "rate_provider": "postnord",
+                "service_name": "postnord_parcel",
+            },
         },
-        {
-            "carrier_id": "postnord",
-            "carrier_name": "postnord",
-            "service": "ground",
-            "currency": "USD",
-            "total_charge": 12.99,
-            "transit_days": 5,
-            "meta": {
-                "service_name": "Ground Service"
-            }
-        }
     ],
-    []
-]
-
-ParsedErrorResponse = [
     [],
-    [
-        {
-            "carrier_id": "postnord",
-            "carrier_name": "postnord",
-            "code": "rate_error",
-            "message": "Unable to get rates",
-            "details": {
-                "details": "Invalid address provided"
-            }
-        }
-    ]
 ]

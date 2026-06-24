@@ -1,15 +1,11 @@
-"""Karrio PostNord tracking API implementation."""
+"""Karrio PostNord tracking API implementation.
 
-# IMPLEMENTATION INSTRUCTIONS:
-# 1. Uncomment the imports when the schema types are generated
-# 2. Import the specific request and response types you need
-# 3. Create a request instance with the appropriate request type
-# 4. Extract tracking details and events from the response to populate TrackingDetails
-#
-# NOTE: JSON schema types are generated with "Type" suffix (e.g., TrackingRequestType),
-# while XML schema types don't have this suffix (e.g., TrackingRequest).
+The supplied Track Shipment URL API returns only a tracking URL, not events
+(D7). ``get_tracking`` therefore populates ``TrackingDetails`` with the
+tracking number plus the tracking URL and an empty event list, under a single
+neutral status. ``LinksResponse.faults`` are surfaced as error Messages.
+"""
 
-import karrio.schemas.postnord.tracking_request as postnord_req
 import karrio.schemas.postnord.tracking_response as postnord_res
 
 import typing
@@ -17,7 +13,6 @@ import karrio.lib as lib
 import karrio.core.models as models
 import karrio.providers.postnord.error as error
 import karrio.providers.postnord.utils as provider_utils
-import karrio.providers.postnord.units as provider_units
 
 
 def parse_tracking_response(
@@ -35,8 +30,9 @@ def parse_tracking_response(
     )
 
     tracking_details = [
-        _extract_details(details, settings, tracking_number)
-        for tracking_number, details in responses
+        _extract_details(response, settings, tracking_number)
+        for tracking_number, response in responses
+        if not response.get("faults")
     ]
 
     return tracking_details, messages
@@ -45,73 +41,22 @@ def parse_tracking_response(
 def _extract_details(
     data: dict,
     settings: provider_utils.Settings,
-    tracking_number: str = None,
+    tracking_number: str,
 ) -> models.TrackingDetails:
-    """
-    Extract tracking details from carrier response data
-
-    data: The carrier-specific tracking data structure
-    settings: The carrier connection settings
-    tracking_number: The tracking number being tracked
-
-    Returns a TrackingDetails object with extracted tracking information
-    """
-    # Convert the carrier data to a proper object for easy attribute access
-    
-    # For JSON APIs, convert dict to proper response object
-    tracking_details = lib.to_object(postnord_res.TrackingResponseType, data)
-
-    # Extract tracking status and information
-    status_code = tracking_details.statusCode if hasattr(tracking_details, 'statusCode') else ""
-    status_detail = tracking_details.statusDescription if hasattr(tracking_details, 'statusDescription') else ""
-    est_delivery = tracking_details.estimatedDeliveryDate if hasattr(tracking_details, 'estimatedDeliveryDate') else None
-
-    # Extract events
-    events = []
-    if hasattr(tracking_details, 'events') and tracking_details.events:
-        for event in tracking_details.events:
-            events.append({
-                "date": event.date if hasattr(event, 'date') else "",
-                "time": event.time if hasattr(event, 'time') else "",
-                "code": event.code if hasattr(event, 'code') else "",
-                "description": event.description if hasattr(event, 'description') else "",
-                "location": event.location if hasattr(event, 'location') else "",
-                "reason": event.reason if hasattr(event, 'reason') else ""
-            })
-    
-
-    # Map carrier status to karrio standard tracking status
-    status = (
-        provider_units.TrackingStatus.find(status_code).name
-        or provider_units.TrackingStatus.in_transit.name
-    )
+    details = lib.to_object(postnord_res.TrackingResponseType, data)
+    tracking_url = details.url
 
     return models.TrackingDetails(
         carrier_id=settings.carrier_id,
         carrier_name=settings.carrier_name,
         tracking_number=tracking_number,
-        events=[
-            models.TrackingEvent(
-                date=lib.fdate(event["date"]),
-                description=event["description"],
-                code=event["code"],
-                time=lib.flocaltime(event["time"]),
-                location=event["location"],
-                # REQUIRED: ISO 8601 timestamp
-                timestamp=lib.fiso_timestamp(
-                    lib.fdate(event["date"]),
-                    lib.ftime(event["time"]),
-                ),
-                # REQUIRED: normalized status at event level
-                status=provider_units.TrackingStatus.find(event["code"]).name,
-                # Incident reason for exception events (from TrackingIncidentReason enum)
-                reason=provider_units.TrackingIncidentReason.find(event["code"]).name,
-            )
-            for event in events
-        ],
-        estimated_delivery=lib.fdate(est_delivery) if est_delivery else None,
-        delivered=status == "delivered",
-        status=status,
+        events=[],
+        delivered=False,
+        status="in_transit",
+        info=models.TrackingInfo(
+            carrier_tracking_link=tracking_url,
+        ),
+        meta=dict(tracking_url=tracking_url),
     )
 
 
@@ -119,29 +64,14 @@ def tracking_request(
     payload: models.TrackingRequest,
     settings: provider_utils.Settings,
 ) -> lib.Serializable:
-    """
-    Create a tracking request for the carrier API
+    # PostNord's Track Shipment URL path is GET /v1/tracking/{country}/{id}.
+    # country must be one of SE/NO/FI/DK; derive it from the account country.
+    country = (settings.account_country_code or "SE").lower()
+    language = (payload.options or {}).get("language") or "en"
 
-    payload: The standardized TrackingRequest from karrio
-    settings: The carrier connection settings
-
-    Returns a Serializable object that can be sent to the carrier API
-    """
-    # Extract the tracking number(s) from payload
-    tracking_numbers = payload.tracking_numbers
-    reference = payload.reference
-
-    
-    # For JSON API request
-    request = postnord_req.TrackingRequestType(
-        trackingInfo={
-            "trackingNumbers": tracking_numbers,
-            "reference": reference,
-            "language": payload.language_code or "en",
-        },
-        # Add account credentials
-        accountNumber=settings.account_number,
-    )
-    
+    request = [
+        dict(country=country, id=tracking_number, language=language)
+        for tracking_number in payload.tracking_numbers
+    ]
 
     return lib.Serializable(request, lib.to_dict)

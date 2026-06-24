@@ -1,10 +1,55 @@
 {
-  "manifestResponse": {
-    "manifestId": "MAN123456",
-    "manifestUrl": "https://example.com/manifest/MAN123456",
-    "manifestData": "base64_encoded_manifest_data",
-    "status": "completed",
-    "shipmentCount": 2,
-    "creationDate": "2023-06-01T15:30:00Z"
+  "bookingId": "PICKUP-BOOK-0001",
+  "idInformation": [
+    {
+      "status": "OK",
+      "ids": [
+        {
+          "idType": "pickupId",
+          "value": "PU-998877",
+          "printId": "PU-998877"
+        }
+      ],
+      "urls": [
+        {
+          "type": "BOOKPICKUP",
+          "url": "https://tracking.postnord.com/se/pickup/PU-998877"
+        }
+      ],
+      "errorResponse": {
+        "message": "High level error message.",
+        "compositeFault": {
+          "faults": [
+            {
+              "explanationText": "Explanation of the fault",
+              "faultCode": "FAULT_CODE",
+              "paramValues": [
+                {
+                  "param": "field",
+                  "value": "value"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "handlingResponse": {
+    "message": "High level error message.",
+    "compositeFault": {
+      "faults": [
+        {
+          "explanationText": "Explanation of the fault",
+          "faultCode": "FAULT_CODE",
+          "paramValues": [
+            {
+              "param": "field",
+              "value": "value"
+            }
+          ]
+        }
+      ]
+    }
   }
 }

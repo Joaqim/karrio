@@ -1,20 +1,18 @@
 {
-  "rateResponse": {
-    "rates": [
-      {
-        "serviceCode": "EXPRESS",
-        "serviceName": "Express Shipping",
-        "totalCharge": 25.99,
-        "currency": "USD",
-        "transitDays": 2
-      },
-      {
-        "serviceCode": "GROUND",
-        "serviceName": "Ground Shipping",
-        "totalCharge": 12.99,
-        "currency": "USD",
-        "transitDays": 5
-      }
-    ]
-  }
+  "rates": [
+    {
+      "basicServiceCode": "18",
+      "serviceName": "PostNord Parcel",
+      "amount": 89.0,
+      "currency": "SEK",
+      "transitDays": 2
+    },
+    {
+      "basicServiceCode": "17",
+      "serviceName": "PostNord MyPack Home",
+      "amount": 99.0,
+      "currency": "SEK",
+      "transitDays": 1
+    }
+  ]
 }
