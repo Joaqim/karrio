@@ -16,6 +16,14 @@ from karrio.providers.postnord.tracking import (
     parse_tracking_response,
     tracking_request,
 )
+from karrio.providers.postnord.pickup import (
+    parse_pickup_response,
+    pickup_request,
+    parse_pickup_update_response,
+    pickup_update_request,
+    parse_cancel_pickup_response,
+    cancel_pickup_request,
+)
 from karrio.providers.postnord.manifest import (
     parse_manifest_response,
     manifest_request,

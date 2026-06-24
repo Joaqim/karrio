@@ -52,7 +52,13 @@ class Proxy(proxy.Proxy):
         return lib.Deserializable(response, lib.to_dict)
 
     def create_manifest(self, request: lib.Serializable) -> lib.Deserializable[str]:
-        # Manifest is mapped to a physical pickup booking (D2): /v3/pickups.
+        # PostNord has no manifest/scan-form endpoint; the operation is
+        # unsupported and resolves to an explicit Message without an HTTP call.
+        # Use schedule_pickup (/v3/pickups) to collect already-booked parcels.
+        return lib.Deserializable("{}", lib.to_dict)
+
+    def schedule_pickup(self, request: lib.Serializable) -> lib.Deserializable[str]:
+        # Courier collection booking: POST /v3/pickups (pickupBooking).
         response = lib.request(
             url=self._url("/rest/shipment/v3/pickups"),
             data=lib.to_json(request.serialize()),
@@ -62,6 +68,16 @@ class Proxy(proxy.Proxy):
         )
 
         return lib.Deserializable(response, lib.to_dict)
+
+    def modify_pickup(self, request: lib.Serializable) -> lib.Deserializable[str]:
+        # PostNord pickup bookings support only "Original" (no PUT/PATCH route);
+        # modifying is unsupported and resolves to an explicit Message.
+        return lib.Deserializable("{}", lib.to_dict)
+
+    def cancel_pickup(self, request: lib.Serializable) -> lib.Deserializable[str]:
+        # PostNord exposes no pickup cancel/DELETE route; cancelling is
+        # unsupported and resolves to an explicit Message.
+        return lib.Deserializable("{}", lib.to_dict)
 
     def get_tracking(self, request: lib.Serializable) -> lib.Deserializable[str]:
         # Link-only tracking (D7): GET /rest/links/v1/tracking/{country}/{id}.
