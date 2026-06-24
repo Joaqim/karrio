@@ -1,9 +1,15 @@
 """Karrio PostNord shipment cancellation API implementation.
 
-PostNord exposes no DELETE route; cancellation POSTs a ``deleteEdiRequest``
-(``{"ids": [{"id": ...}]}``, ``minItems`` 1) referencing the booked shipment id
-to ``/rest/shipment/v3/edi``. Success is the absence of faults in the response.
+PostNord exposes no DELETE route; cancellation re-POSTs the booking
+``ediInstruction`` (``ShipmentRequestType``) with ``updateIndicator``
+``"Deletion"`` to ``/rest/shipment/v3/edi``. PostNord matches the original
+shipment by ``shipmentIdentification.shipmentId`` (the client id assigned at
+booking), so the Deletion references that id on both the shipment and its
+item. Success is the absence of faults in the response.
 """
+
+import datetime
+import karrio.schemas.postnord.shipment_request as postnord_req
 
 import typing
 import karrio.lib as lib
@@ -38,8 +44,47 @@ def shipment_cancel_request(
     payload: models.ShipmentCancelRequest,
     settings: provider_utils.Settings,
 ) -> lib.Serializable:
-    # PostNord cancellation is a deleteEdiRequest: an ids array (minItems 1) of
-    # {"id": ...} objects naming the EDI/shipment ids to delete.
-    request = dict(ids=[dict(id=payload.shipment_identifier)])
+    shipment_id = payload.shipment_identifier
+
+    request = postnord_req.ShipmentRequestType(
+        messageDate=datetime.datetime.now().isoformat(timespec="seconds"),
+        updateIndicator="Deletion",
+        testIndicator=settings.test_mode,
+        application=postnord_req.ApplicationType(
+            name="Karrio",
+            applicationId=lib.to_int(settings.application_id),
+        ),
+        shipment=[
+            postnord_req.ShipmentType(
+                shipmentIdentification=postnord_req.ShipmentIdentificationType(
+                    shipmentId=shipment_id,
+                ),
+                parties=postnord_req.PartiesType(
+                    consignor=postnord_req.ConsignType(
+                        issuerCode=settings.issuer_code,
+                        partyIdentification=lib.identity(
+                            postnord_req.PartyIdentificationType(
+                                partyId=settings.customer_number,
+                                partyIdType="160",
+                            )
+                            if settings.customer_number
+                            else None
+                        ),
+                    ),
+                ),
+                goodsItem=[
+                    postnord_req.GoodsItemType(
+                        items=[
+                            postnord_req.ItemType(
+                                itemIdentification=postnord_req.ItemIdentificationType(
+                                    itemId=shipment_id,
+                                ),
+                            )
+                        ],
+                    )
+                ],
+            )
+        ],
+    )
 
     return lib.Serializable(request, lib.to_dict)
