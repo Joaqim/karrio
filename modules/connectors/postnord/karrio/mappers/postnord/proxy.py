@@ -1,5 +1,6 @@
 """Karrio PostNord client proxy."""
 
+import datetime
 import karrio.lib as lib
 import karrio.api.proxy as proxy
 import karrio.mappers.postnord.settings as provider_settings
@@ -9,9 +10,65 @@ from karrio.universal.mappers.rating_proxy import RatingMixinProxy
 class Proxy(proxy.Proxy):
     settings: provider_settings.Settings
 
-    # PostNord has no live rate API; rating resolves the server-side RateSheet
-    # via the universal rating mixin rather than an HTTP call.
-    get_rates = RatingMixinProxy.get_rates
+    def get_rates(self, request: lib.Serializable) -> lib.Deserializable:
+        """Resolve static prices and enrich with PostNord transit times.
+
+        PostNord has no live money-rate API, so PRICE resolution delegates to
+        the universal rating mixin (server-side RateSheet). On top of that, one
+        ``GET /rest/transport/v2/transittime/addresstoaddress`` call is issued
+        per rate request to obtain accurate transit days, estimated delivery
+        dates, and per-service bookability. The transit results are threaded to
+        ``parse_rate_response`` via the returned ``Deserializable.ctx``.
+
+        A transit outage never breaks price rating: the call is guarded, and on
+        failure an empty result set plus a ``transit_degraded`` marker is placed
+        on the context so the parser can surface a warning and skip filtering.
+        """
+        payload = request.serialize()
+        rate_response = RatingMixinProxy.get_rates(self, request)
+
+        transit_ctx = self._get_transit_times(payload)
+
+        return lib.Deserializable(
+            rate_response.deserialize(),
+            ctx=transit_ctx,
+        )
+
+    def _get_transit_times(self, payload) -> dict:
+        """Call the Transit Time V2 API and parse it into a service-code map.
+
+        Returns ``{"transit_results": {basicServiceCode: {transit_days,
+        estimated_delivery, is_bookable}}}`` on success, or
+        ``{"transit_results": {}, "transit_degraded": True}`` when the call
+        fails, returns a non-200 body, or cannot be parsed.
+        """
+        service_codes = ",".join(
+            s.carrier_service_code
+            for s in (self.settings.services or [])
+            if s.carrier_service_code
+        )
+
+        response = lib.failsafe(
+            lambda: lib.request(
+                url=self._url(
+                    "/rest/transport/v2/transittime/addresstoaddress",
+                    startTime=datetime.datetime.now().isoformat(timespec="seconds"),
+                    originPostalCode=payload.shipper.postal_code,
+                    originCountryCode=payload.shipper.country_code,
+                    destinationPostalCode=payload.recipient.postal_code,
+                    destinationCountryCode=payload.recipient.country_code,
+                    serviceCodes=service_codes or None,
+                ),
+                trace=self.trace_as("json"),
+                method="GET",
+            )
+        )
+
+        results = _parse_transit_times(response)
+        if results is None:
+            return {"transit_results": {}, "transit_degraded": True}
+
+        return {"transit_results": results}
 
     def _url(self, path: str, **params) -> str:
         """Build a PostNord URL with the apikey appended as a query parameter.
@@ -102,3 +159,76 @@ class Proxy(proxy.Proxy):
             response,
             lambda res: [(identifier, lib.to_dict(data)) for identifier, data in res],
         )
+
+
+def _parse_transit_times(response):
+    """Parse a Transit Time V2 response body into a service-code map.
+
+    The V2 ``addresstoaddress`` operation returns a JSON array of
+    ``TransitTimeV2`` objects. Each carries ``service.basicServiceCode``,
+    ``estimatedTimeOfArrival`` (with ``dateOfDeparture``/``timeOfArrival`` or a
+    ``dayRangeOfArrival.daysMaximum`` fallback), and an ``isBookable`` flag.
+
+    Returns ``{basicServiceCode: {transit_days, estimated_delivery,
+    is_bookable}}`` on an array body (an empty array yields an empty map, a
+    successful "no transit info" result, not a degrade), or ``None`` to signal
+    degrade when the body is missing, not a list (e.g. an error object), or
+    unparseable.
+    """
+    if not response:
+        return None
+
+    entries = lib.failsafe(lambda: lib.to_dict(response))
+    if not isinstance(entries, list):
+        return None
+
+    results: dict = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        code = (entry.get("service") or {}).get("basicServiceCode")
+        if not code:
+            continue
+
+        eta = entry.get("estimatedTimeOfArrival") or {}
+        results[code] = dict(
+            transit_days=_compute_transit_days(eta),
+            estimated_delivery=_estimated_delivery(eta),
+            is_bookable=entry.get("isBookable"),
+        )
+
+    return results
+
+
+def _estimated_delivery(eta: dict):
+    """Return the estimated delivery date (YYYY-MM-DD) from an ETA object."""
+    arrival = eta.get("timeOfArrival")
+    if not arrival:
+        return None
+
+    return lib.failsafe(
+        lambda: lib.fdate(arrival, try_formats=["%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"])
+    )
+
+
+def _compute_transit_days(eta: dict):
+    """Derive transit days from an ETA, departure->arrival or day-range fallback."""
+    departure = eta.get("dateOfDeparture") or eta.get("timeOfDeparture")
+    arrival = eta.get("timeOfArrival")
+
+    if departure and arrival:
+        days = lib.failsafe(
+            lambda: (
+                lib.to_date(
+                    arrival, try_formats=["%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"]
+                ).date()
+                - lib.to_date(
+                    departure, try_formats=["%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"]
+                ).date()
+            ).days
+        )
+        if days is not None:
+            return days
+
+    day_range = eta.get("dayRangeOfArrival") or {}
+    return day_range.get("daysMaximum")
