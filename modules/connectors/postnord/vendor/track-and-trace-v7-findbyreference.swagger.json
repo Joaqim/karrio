@@ -1,0 +1,1754 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "PostNord Track & Trace API v7 - FindByReference - Public",
+    "description": "Track & Trace FindByReference endpoints to fetch shipment information using its unique shipment ID.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://atapi2.postnord.com/rest/shipment",
+      "description": "AT sandbox server"
+    }
+  ],
+  "paths": {
+    "/v7/trackandtrace/customernumber/{customerNumber}/reference/{reference}/public": {
+      "get": {
+        "tags": [
+          "Track&Trace PublicRecipientView"
+        ],
+        "summary": "Track shipment by customer number and reference",
+        "description": "The PostNord Track Shipment API supports different ways to retrieve shipment information. <br><br>The same API is used on all PostNord’s websites (e.g. postnord.se, postdanmark.dk, postnord.no, postnord.fi and tracking.postnord.com).<br><br>The result will contain the matching shipments with their associated events",
+        "operationId": "findByReferencePublicRecipientView",
+        "parameters": [
+          {
+            "name": "apikey",
+            "in": "query",
+            "description": "The unique consumer (client) identifier 32 characters",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-data-threescale-name": "user_keys"
+          },
+          {
+            "name": "customerNumber",
+            "in": "path",
+            "description": "The Postnord customer number for the shipment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "80068059"
+          },
+          {
+            "name": "reference",
+            "in": "path",
+            "description": "The customer reference on the shipment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "dk2238532288565/dk80059/0"
+          },
+          {
+            "name": "locale",
+            "in": "query",
+            "description": "Default is en. Allowed values are en, sv, no, da and fi",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "en"
+            }
+          },
+          {
+            "name": "callback",
+            "in": "query",
+            "description": "Return JSON-P response",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The server did not understand or could not validate the input parameters. More information about the cause of the error is available in the compositeFault object.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "description": "The server experienced a runtime exception while processing the request. Try again later or contact customer support.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AcceptorDto": {
+        "title": "AcceptorDto",
+        "type": "object",
+        "properties": {
+          "signatureReference": {
+            "type": "string",
+            "description": ""
+          },
+          "name": {
+            "type": "string",
+            "description": ""
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "AccountDto": {
+        "title": "AccountDto",
+        "required": [
+          "accountType"
+        ],
+        "type": "object",
+        "properties": {
+          "accountNumber": {
+            "type": "string",
+            "description": ""
+          },
+          "accountType": {
+            "$ref": "#/components/schemas/AccountType"
+          },
+          "bic": {
+            "type": "string",
+            "description": ""
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "AccountType": {
+        "title": "accountType",
+        "type": "string",
+        "example": "BANKACCOUNT",
+        "enum": [
+          "BANKACCOUNT",
+          "BANKGIRO",
+          "DBFILE",
+          "DBIMAGE",
+          "IBAN",
+          "PLUSGIRO",
+          "UNDEF"
+        ]
+      },
+      "AdditionalServiceDto": {
+        "title": "AdditionalServiceDto",
+        "required": [
+          "code",
+          "sourceSystem"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": ""
+          },
+          "groupCode": {
+            "type": "string",
+            "description": ""
+          },
+          "sourceSystem": {
+            "type": "string",
+            "description": ""
+          },
+          "type": {
+            "type": "string",
+            "description": ""
+          },
+          "name": {
+            "type": "string",
+            "description": ""
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "AddressDto": {
+        "title": "AddressDto",
+        "type": "object",
+        "properties": {
+          "street1": {
+            "type": "string",
+            "description": ""
+          },
+          "street2": {
+            "type": "string",
+            "description": ""
+          },
+          "city": {
+            "type": "string",
+            "description": ""
+          },
+          "countryCode": {
+            "type": "string",
+            "description": ""
+          },
+          "country": {
+            "type": "string",
+            "description": ""
+          },
+          "postCode": {
+            "type": "string",
+            "description": ""
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "CollectionPartyDto": {
+        "title": "CollectionPartyDto",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": ""
+          },
+          "address": {
+            "$ref": "#/components/schemas/AddressDto"
+          },
+          "contact": {
+            "$ref": "#/components/schemas/ContactDto"
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "CompositeFault": {
+        "title": "CompositeFault",
+        "type": "object",
+        "properties": {
+          "faults": {
+            "type": "array",
+            "description": "",
+            "items": {
+              "$ref": "#/components/schemas/Fault"
+            }
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "ConsigneeDto": {
+        "title": "ConsigneeDto",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": ""
+          },
+          "address": {
+            "$ref": "#/components/schemas/AddressDto"
+          },
+          "contact": {
+            "$ref": "#/components/schemas/ContactDto"
+          },
+          "customer": {
+            "$ref": "#/components/schemas/CustomerDto"
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        },
+        "description": "receiver"
+      },
+      "ConsignorDto": {
+        "title": "ConsignorDto",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": ""
+          },
+          "issuercode": {
+            "type": "string",
+            "description": ""
+          },
+          "customer": {
+            "$ref": "#/components/schemas/CustomerDto"
+          },
+          "address": {
+            "$ref": "#/components/schemas/AddressDto"
+          },
+          "contact": {
+            "$ref": "#/components/schemas/ContactDto"
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        },
+        "description": "sender"
+      },
+      "ContactDto": {
+        "title": "ContactDto",
+        "type": "object",
+        "properties": {
+          "contactName": {
+            "type": "string",
+            "description": ""
+          },
+          "phone": {
+            "type": "string",
+            "description": ""
+          },
+          "mobilePhone": {
+            "type": "string",
+            "description": ""
+          },
+          "email": {
+            "type": "string",
+            "description": ""
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "CoordinateDto": {
+        "title": "CoordinateDto",
+        "type": "object",
+        "properties": {
+          "srId": {
+            "type": "string",
+            "description": ""
+          },
+          "northing": {
+            "type": "string",
+            "description": ""
+          },
+          "easting": {
+            "type": "string",
+            "description": ""
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "CustomerDto": {
+        "title": "CustomerDto",
+        "type": "object",
+        "properties": {
+          "productionCustomerNumber": {
+            "type": "string",
+            "description": ""
+          },
+          "externalCustomerNumber": {
+            "type": "string",
+            "description": ""
+          },
+          "sapCustomerNumber": {
+            "type": "string",
+            "description": ""
+          },
+          "corporateId": {
+            "type": "string",
+            "description": ""
+          },
+          "pnLocalCustomerId": {
+            "type": "string",
+            "description": ""
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "DatedTransportUnitDto": {
+        "title": "DatedTransportUnitDto",
+        "type": "object",
+        "properties": {
+          "eventTime": {
+            "type": "string",
+            "description": "",
+            "format": "date-time"
+          },
+          "idType": {
+            "type": "string",
+            "description": ""
+          },
+          "type": {
+            "type": "string",
+            "description": ""
+          },
+          "unitId": {
+            "type": "string",
+            "description": ""
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "DeliveryPointDto": {
+        "title": "DeliveryPointDto",
+        "required": [
+          "locationId",
+          "locationType"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": ""
+          },
+          "country": {
+            "type": "string",
+            "description": ""
+          },
+          "countryCode": {
+            "type": "string",
+            "description": ""
+          },
+          "depotId": {
+            "type": "string",
+            "description": ""
+          },
+          "locationDetail": {
+            "type": "string",
+            "description": ""
+          },
+          "address": {
+            "$ref": "#/components/schemas/AddressDto"
+          },
+          "contact": {
+            "$ref": "#/components/schemas/ContactDto"
+          },
+          "coordinate": {
+            "type": "array",
+            "description": "",
+            "items": {
+              "$ref": "#/components/schemas/CoordinateDto"
+            }
+          },
+          "openingHours": {
+            "type": "array",
+            "description": "",
+            "items": {
+              "$ref": "#/components/schemas/OpeningHoursDto"
+            }
+          },
+          "displayName": {
+            "type": "string",
+            "description": ""
+          },
+          "locationId": {
+            "type": "string",
+            "description": ""
+          },
+          "postcode": {
+            "type": "string",
+            "description": ""
+          },
+          "servicePointType": {
+            "type": "string",
+            "description": ""
+          },
+          "locationType": {
+            "$ref": "#/components/schemas/LocationType"
+          },
+          "city": {
+            "type": "string",
+            "description": ""
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "DistanceDto": {
+        "title": "DistanceDto",
+        "required": [
+          "unit",
+          "value"
+        ],
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string",
+            "description": "String representing BigDecimal",
+            "example": "13.55"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/DistanceUnit"
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "DistanceUnit": {
+        "title": "distanceUnit",
+        "type": "string",
+        "example": "mm",
+        "enum": [
+          "mm",
+          "cm",
+          "dm",
+          "m"
+        ]
+      },
+      "Fault": {
+        "title": "Fault",
+        "required": [
+          "explanationText",
+          "faultCode"
+        ],
+        "type": "object",
+        "properties": {
+          "faultCode": {
+            "type": "string",
+            "description": ""
+          },
+          "explanationText": {
+            "type": "string",
+            "description": ""
+          },
+          "paramValues": {
+            "type": "array",
+            "description": "",
+            "items": {
+              "$ref": "#/components/schemas/ParamValue"
+            }
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "FreightPayerDto": {
+        "title": "FreightPayerDto",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": ""
+          },
+          "customer": {
+            "$ref": "#/components/schemas/CustomerDto"
+          },
+          "contact": {
+            "$ref": "#/components/schemas/ContactDto"
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "GeoLocationDto": {
+        "title": "GeoLocationDto",
+        "type": "object",
+        "properties": {
+          "geoNorthing": {
+            "type": "number",
+            "description": "",
+            "format": "double"
+          },
+          "geoEasting": {
+            "type": "number",
+            "description": "",
+            "format": "double"
+          },
+          "geoReferenceSystem": {
+            "type": "string",
+            "description": ""
+          },
+          "geoPostalCode": {
+            "type": "string",
+            "description": ""
+          },
+          "geoCity": {
+            "type": "string",
+            "description": ""
+          },
+          "geoCountryCode": {
+            "type": "string",
+            "description": ""
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "ItemDto": {
+        "title": "ItemDto",
+        "required": [
+          "itemId"
+        ],
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "description": ""
+          },
+          "originEstimatedTimeOfArrival": {
+            "type": "string",
+            "description": "",
+            "format": "date-time"
+          },
+          "estimatedTimeOfArrival": {
+            "type": "string",
+            "description": "",
+            "format": "date-time"
+          },
+          "publicTimeOfArrival": {
+            "type": "string",
+            "description": "Public time of arrival. Might be based on statistical ETA",
+            "format": "date-time"
+          },
+          "realTimeOfArrival": {
+            "type": "string",
+            "description": "",
+            "format": "date-time"
+          },
+          "dropOffDate": {
+            "type": "string",
+            "description": "",
+            "format": "date-time"
+          },
+          "deliveryDate": {
+            "type": "string",
+            "description": "",
+            "format": "date-time"
+          },
+          "returnDate": {
+            "type": "string",
+            "description": "",
+            "format": "date-time"
+          },
+          "bookedDeliveryDateFrom": {
+            "type": "string",
+            "description": "",
+            "format": "date-time"
+          },
+          "deliveryImageAvailable": {
+            "type": "boolean",
+            "description": ""
+          },
+          "deliveryTo": {
+            "type": "string",
+            "description": ""
+          },
+          "deliveryToInfo": {
+            "type": "string",
+            "description": ""
+          },
+          "liveTracking": {
+            "$ref": "#/components/schemas/LiveTrackingDto"
+          },
+          "bookedDeliveryDateTo": {
+            "type": "string",
+            "description": "",
+            "format": "date-time"
+          },
+          "typeOfItem": {
+            "type": "string",
+            "description": ""
+          },
+          "typeOfItemName": {
+            "type": "string",
+            "description": ""
+          },
+          "typeOfItemActual": {
+            "type": "string",
+            "description": ""
+          },
+          "typeOfItemActualName": {
+            "type": "string",
+            "description": ""
+          },
+          "additionalInformation": {
+            "type": "string",
+            "description": ""
+          },
+          "transportUnits": {
+            "type": "array",
+            "description": "",
+            "items": {
+              "$ref": "#/components/schemas/DatedTransportUnitDto"
+            }
+          },
+          "noItems": {
+            "type": "integer",
+            "description": "",
+            "format": "int32"
+          },
+          "numberOfPallets": {
+            "type": "string",
+            "description": ""
+          },
+          "signature": {
+            "type": "string",
+            "description": ""
+          },
+          "status": {
+            "$ref": "#/components/schemas/ItemStatus"
+          },
+          "eventStatus": {
+            "$ref": "#/components/schemas/ItemStatus"
+          },
+          "statusText": {
+            "$ref": "#/components/schemas/StatusTextDto"
+          },
+          "acceptor": {
+            "$ref": "#/components/schemas/AcceptorDto"
+          },
+          "statedMeasurement": {
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MeasurementDto"
+              },
+              {
+                "type": "object",
+                "description": "measurement that was made and scanned by Postnord"
+              }
+            ]
+          },
+          "assessedMeasurement": {
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MeasurementDto"
+              },
+              {
+                "type": "object",
+                "description": "measurement that was received in the shipment information"
+              }
+            ]
+          },
+          "events": {
+            "type": "array",
+            "description": "",
+            "items": {
+              "$ref": "#/components/schemas/TrackingEventDto"
+            }
+          },
+          "stoppedInCustoms": {
+            "type": "boolean"
+          },
+          "temperatures": {
+            "$ref": "#/components/schemas/TemperaturesDto"
+          },
+          "references": {
+            "type": "array",
+            "description": "",
+            "items": {
+              "$ref": "#/components/schemas/ReferenceDto"
+            }
+          },
+          "itemRefIds": {
+            "type": "array",
+            "description": "",
+            "items": {
+              "$ref": "#/components/schemas/ItemRefDto"
+            }
+          },
+          "previousItemStates": {
+            "uniqueItems": true,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ItemStatus"
+            }
+          },
+          "freeTexts": {
+            "type": "array",
+            "description": "",
+            "items": {
+              "$ref": "#/components/schemas/ItemFreeTextDto"
+            }
+          },
+          "isPlacedInRetailParcelBox": {
+            "type": "boolean",
+            "description": ""
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "ItemFreeTextDto": {
+        "title": "ItemFreeTextDto",
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": ""
+          },
+          "type": {
+            "$ref": "#/components/schemas/TextType"
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "ItemRefDto": {
+        "title": "ItemRefDto",
+        "type": "object",
+        "properties": {
+          "referenceId": {
+            "type": "string",
+            "description": ""
+          },
+          "type": {
+            "$ref": "#/components/schemas/ItemRefIdType"
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "LiveTrackingDto": {
+        "title": "LiveTrackingDto",
+        "type": "object",
+        "properties": {
+          "liveTrackId": {
+            "type": "string",
+            "description": ""
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "ItemRefIdType": {
+        "title": "type",
+        "type": "string",
+        "example": "INFO_ID",
+        "enum": [
+          "INFO_ID",
+          "REF_ID",
+          "UNDEF",
+          "BUNDLE_ID"
+        ]
+      },
+      "ItemStatus": {
+        "title": "itemStatus",
+        "type": "string",
+        "example": "CREATED",
+        "enum": [
+          "CREATED",
+          "AVAILABLE_FOR_DELIVERY",
+          "AVAILABLE_FOR_DELIVERY_PAR_LOC",
+          "DELAYED",
+          "DELIVERED",
+          "DELIVERY_IMPOSSIBLE",
+          "DELIVERY_REFUSED",
+          "EXPECTED_DELAY",
+          "INFORMED",
+          "EN_ROUTE",
+          "OTHER",
+          "RETURNED",
+          "STOPPED"
+        ]
+      },
+      "LocationDto": {
+        "title": "LocationDto",
+        "required": [
+          "locationId",
+          "locationType"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": ""
+          },
+          "countryCode": {
+            "type": "string",
+            "description": ""
+          },
+          "country": {
+            "type": "string",
+            "description": ""
+          },
+          "locationId": {
+            "type": "string",
+            "description": ""
+          },
+          "depotId": {
+            "type": "string",
+            "description": ""
+          },
+          "displayName": {
+            "type": "string",
+            "description": ""
+          },
+          "postcode": {
+            "type": "string",
+            "description": ""
+          },
+          "city": {
+            "type": "string",
+            "description": ""
+          },
+          "servicePointType": {
+            "type": "string",
+            "description": ""
+          },
+          "locationType": {
+            "$ref": "#/components/schemas/LocationType"
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "LocationType": {
+        "title": "locationType",
+        "type": "string",
+        "example": "HUB",
+        "enum": [
+          "CUSTOMER_LOCATION",
+          "DELIVERY_POINT",
+          "DEPOT",
+          "DISTRIBUTION_PARTNER",
+          "DPD_DEPOT",
+          "HUB",
+          "IPS_LOCATION",
+          "LOAD_POINT",
+          "POSTAL_SERVICE_TERMINAL",
+          "SERVICE_POINT",
+          "SLINGA",
+          "UNDEF"
+        ]
+      },
+      "MeasurementDto": {
+        "title": "MeasurementDto",
+        "type": "object",
+        "properties": {
+          "weight": {
+            "$ref": "#/components/schemas/WeightDto"
+          },
+          "length": {
+            "$ref": "#/components/schemas/DistanceDto"
+          },
+          "height": {
+            "$ref": "#/components/schemas/DistanceDto"
+          },
+          "width": {
+            "$ref": "#/components/schemas/DistanceDto"
+          },
+          "volume": {
+            "$ref": "#/components/schemas/VolumeDto"
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "MoneyDto": {
+        "title": "MoneyDto",
+        "required": [
+          "currency",
+          "value"
+        ],
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string",
+            "description": "BigDecimal format"
+          },
+          "currency": {
+            "type": "string",
+            "description": ""
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "NotificationPartyDto": {
+        "title": "NotificationPartyDto",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": ""
+          },
+          "address": {
+            "$ref": "#/components/schemas/AddressDto"
+          },
+          "contact": {
+            "$ref": "#/components/schemas/ContactDto"
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "OpeningHoursDto": {
+        "title": "OpeningHoursDto",
+        "required": [
+          "openFrom",
+          "openTo"
+        ],
+        "type": "object",
+        "properties": {
+          "openFrom": {
+            "type": "string",
+            "description": ""
+          },
+          "openTo": {
+            "type": "string",
+            "description": ""
+          },
+          "openFrom2": {
+            "type": "string",
+            "description": ""
+          },
+          "openTo2": {
+            "type": "string",
+            "description": ""
+          },
+          "monday": {
+            "type": "boolean",
+            "description": ""
+          },
+          "tuesday": {
+            "type": "boolean",
+            "description": ""
+          },
+          "wednesday": {
+            "type": "boolean",
+            "description": ""
+          },
+          "thursday": {
+            "type": "boolean",
+            "description": ""
+          },
+          "friday": {
+            "type": "boolean",
+            "description": ""
+          },
+          "saturday": {
+            "type": "boolean",
+            "description": ""
+          },
+          "sunday": {
+            "type": "boolean",
+            "description": ""
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "OriginalShipperDto": {
+        "title": "OriginalShipperDto",
+        "type": "object",
+        "properties": {
+          "address": {
+            "$ref": "#/components/schemas/AddressDto"
+          },
+          "name": {
+            "type": "string",
+            "description": ""
+          },
+          "customer": {
+            "$ref": "#/components/schemas/CustomerDto"
+          },
+          "contact": {
+            "$ref": "#/components/schemas/ContactDto"
+          },
+          "issuercode": {
+            "type": "string",
+            "description": ""
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "ParamValue": {
+        "title": "ParamValue",
+        "required": [
+          "param",
+          "value"
+        ],
+        "type": "object",
+        "properties": {
+          "param": {
+            "type": "string",
+            "description": ""
+          },
+          "value": {
+            "type": "string",
+            "description": ""
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "PickupPartyDto": {
+        "title": "PickupPartyDto",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": ""
+          },
+          "address": {
+            "$ref": "#/components/schemas/AddressDto"
+          },
+          "contact": {
+            "$ref": "#/components/schemas/ContactDto"
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "ReferenceDto": {
+        "title": "ReferenceDto",
+        "required": [
+          "type",
+          "value"
+        ],
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string",
+            "description": ""
+          },
+          "type": {
+            "type": "string",
+            "description": ""
+          },
+          "name": {
+            "type": "string",
+            "description": ""
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "ResponseDto": {
+        "title": "ResponseDto",
+        "type": "object",
+        "properties": {
+          "TrackingInformationResponse": {
+            "$ref": "#/components/schemas/TrackingInformationResponse"
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "ReturnPartyDto": {
+        "title": "ReturnPartyDto",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": ""
+          },
+          "address": {
+            "$ref": "#/components/schemas/AddressDto"
+          },
+          "contact": {
+            "$ref": "#/components/schemas/ContactDto"
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "ServiceDto": {
+        "title": "ServiceDto",
+        "required": [
+          "code",
+          "sourceSystem"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": ""
+          },
+          "sourceSystem": {
+            "type": "string",
+            "description": ""
+          },
+          "name": {
+            "type": "string",
+            "description": ""
+          },
+          "articleNumber": {
+            "type": "string",
+            "description": ""
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "ShipmentDto": {
+        "title": "ShipmentDto",
+        "required": [
+          "shipmentId"
+        ],
+        "type": "object",
+        "properties": {
+          "shipmentId": {
+            "type": "string",
+            "description": ""
+          },
+          "uri": {
+            "type": "string",
+            "description": ""
+          },
+          "assessedNumberOfItems": {
+            "type": "integer",
+            "description": "",
+            "format": "int32"
+          },
+          "cashOnDeliveryText": {
+            "type": "string",
+            "description": ""
+          },
+          "deliveryDate": {
+            "type": "string",
+            "description": "",
+            "format": "date-time"
+          },
+          "returnDate": {
+            "type": "string",
+            "description": "",
+            "format": "date-time"
+          },
+          "originEstimatedTimeOfArrival": {
+            "type": "string",
+            "description": "First estimated time of arrival",
+            "format": "date-time"
+          },
+          "estimatedTimeOfArrival": {
+            "type": "string",
+            "description": "Estimated time of arrival",
+            "format": "date-time"
+          },
+          "publicTimeOfArrival": {
+            "type": "string",
+            "description": "Public time of arrival. Might be based on statistical ETA",
+            "format": "date-time"
+          },
+          "realTimeOfArrival": {
+            "type": "string",
+            "description": "Actual time of arrival",
+            "format": "date-time"
+          },
+          "requestedDeliveryDate": {
+            "type": "string",
+            "description": "",
+            "format": "date-time"
+          },
+          "requestedProductionDate": {
+            "type": "string",
+            "description": "",
+            "format": "date-time"
+          },
+          "notificationPhoneNumber": {
+            "type": "string",
+            "description": ""
+          },
+          "notificationCode": {
+            "type": "string",
+            "description": ""
+          },
+          "customerNumber": {
+            "type": "string",
+            "description": ""
+          },
+          "riskForDelay": {
+            "type": "boolean",
+            "description": ""
+          },
+          "numberOfPallets": {
+            "type": "string",
+            "description": ""
+          },
+          "flexChangePossible": {
+            "type": "boolean",
+            "description": ""
+          },
+          "service": {
+            "$ref": "#/components/schemas/ServiceDto"
+          },
+          "consignor": {
+            "$ref": "#/components/schemas/ConsignorDto"
+          },
+          "consignee": {
+            "$ref": "#/components/schemas/ConsigneeDto"
+          },
+          "originalShipper": {
+            "$ref": "#/components/schemas/OriginalShipperDto"
+          },
+          "freightPayer": {
+            "$ref": "#/components/schemas/FreightPayerDto"
+          },
+          "returnParty": {
+            "$ref": "#/components/schemas/ReturnPartyDto"
+          },
+          "pickupParty": {
+            "$ref": "#/components/schemas/PickupPartyDto"
+          },
+          "collectionParty": {
+            "$ref": "#/components/schemas/CollectionPartyDto"
+          },
+          "notificationParty": {
+            "$ref": "#/components/schemas/NotificationPartyDto"
+          },
+          "cashOnDelivery": {
+            "$ref": "#/components/schemas/MoneyDto"
+          },
+          "statusText": {
+            "$ref": "#/components/schemas/ShipmentStatusTextDto"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status18"
+          },
+          "requestedDeliveryPoint": {
+            "$ref": "#/components/schemas/DeliveryPointDto"
+          },
+          "deliveryPoint": {
+            "$ref": "#/components/schemas/DeliveryPointDto"
+          },
+          "destinationDeliveryPoint": {
+            "$ref": "#/components/schemas/DeliveryPointDto"
+          },
+          "paymentAccount": {
+            "$ref": "#/components/schemas/AccountDto"
+          },
+          "totalWeight": {
+            "$ref": "#/components/schemas/WeightDto"
+          },
+          "totalVolume": {
+            "$ref": "#/components/schemas/VolumeDto"
+          },
+          "assessedWeight": {
+            "$ref": "#/components/schemas/WeightDto"
+          },
+          "assessedVolume": {
+            "$ref": "#/components/schemas/VolumeDto"
+          },
+          "transportInsurance": {
+            "$ref": "#/components/schemas/MoneyDto"
+          },
+          "splitStatuses": {
+            "uniqueItems": true,
+            "type": "array",
+            "description": "",
+            "items": {
+              "$ref": "#/components/schemas/SplitStatusDto"
+            }
+          },
+          "shipmentReferences": {
+            "type": "array",
+            "description": "",
+            "items": {
+              "$ref": "#/components/schemas/ReferenceDto"
+            }
+          },
+          "additionalServices": {
+            "uniqueItems": true,
+            "type": "array",
+            "description": "",
+            "items": {
+              "$ref": "#/components/schemas/AdditionalServiceDto"
+            }
+          },
+          "harmonizedVersion": {
+            "type": "integer",
+            "description": "",
+            "format": "int32"
+          },
+          "items": {
+            "type": "array",
+            "description": "",
+            "items": {
+              "$ref": "#/components/schemas/ItemDto"
+            }
+          },
+          "consigneeMobilePhoneExists": {
+            "type": "boolean",
+            "description": ""
+          },
+          "consigneeEmailExists": {
+            "type": "boolean",
+            "description": ""
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "ShipmentStatusTextDto": {
+        "title": "ShipmentStatusTextDto",
+        "type": "object",
+        "properties": {
+          "header": {
+            "type": "string",
+            "description": ""
+          },
+          "body": {
+            "type": "string",
+            "description": ""
+          },
+          "estimatedTimeOfArrival": {
+            "type": "string",
+            "description": ""
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "SplitStatusDto": {
+        "title": "SplitStatusDto",
+        "type": "object",
+        "properties": {
+          "noItemsWithStatus": {
+            "type": "integer",
+            "description": "",
+            "format": "int32"
+          },
+          "noItems": {
+            "type": "integer",
+            "description": "",
+            "format": "int32"
+          },
+          "statusDescription": {
+            "type": "string",
+            "description": ""
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "Status": {
+        "title": "status",
+        "type": "string",
+        "example": "CREATED",
+        "enum": [
+          "CREATED",
+          "AVAILABLE_FOR_DELIVERY",
+          "AVAILABLE_FOR_DELIVERY_PAR_LOC",
+          "DELAYED",
+          "DELIVERED",
+          "DELIVERY_IMPOSSIBLE",
+          "DELIVERY_REFUSED",
+          "EXPECTED_DELAY",
+          "INFORMED",
+          "EN_ROUTE",
+          "OTHER",
+          "RETURNED",
+          "STOPPED"
+        ]
+      },
+      "Status18": {
+        "title": "ShipmentStatus",
+        "type": "string",
+        "example": "CREATED",
+        "enum": [
+          "CREATED",
+          "AVAILABLE_FOR_DELIVERY",
+          "DELAYED",
+          "DELIVERED",
+          "DELIVERY_IMPOSSIBLE",
+          "DELIVERY_REFUSED",
+          "EXPECTED_DELAY",
+          "INFORMED",
+          "EN_ROUTE",
+          "OTHER",
+          "RETURNED",
+          "STOPPED",
+          "SPLIT"
+        ]
+      },
+      "StatusTextDto": {
+        "title": "StatusTextDto",
+        "type": "object",
+        "properties": {
+          "header": {
+            "type": "string",
+            "description": ""
+          },
+          "body": {
+            "type": "string",
+            "description": ""
+          },
+          "estimatedTimeOfArrival": {
+            "type": "string",
+            "description": ""
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "TemperaturesDto": {
+        "title": "TemperaturesDto",
+        "type": "object",
+        "properties": {
+          "idealTemperatureCelsius": {
+            "type": "string",
+            "description": ""
+          },
+          "maxTemperatureCelsius": {
+            "type": "string",
+            "description": ""
+          },
+          "minTemperatureCelsius": {
+            "type": "string",
+            "description": ""
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "TextType": {
+        "title": "type46",
+        "type": "string",
+        "example": "ICN",
+        "enum": [
+          "ICN",
+          "SIC",
+          "DEL",
+          "DIN",
+          "ADR",
+          "NEI",
+          "UNDEF"
+        ]
+      },
+      "TrackingEventDto": {
+        "title": "TrackingEventDto",
+        "required": [
+          "eventCode",
+          "eventTime",
+          "location"
+        ],
+        "type": "object",
+        "properties": {
+          "eventTime": {
+            "type": "string",
+            "description": "",
+            "format": "date-time"
+          },
+          "eventCode": {
+            "type": "string",
+            "description": ""
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationDto"
+          },
+          "geoLocation": {
+            "$ref": "#/components/schemas/GeoLocationDto"
+          },
+          "status": {
+            "type": "string",
+            "description": ""
+          },
+          "sourceSystem": {
+            "type": "string",
+            "description": ""
+          },
+          "eventDescription": {
+            "type": "string",
+            "description": ""
+          },
+          "temperatureCelsius": {
+            "type": "string",
+            "description": ""
+          },
+          "transportUnit": {
+            "$ref": "#/components/schemas/TransportUnitDto"
+          },
+          "transportUnitId": {
+            "type": "string",
+            "description": ""
+          },
+          "localEventCode": {
+            "type": "string",
+            "description": ""
+          },
+          "scanUserId": {
+            "type": "string",
+            "description": ""
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "TransportUnitDto": {
+        "title": "TransportUnitDto",
+        "type": "object",
+        "properties": {
+          "idType": {
+            "type": "string",
+            "description": ""
+          },
+          "type": {
+            "type": "string",
+            "description": ""
+          },
+          "unitId": {
+            "type": "string",
+            "description": ""
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "TrackingInformationResponse": {
+        "title": "TrackingInformationResponse",
+        "type": "object",
+        "properties": {
+          "compositeFault": {
+            "$ref": "#/components/schemas/CompositeFault"
+          },
+          "shipments": {
+            "type": "array",
+            "description": "",
+            "items": {
+              "$ref": "#/components/schemas/ShipmentDto"
+            }
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "VolumeDto": {
+        "title": "VolumeDto",
+        "required": [
+          "unit",
+          "value"
+        ],
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string",
+            "description": "A string representation the BigDecimal value",
+            "example": "1.76"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/VolumeUnit"
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "VolumeUnit": {
+        "title": "volumeUnit",
+        "type": "string",
+        "example": "cm3",
+        "enum": [
+          "cm3",
+          "dm3",
+          "m3"
+        ]
+      },
+      "WeightDto": {
+        "title": "WeightDto",
+        "required": [
+          "unit",
+          "value"
+        ],
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string",
+            "description": "A string representing a BigDecimal",
+            "example": "11.92"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/WeightUnit"
+          }
+        },
+        "additionalProperties": {
+          "type": "object"
+        }
+      },
+      "WeightUnit": {
+        "title": "WeightUnit",
+        "type": "string",
+        "example": "g",
+        "enum": [
+          "g",
+          "kg"
+        ]
+      },
+      "ErrorResponse": {
+        "required": [
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "compositeFault": {
+            "$ref": "#/components/schemas/CompositeFault"
+          },
+          "message": {
+            "type": "string",
+            "description": "High level error message.",
+            "example": "Query parameter missing"
+          }
+        },
+        "description": "PostNord standard error response message"
+      }
+    },
+    "securitySchemes": {
+      "oauth2CustomerView": {
+        "type": "oauth2",
+        "flows": {
+          "clientCredentials": {
+            "tokenUrl": "https://account.postnord.com/oauth2/token",
+            "scopes": {
+              "https://api.postnord.com/scopes/shipment/trackandtrace/customerview": "Track&Trace EDI Status"
+            }
+          }
+        }
+      }
+    }
+  }
+}
