@@ -114,6 +114,7 @@ ShipmentPayload = {
     ],
     "service": "postnord_parcel",
     "options": {"insurance": 500.0},
+    "reference": "ORDER-7788",
 }
 
 ShipmentCancelPayload = {
@@ -121,7 +122,7 @@ ShipmentCancelPayload = {
 }
 
 ShipmentRequest = {
-    "application": {"name": "Karrio", "applicationId": "2458"},
+    "application": {"name": "Karrio", "applicationId": 2458},
     "messageDate": ANY,
     "testIndicator": True,
     "updateIndicator": "Original",
@@ -187,6 +188,7 @@ ShipmentRequest = {
                     "numberOfPackageTypeCodeItems": {"value": 1},
                     "items": [
                         {
+                            "itemIdentification": {"itemId": "ORDER-77881"},
                             "grossWeight": {"value": 1.5, "unit": "KGM"},
                             "dimensions": {
                                 "height": {"value": 10.0, "unit": "CMT"},
@@ -202,7 +204,7 @@ ShipmentRequest = {
 }
 
 ShipmentCancelRequest = {
-    "application": {"name": "Karrio", "applicationId": "2458"},
+    "application": {"name": "Karrio", "applicationId": 2458},
     "messageDate": ANY,
     "testIndicator": True,
     "updateIndicator": "Deletion",
@@ -234,15 +236,24 @@ ShipmentResponse = """{
 ShipmentCancelResponse = "{}"
 
 ErrorResponse = """{
-  "errorResponse": {
-    "message": "Unable to create shipment",
-    "compositeFault": {
-      "faults": [{
-        "explanationText": "Invalid consignee",
-        "faultCode": "PNCS-400",
-        "paramValues": [{"param": "postalCode", "value": "00000"}]
-      }]
-    }
+  "message": "Invalid indata object EdiInstruction",
+  "compositeFault": {
+    "faults": [
+      {
+        "explanationText": "applicationId (2458) is not a type of integer",
+        "faultReferences": [
+          {"key": "CustomerOriginValidationError.type", "value": "MANDATORY_FIELDS_MISSING"},
+          {"key": "CustomerOriginValidationError.subType", "value": "APPLICATION_ID"}
+        ]
+      },
+      {
+        "explanationText": "itemIdentification is a required field",
+        "faultReferences": [
+          {"key": "CustomerOriginValidationError.type", "value": "MANDATORY_FIELDS_MISSING"},
+          {"key": "CustomerOriginValidationError.subType", "value": "ITEM_IDENTIFICATION"}
+        ]
+      }
+    ]
   }
 }"""
 
@@ -279,9 +290,26 @@ ParsedErrorResponse = [
         {
             "carrier_id": "postnord",
             "carrier_name": "postnord",
-            "code": "PNCS-400",
-            "message": "Invalid consignee",
-            "details": {"params": {"postalCode": "00000"}},
-        }
+            "code": "APPLICATION_ID",
+            "message": "applicationId (2458) is not a type of integer",
+            "details": {
+                "references": {
+                    "CustomerOriginValidationError.type": "MANDATORY_FIELDS_MISSING",
+                    "CustomerOriginValidationError.subType": "APPLICATION_ID",
+                }
+            },
+        },
+        {
+            "carrier_id": "postnord",
+            "carrier_name": "postnord",
+            "code": "ITEM_IDENTIFICATION",
+            "message": "itemIdentification is a required field",
+            "details": {
+                "references": {
+                    "CustomerOriginValidationError.type": "MANDATORY_FIELDS_MISSING",
+                    "CustomerOriginValidationError.subType": "ITEM_IDENTIFICATION",
+                }
+            },
+        },
     ],
 ]
