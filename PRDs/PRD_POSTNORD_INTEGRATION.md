@@ -71,7 +71,7 @@ The authoritative Booking (EDI) spec resolves the central design question: every
 
 | # | Question | Context | Options | Status |
 |---|----------|---------|---------|--------|
-| Q2 | Sandbox apikey availability | Tests are mocked and need no live key, but end-to-end validation against `atapi2.postnord.com` does. | A) Obtain partner sandbox apikey before live validation; B) mock-only | ⏳ Pending |
+| Q2 | Sandbox apikey availability | Tests are mocked and need no live key, but end-to-end validation against `atapi2.postnord.com` does. | A) Obtain partner sandbox apikey before live validation; B) mock-only | ✅ Partially resolved — apikey obtained; tracking validated live (2026-06-24). Shipment/manifest still need a sandbox customer agreement to exercise booking. |
 | Q3 | Static rate table location | D1 chose static/config rates; this sub-decision sets whether each merchant configures rates or a default ships. | A) `ConnectionConfig.rate_table` per connection; B) config over shipped default | ⏳ Pending |
 | Q4 | Label-by-id token (`id` vs `printId`) | Booking response returns both `assignedIds.value` and `assignedIds.printId`; the `/v3/labels/ids/*` body schema (`ids_inner`) only has `{id, labelType}`. Which token the retrieval keys on is ambiguous in the spec. Only relevant if the two-step (book then fetch label) path is used; the one-shot `/v3/edi/labels/*` path avoids it. | A) Use one-shot path (avoids the question) — **recommended**; B) confirm with PostNord | ⏳ Pending |
 
@@ -632,6 +632,8 @@ D1 rating=static/config; D2 manifest=`/v3/pickups`; D3 auth=apikey EDI generatio
 - `vendor/booking.swagger.json` — Swagger 2.0, `Booking APIs` v3.5.29.1, host `api2.postnord.com`, basePath `/rest/shipment`, apikey query param, `SECURED: False`.
 - `vendor/servicepoints-v5.swagger.json` — OpenAPI 3.0.0, `Service Points V5` v5.0.14, base `/rest/businesslocation`, apikey query param.
 - `vendor/tracking-url.swagger.json` — Swagger 2.0, `Track Shipment URL` v1.0.2, host `api2.postnord.com`, basePath `/rest/links`, apikey query param. `GET /v1/tracking/{country}/{id}` → `LinksResponse{ url, faults[] }` (URL only, **no events** — drives D7's link-only tracking).
+
+**Live sandbox validation (2026-06-24):** the tracking path was exercised against `atapi2.postnord.com` with a real sandbox apikey and returned a `tracking.postnord.com/se/?id=…` URL with no faults. Confirmed: apikey query-param auth works; lowercase country segment (`se`) is accepted (no upper-casing needed); the API returns a URL for any id without validation (no events), consistent with D7. Shipment/manifest booking remain unverified live (require a sandbox customer agreement).
 
 **Codes (free-form strings in the spec; enumerate in `units.py` from PostNord General Descriptions):**
 
