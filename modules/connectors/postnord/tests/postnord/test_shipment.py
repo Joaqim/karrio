@@ -21,6 +21,37 @@ class TestPostNordShipment(unittest.TestCase):
         request = gateway.mapper.create_shipment_request(self.ShipmentRequest)
         self.assertEqual(lib.to_dict(request.serialize()), ShipmentRequest)
 
+    def test_create_shipment_request_new_service(self):
+        # postnord_express_mailbox must route to basicServiceCode "86"
+        # (evidence: delivery-options bookingInstructions worked example).
+        payload = {**ShipmentPayload, "service": "postnord_express_mailbox"}
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        serialized = lib.to_dict(request.serialize())
+        self.assertEqual(
+            serialized["shipment"][0]["service"]["basicServiceCode"], "86"
+        )
+
+    def test_create_shipment_request_pallet_groupage_option(self):
+        # postnord_pallet_groupage must route into additionalServiceCode as "65"
+        # (evidence: delivery-options DeliveryType narrative).
+        payload = {
+            **ShipmentPayload,
+            "service": "postnord_groupage",
+            "options": {"postnord_pallet_groupage": True},
+        }
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        serialized = lib.to_dict(request.serialize())
+        self.assertEqual(
+            serialized["shipment"][0]["service"]["basicServiceCode"], "83"
+        )
+        self.assertIn(
+            "65", serialized["shipment"][0]["service"]["additionalServiceCode"]
+        )
+
     def test_create_shipment(self):
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
             mock.return_value = "{}"
