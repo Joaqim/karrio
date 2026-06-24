@@ -12,6 +12,7 @@ class Settings(provider_utils.Settings):
     apikey: str = None
     issuer_code: str = "Z12"
     customer_number: str = None
+    application_id: str = None
 
     # generic properties
     id: str = None
