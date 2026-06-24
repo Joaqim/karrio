@@ -357,6 +357,7 @@ class Proxy(proxy.Proxy):
 | `apikey` | string | Yes | Query-param credential for all PostNord calls |
 | `issuer_code` | string | No | `Z11`–`Z14`/`ZDL`; default `Z12` (Sweden) |
 | `customer_number` | string | For shipping | Consignor `partyId` (`partyIdType` 160) |
+| `application_id` | string | For label printing | EDI `application.applicationId`; required by the `/v3/edi/labels/*` booking endpoints (omitted when unset) |
 | `test_mode` | bool | No | Switches `atapi2` (sandbox) vs `api2` (prod) |
 
 <!-- INTEGRATION -->
