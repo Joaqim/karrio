@@ -1,0 +1,2344 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Transit time calculation V1 and V2",
+    "description": "Calculates transit time for transport between two locations. Origin and\ndestination can be described using either the id of a defined location or address. If address is used the default\nlocation for that post code will be used as origin and/or destination location. \n\nThere can be multiple transit times for each request. Each transit time is listed together with the PostNord \nservice (with additional services) that the time applies for. For some requests, PostNord does not have detailed \ntransit time, and will instead respond with a day interval (e.g. 3-4 days).\n\n<h2>Changes Between V1 (Legacy) and V2</h2>\n\nCurrently, there are two versions of this endpoint: V1 (Legacy) and V2. Below are the key differences:\n\n**Response Handling:**\n* V1 (Legacy): Transit time requests for a Postnord service that failed to calculate an ETA were filtered out from the response. This often resulted in an empty 200 OK response, causing confusion for consumers, especially when all Postnord service variations failed to calculate an ETA.\n* V2: Both successful and unsuccessful ETA calculations are included in the response. This provides a more comprehensive view of the ETA calculations.\n\n**New Flags:**\n* V2 introduces two new flags:\n  - isSupported: Indicates if there is at least one depot that can handle either pickup or distribution for this service, regardless of the specific origin/destination.<br>\n    Logic:\n    * True if any depot exists that supports pickup or distribution for the service.\n    * False if no such depot exists.\n  - isBookable: Indicates if the service can actually be booked for a given origin and destination postal code.<br>\n    Logic:\n    * Identify pickup depot: Is there a depot that covers pickup for the origin postal code?\n    * Identify distribution depot: Is there a depot that covers distribution for the destination postal code?\n    * Configuration check: If both a pickup and a distribution depot have been found (so normally it should be bookable), but there is a system/administrative error preventing these locations from linking properly, we still conceptually mark isBookable as true (because from a business standpoint, everything needed is in place, but there’s a config error).\n    * If no depots support pickup or distribution for the origin/destination (meaning you cannot fulfill the shipment from start to end), then isBookable is false.\n\nThese changes aim to enhance transparency and usability by providing more detailed information in the response and reducing confusion caused by empty responses.\n\n<h2>Request Changes from V1 to V2</h2>\n\n  The following changes have been made to the request parameters in version 2 (V2) of the API:\n* Merged Parameters:\n  - originStreetName and originStreetNumber have been combined into a single parameter: originAddress. This should be formatted as originStreetName + originStreetNumber (e.g., Testvägen 3).\n  - destinationStreetName and destinationStreetNumber have also been combined into a single parameter: destinationAddress. This should be formatted as destinationStreetName + destinationStreetNumber (e.g., Testvägen 3).\n\n* Renamed Parameters:\n  - originLocationId is now originProductionPointId.\n  - originLocationType is now originProductionPointType.\n  - originPostCode is now originPostalCode.\n  - destinationLocationId is now destinationProductionPointId.\n  - destinationLocationType is now destinationProductionPointType.\n  - destinationPostCode is now destinationPostalCode.\n\n* New Parameters:\n  - A new boolean parameter, showInternalAdditionalServiceCode, has been added. This parameter is false by default. When set to true, it will include the internal additional service code in the response (code).\n\n<h2>Response Changes from V1 to V2</h2>\n\nThe following changes have been made to the response structure in version 2 (V2) of the API:\n\n* Grouped Properties:\n  - timeOfDeparture, latestTimeOfBooking, timeOfArrival, eveningPickup, and deliveryPoint are now grouped under the estimatedTimeOfArrival property.\n\n* Removed Properties:\n  - The possibleDeviation property has been removed.\n  - The serviceInformation.pickup and serviceInformation.distribution flags have been removed.\n\n* Renamed Properties:\n  - serviceInformation is now services.\n  - serviceInformation.serviceCode is now service.basicServiceCode.\n\n* New Properties:\n  - additionalServices.additionalServiceCode: This property shows the nordic code equivalent of the local code whenever the showInternalAdditionalServiceCode request flag is set to true.\n  - isSupported: Indicates if there is at least one depot that can handle either pickup or distribution for this service, regardless of the specific origin/destination.<br>\n  - isBookable: Indicates if the service can actually be booked for a given origin and destination postal code.<br>\n  - errorMessage: Indicates the cause of the failed ETA calculation\n\n  Possible errorMessages:\n  - Service X is not offered from/to postal code 'XXXX'.\n  - Could not calculate ETA.\n  - Requested service 'X' not found.\n  - Requested origin/destination 'X' location not found.\n  - Missing foreign transit time for 'Service X' from 'YY' to 'ZZ'.\n",
+    "version": "2.0.3"
+  },
+  "servers": [
+    {
+      "url": "https://api2.postnord.com/rest/transport"
+    },
+    {
+      "url": "https://atapi2.postnord.com/rest/transport"
+    }
+  ],
+  "paths": {
+    "/v1/transittime/addresstoaddress": {
+      "get": {
+        "tags": [
+          "Legacy"
+        ],
+        "summary": "From address to address",
+        "description": "Transit times from an address to an address. Response will include all transittimes for relevant country filtered by optional service codes, including possible variations based on additional services.",
+        "operationId": "transittimesAddressToAddress",
+        "parameters": [
+          {
+            "name": "apikey",
+            "in": "query",
+            "description": "The unique consumer (client) identifier 32 characters",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-data-threescale-name": "user_keys"
+          },
+          {
+            "name": "startTime",
+            "in": "query",
+            "description": "Better described as the hand over time. The time for which PostNord has received the parcel from the customer or \nprivate sender. Format is local date time\n",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "example": "2023-12-01T08:00"
+          },
+          {
+            "name": "serviceCodes",
+            "in": "query",
+            "description": "Comma-separated PostNord service codes. Only Nordic Codes are allowed. \nFor more details, visit PostNord Valid Services & Addon Codes.\n* 17 (Mypack Home) \n* 18 (Parcel)\n* 19 (Mypack Collect)\n* ..\n",
+            "required": false,
+            "style": "form",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "additionalServiceCodes",
+            "in": "query",
+            "description": "Comma-separated PostNord additional service codes. Only Nordic Codes are allowed. \nFor more details, visit PostNord Valid Services & Addon Codes.\n* D6 (Before 9:00)\n* D7 (Before 12:00)\n* ..\n",
+            "required": false,
+            "style": "form",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "originStreetName",
+            "in": "query",
+            "description": "Street name of origin. Providing this will allow for more accurate results",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "Terminalvägen"
+          },
+          {
+            "name": "originStreetNumber",
+            "in": "query",
+            "description": "Street number of origin. Providing this will allow for more accurate results",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "24"
+          },
+          {
+            "name": "originPostCode",
+            "in": "query",
+            "description": "Post code of origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "17173"
+          },
+          {
+            "name": "originCountryCode",
+            "in": "query",
+            "description": "Origin country code of address or location as ISO 3166-1 alpha-2",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z]{2}$",
+              "type": "string"
+            },
+            "example": "SE"
+          },
+          {
+            "name": "destinationStreetName",
+            "in": "query",
+            "description": "Street name of destination. Providing this will allow for more accurate results",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "Glimmervägen"
+          },
+          {
+            "name": "destinationStreetNumber",
+            "in": "query",
+            "description": "Street number of destination. Providing this will allow for more accurate results",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "10"
+          },
+          {
+            "name": "destinationPostCode",
+            "in": "query",
+            "description": "Post code of destination",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "17173"
+          },
+          {
+            "name": "destinationCountryCode",
+            "in": "query",
+            "description": "Destination country code of address or location as ISO 3166-1 alpha-2",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z]{2}$",
+              "type": "string"
+            },
+            "example": "SE"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/OkTransitTimeResponse"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAccepted"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/TemporarilyUnavailable"
+          }
+        }
+      }
+    },
+    "/v1/transittime/addresstolocation": {
+      "get": {
+        "tags": [
+          "Legacy"
+        ],
+        "summary": "From address to location",
+        "description": "Transit times from an address to a location. Response will include all transittimes for relevant country filtered by optional service codes, including possible variations based on additional services. Example usage is to get transit time to a non default service point such as a parcel box.",
+        "operationId": "transittimesAddressToLocation",
+        "parameters": [
+          {
+            "name": "apikey",
+            "in": "query",
+            "description": "The unique consumer (client) identifier 32 characters",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-data-threescale-name": "user_keys"
+          },
+          {
+            "name": "startTime",
+            "in": "query",
+            "description": "Better described as the hand over time. The time for which PostNord has received the parcel from the customer or \nprivate sender. Format is local date time\n",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "example": "2023-12-01T08:00"
+          },
+          {
+            "name": "serviceCodes",
+            "in": "query",
+            "description": "Comma-separated PostNord service codes. Only Nordic Codes are allowed. \nFor more details, visit PostNord Valid Services & Addon Codes.\n* 17 (Mypack Home) \n* 18 (Parcel)\n* 19 (Mypack Collect)\n* ..\n",
+            "required": false,
+            "style": "form",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "additionalServiceCodes",
+            "in": "query",
+            "description": "Comma-separated PostNord additional service codes. Only Nordic Codes are allowed. \nFor more details, visit PostNord Valid Services & Addon Codes.\n* D6 (Before 9:00)\n* D7 (Before 12:00)\n* ..\n",
+            "required": false,
+            "style": "form",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "originStreetName",
+            "in": "query",
+            "description": "Street name of origin. Providing this will allow for more accurate results",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "Terminalvägen"
+          },
+          {
+            "name": "originStreetNumber",
+            "in": "query",
+            "description": "Street number of origin. Providing this will allow for more accurate results",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "24"
+          },
+          {
+            "name": "originPostCode",
+            "in": "query",
+            "description": "Post code of origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "17173"
+          },
+          {
+            "name": "originCountryCode",
+            "in": "query",
+            "description": "Origin country code of address or location as ISO 3166-1 alpha-2",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z]{2}$",
+              "type": "string"
+            },
+            "example": "SE"
+          },
+          {
+            "name": "destinationLocationId",
+            "in": "query",
+            "description": "The production point id for location of destination",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": 135201
+          },
+          {
+            "name": "destinationLocationType",
+            "in": "query",
+            "description": "The type of production point for the destination location.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "depot",
+                "hub",
+                "servicepoint",
+                "customer"
+              ]
+            }
+          },
+          {
+            "name": "destinationCountryCode",
+            "in": "query",
+            "description": "Destination country code of address or location as ISO 3166-1 alpha-2",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z]{2}$",
+              "type": "string"
+            },
+            "example": "SE"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/OkTransitTimeResponse"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAccepted"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/TemporarilyUnavailable"
+          }
+        }
+      }
+    },
+    "/v1/transittime/locationtoaddress": {
+      "get": {
+        "tags": [
+          "Legacy"
+        ],
+        "summary": "From location to address",
+        "description": "Transit times from a location to an address. Response will include all transittimes for relevant country filtered by optional service codes, including possible variations based on additional services. Example usage is when selecting a non default service point as the drop off origin location, or if selecting a customer warehouse as origin.",
+        "operationId": "transittimesLocationToAddress",
+        "parameters": [
+          {
+            "name": "apikey",
+            "in": "query",
+            "description": "The unique consumer (client) identifier 32 characters",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-data-threescale-name": "user_keys"
+          },
+          {
+            "name": "startTime",
+            "in": "query",
+            "description": "The time for which the parcel is at its origin location. Format is local date time\n",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "example": "2023-12-01T08:00"
+          },
+          {
+            "name": "serviceCodes",
+            "in": "query",
+            "description": "Comma-separated PostNord service codes. Only Nordic Codes are allowed. \nFor more details, visit PostNord Valid Services & Addon Codes.\n* 17 (Mypack Home) \n* 18 (Parcel)\n* 19 (Mypack Collect)\n* ..\n",
+            "required": false,
+            "style": "form",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "additionalServiceCodes",
+            "in": "query",
+            "description": "Comma-separated PostNord additional service codes. Only Nordic Codes are allowed. \nFor more details, visit PostNord Valid Services & Addon Codes.\n* D6 (Before 9:00)\n* D7 (Before 12:00)\n* ..\n",
+            "required": false,
+            "style": "form",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "originLocationId",
+            "in": "query",
+            "description": "The production point id for location of origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": 169101
+          },
+          {
+            "name": "originLocationType",
+            "in": "query",
+            "description": "The type of production point for the origin location.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "depot",
+                "hub",
+                "servicepoint",
+                "customer"
+              ]
+            }
+          },
+          {
+            "name": "originCountryCode",
+            "in": "query",
+            "description": "Origin country code of address or location as ISO 3166-1 alpha-2",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z]{2}$",
+              "type": "string"
+            },
+            "example": "SE"
+          },
+          {
+            "name": "destinationStreetName",
+            "in": "query",
+            "description": "Street name of destination. Providing this will allow for more accurate results",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "Glimmervägen"
+          },
+          {
+            "name": "destinationStreetNumber",
+            "in": "query",
+            "description": "Street number of destination. Providing this will allow for more accurate results",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "10"
+          },
+          {
+            "name": "destinationPostCode",
+            "in": "query",
+            "description": "Post code of destination",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "17173"
+          },
+          {
+            "name": "destinationCountryCode",
+            "in": "query",
+            "description": "Destination country code of address or location as ISO 3166-1 alpha-2",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z]{2}$",
+              "type": "string"
+            },
+            "example": "SE"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/OkTransitTimeResponse"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAccepted"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/TemporarilyUnavailable"
+          }
+        }
+      }
+    },
+    "/v1/transittime/locationtolocation": {
+      "get": {
+        "tags": [
+          "Legacy"
+        ],
+        "summary": "From location to location",
+        "description": "Transit times between two location. Response will include all transittimes for relevant country filtered by optional service codes, including possible variations based on additional services.",
+        "operationId": "transittimesLocationToLocation",
+        "parameters": [
+          {
+            "name": "apikey",
+            "in": "query",
+            "description": "The unique consumer (client) identifier 32 characters",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-data-threescale-name": "user_keys"
+          },
+          {
+            "name": "startTime",
+            "in": "query",
+            "description": "The time for which the parcel is at its origin location. Format is local date time\n",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "example": "2023-12-01T08:00"
+          },
+          {
+            "name": "serviceCodes",
+            "in": "query",
+            "description": "Comma-separated PostNord service codes. Only Nordic Codes are allowed. \nFor more details, visit PostNord Valid Services & Addon Codes.\n* 17 (Mypack Home) \n* 18 (Parcel)\n* 19 (Mypack Collect)\n* ..\n",
+            "required": false,
+            "style": "form",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "additionalServiceCodes",
+            "in": "query",
+            "description": "Comma-separated PostNord additional service codes. Only Nordic Codes are allowed. \nFor more details, visit PostNord Valid Services & Addon Codes.\n* D6 (Before 9:00)\n* D7 (Before 12:00)\n* ..\n",
+            "required": false,
+            "style": "form",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "originLocationId",
+            "in": "query",
+            "description": "The production point id for location of origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": 169101
+          },
+          {
+            "name": "originLocationType",
+            "in": "query",
+            "description": "The type of production point for the origin location.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "depot",
+                "hub",
+                "servicepoint",
+                "customer"
+              ]
+            }
+          },
+          {
+            "name": "originCountryCode",
+            "in": "query",
+            "description": "Origin country code of address or location as ISO 3166-1 alpha-2",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z]{2}$",
+              "type": "string"
+            },
+            "example": "SE"
+          },
+          {
+            "name": "destinationLocationId",
+            "in": "query",
+            "description": "The production point id for location of destination",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": 135201
+          },
+          {
+            "name": "destinationLocationType",
+            "in": "query",
+            "description": "The type of production point for the destination location.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "depot",
+                "hub",
+                "servicepoint",
+                "customer"
+              ]
+            }
+          },
+          {
+            "name": "destinationCountryCode",
+            "in": "query",
+            "description": "Destination country code of address or location as ISO 3166-1 alpha-2",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z]{2}$",
+              "type": "string"
+            },
+            "example": "SE"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/OkTransitTimeResponse"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAccepted"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/TemporarilyUnavailable"
+          }
+        }
+      }
+    },
+    "/v1/transittime/manage/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Health check",
+        "description": "API will respond with \"UP\" if healthy",
+        "operationId": "healthCheck",
+        "parameters": [
+          {
+            "name": "apikey",
+            "in": "query",
+            "description": "The unique consumer (client) identifier 32 characters",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-data-threescale-name": "user_keys"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/transittime/addresstoaddress": {
+      "get": {
+        "tags": [
+          "Transit Time V2"
+        ],
+        "summary": "From address to address",
+        "description": "Transit times from an address to an address. Response will include all\ntransittimes for the relevant country filtered by optional service codes,\nincluding possible variations based on additional services.\n",
+        "operationId": "transittimesAddressToAddressV2",
+        "parameters": [
+          {
+            "name": "apikey",
+            "in": "query",
+            "description": "The unique consumer (client) identifier 32 characters",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-data-threescale-name": "user_keys"
+          },
+          {
+            "name": "startTime",
+            "in": "query",
+            "description": "Better described as the hand over time. The time for which PostNord has\nreceived the parcel from the customer or private sender. Format is local date time\n",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "example": "2024-12-01T08:00"
+          },
+          {
+            "name": "serviceCodes",
+            "in": "query",
+            "description": "Comma-separated PostNord service codes. Only Nordic Codes are allowed. \nFor more details, visit PostNord Valid Services & Addon Codes.\n* 17 (Mypack Home) \n* 18 (Parcel)\n* 19 (Mypack Collect)\n* ..\n",
+            "required": false,
+            "style": "form",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "additionalServiceCodes",
+            "in": "query",
+            "description": "Comma-separated PostNord additional service codes. Only Nordic Codes are allowed. \nFor more details, visit PostNord Valid Services & Addon Codes.\n* D6 (Before 9:00)\n* D7 (Before 12:00)\n* ..\n",
+            "required": false,
+            "style": "form",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "originAddress",
+            "in": "query",
+            "description": "The full address of the origin. Providing this will allow for more\naccurate results. The format should be 'street name' followed by 'street number'.\n",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "Testvägen 3"
+          },
+          {
+            "name": "originPostalCode",
+            "in": "query",
+            "description": "Post code of origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": 17173
+          },
+          {
+            "name": "originCountryCode",
+            "in": "query",
+            "description": "Origin country code of address or location as ISO 3166-1 alpha-2",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z]{2}$",
+              "type": "string"
+            },
+            "example": "SE"
+          },
+          {
+            "name": "destinationAddress",
+            "in": "query",
+            "description": "The full address of the destination. Providing this will allow for more\naccurate results. The format should be 'street name' followed by 'street number'.\n",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "Testvägen 3"
+          },
+          {
+            "name": "destinationPostalCode",
+            "in": "query",
+            "description": "Post code of destination",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": 17173
+          },
+          {
+            "name": "destinationCountryCode",
+            "in": "query",
+            "description": "Destination country code of address or location as ISO 3166-1 alpha-2",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z]{2}$",
+              "type": "string"
+            },
+            "example": "SE"
+          },
+          {
+            "name": "showInternalAdditionalServiceCode",
+            "in": "query",
+            "description": "Option to show the internal additional service code in the response. This is set to false by default.",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/OkTransitTimeResponseV2"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAccepted"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/TemporarilyUnavailable"
+          }
+        }
+      }
+    },
+    "/v2/transittime/addresstolocation": {
+      "get": {
+        "tags": [
+          "Transit Time V2"
+        ],
+        "summary": "From address to location",
+        "description": "Transit times from an address to a location. Response will include all\ntransittimes for the relevant country filtered by optional service codes,\nincluding possible variations based on additional services. Example\nusage is to get transit time to a non default service point such as a\nparcel box.\n",
+        "operationId": "transittimesAddressToLocationV2",
+        "parameters": [
+          {
+            "name": "apikey",
+            "in": "query",
+            "description": "The unique consumer (client) identifier 32 characters",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-data-threescale-name": "user_keys"
+          },
+          {
+            "name": "startTime",
+            "in": "query",
+            "description": "Better described as the hand over time. The time for which PostNord has\nreceived the parcel from the customer or private sender. Format is local date time\n",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "example": "2024-12-01T08:00"
+          },
+          {
+            "name": "serviceCodes",
+            "in": "query",
+            "description": "Comma-separated PostNord service codes. Only Nordic Codes are allowed. \nFor more details, visit PostNord Valid Services & Addon Codes.\n* 17 (Mypack Home) \n* 18 (Parcel)\n* 19 (Mypack Collect)\n* ..\n",
+            "required": false,
+            "style": "form",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "additionalServiceCodes",
+            "in": "query",
+            "description": "Comma-separated PostNord additional service codes. Only Nordic Codes are allowed. \nFor more details, visit PostNord Valid Services & Addon Codes.\n* D6 (Before 9:00)\n* D7 (Before 12:00)\n* ..\n",
+            "required": false,
+            "style": "form",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "originAddress",
+            "in": "query",
+            "description": "The full address of the origin. Providing this will allow for more\naccurate results. The format should be 'street name' followed by 'street number'.\n",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "Testvägen 3"
+          },
+          {
+            "name": "originPostalCode",
+            "in": "query",
+            "description": "Post code of origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": 17173
+          },
+          {
+            "name": "originCountryCode",
+            "in": "query",
+            "description": "Origin country code of address or location as ISO 3166-1 alpha-2",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z]{2}$",
+              "type": "string"
+            },
+            "example": "SE"
+          },
+          {
+            "name": "destinationProductionPointId",
+            "in": "query",
+            "description": "The production point id for location of destination",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": 135201
+          },
+          {
+            "name": "destinationProductionPointType",
+            "in": "query",
+            "description": "The type of production point for the destination location.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "depot",
+                "hub",
+                "servicepoint",
+                "customer"
+              ]
+            }
+          },
+          {
+            "name": "destinationCountryCode",
+            "in": "query",
+            "description": "Destination country code of address or location as ISO 3166-1 alpha-2",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z]{2}$",
+              "type": "string"
+            },
+            "example": "SE"
+          },
+          {
+            "name": "showInternalAdditionalServiceCode",
+            "in": "query",
+            "description": "Option to show the internal additional service code in the response. This is set to false by default.",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/OkTransitTimeResponseV2"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAccepted"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/TemporarilyUnavailable"
+          }
+        }
+      }
+    },
+    "/v2/transittime/locationtoaddress": {
+      "get": {
+        "tags": [
+          "Transit Time V2"
+        ],
+        "summary": "From location to address",
+        "description": "Transit times from a location to an address. Response will include all\ntransittimes for the relevant country filtered by optional service codes,\nincluding possible variations based on additional services. Example\nusage is when selecting a non default service point as the drop off\norigin location, or if selecting a customer warehouse as origin.\n",
+        "operationId": "transittimesLocationToAddressV2",
+        "parameters": [
+          {
+            "name": "apikey",
+            "in": "query",
+            "description": "The unique consumer (client) identifier 32 characters",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-data-threescale-name": "user_keys"
+          },
+          {
+            "name": "startTime",
+            "in": "query",
+            "description": "Better described as the hand over time. The time for which PostNord has\nreceived the parcel from the customer or private sender. Format is local date time\n",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "example": "2024-12-01T08:00"
+          },
+          {
+            "name": "serviceCodes",
+            "in": "query",
+            "description": "Comma-separated PostNord service codes. Only Nordic Codes are allowed. \nFor more details, visit PostNord Valid Services & Addon Codes.\n* 17 (Mypack Home) \n* 18 (Parcel)\n* 19 (Mypack Collect)\n* ..\n",
+            "required": false,
+            "style": "form",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "additionalServiceCodes",
+            "in": "query",
+            "description": "Comma-separated PostNord additional service codes. Only Nordic Codes are allowed. \nFor more details, visit PostNord Valid Services & Addon Codes.\n* D6 (Before 9:00)\n* D7 (Before 12:00)\n* ..\n",
+            "required": false,
+            "style": "form",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "originProductionPointId",
+            "in": "query",
+            "description": "The production point id for location of origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": 169101
+          },
+          {
+            "name": "originProductionPointType",
+            "in": "query",
+            "description": "The type of production point for the origin location.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "depot",
+                "hub",
+                "servicepoint",
+                "customer"
+              ]
+            }
+          },
+          {
+            "name": "originCountryCode",
+            "in": "query",
+            "description": "Origin country code of address or location as ISO 3166-1 alpha-2",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z]{2}$",
+              "type": "string"
+            },
+            "example": "SE"
+          },
+          {
+            "name": "destinationAddress",
+            "in": "query",
+            "description": "The full address of the destination. Providing this will allow for more\naccurate results. The format should be 'street name' followed by 'street number'.\n",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "Testvägen 3"
+          },
+          {
+            "name": "destinationPostalCode",
+            "in": "query",
+            "description": "Post code of destination",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": 17173
+          },
+          {
+            "name": "destinationCountryCode",
+            "in": "query",
+            "description": "Destination country code of address or location as ISO 3166-1 alpha-2",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z]{2}$",
+              "type": "string"
+            },
+            "example": "SE"
+          },
+          {
+            "name": "showInternalAdditionalServiceCode",
+            "in": "query",
+            "description": "Option to show the internal additional service code in the response. This is set to false by default.",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/OkTransitTimeResponseV2"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAccepted"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/TemporarilyUnavailable"
+          }
+        }
+      }
+    },
+    "/v2/transittime/locationtolocation": {
+      "get": {
+        "tags": [
+          "Transit Time V2"
+        ],
+        "summary": "From location to location",
+        "description": "Transit times between two location. Response will include all\ntransittimes for the relevant country filtered by optional service codes,\nincluding possible variations based on additional services.\n",
+        "operationId": "transittimesLocationToLocationV2",
+        "parameters": [
+          {
+            "name": "apikey",
+            "in": "query",
+            "description": "The unique consumer (client) identifier 32 characters",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-data-threescale-name": "user_keys"
+          },
+          {
+            "name": "startTime",
+            "in": "query",
+            "description": "Better described as the hand over time. The time for which PostNord has\nreceived the parcel from the customer or private sender. Format is local date time\n",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "example": "2024-12-01T08:00"
+          },
+          {
+            "name": "serviceCodes",
+            "in": "query",
+            "description": "Comma-separated PostNord service codes. Only Nordic Codes are allowed. \nFor more details, visit PostNord Valid Services & Addon Codes.\n* 17 (Mypack Home) \n* 18 (Parcel)\n* 19 (Mypack Collect)\n* ..\n",
+            "required": false,
+            "style": "form",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "additionalServiceCodes",
+            "in": "query",
+            "description": "Comma-separated PostNord additional service codes. Only Nordic Codes are allowed. \nFor more details, visit PostNord Valid Services & Addon Codes.\n* D6 (Before 9:00)\n* D7 (Before 12:00)\n* ..\n",
+            "required": false,
+            "style": "form",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "originProductionPointId",
+            "in": "query",
+            "description": "The production point id for location of origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": 169101
+          },
+          {
+            "name": "originProductionPointType",
+            "in": "query",
+            "description": "The type of production point for the origin location.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "depot",
+                "hub",
+                "servicepoint",
+                "customer"
+              ]
+            }
+          },
+          {
+            "name": "originCountryCode",
+            "in": "query",
+            "description": "Origin country code of address or location as ISO 3166-1 alpha-2",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z]{2}$",
+              "type": "string"
+            },
+            "example": "SE"
+          },
+          {
+            "name": "destinationProductionPointId",
+            "in": "query",
+            "description": "The production point id for location of destination",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": 135201
+          },
+          {
+            "name": "destinationProductionPointType",
+            "in": "query",
+            "description": "The type of production point for the destination location.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "depot",
+                "hub",
+                "servicepoint",
+                "customer"
+              ]
+            }
+          },
+          {
+            "name": "destinationCountryCode",
+            "in": "query",
+            "description": "Destination country code of address or location as ISO 3166-1 alpha-2",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z]{2}$",
+              "type": "string"
+            },
+            "example": "SE"
+          },
+          {
+            "name": "showInternalAdditionalServiceCode",
+            "in": "query",
+            "description": "Option to show the internal additional service code in the response. This is set to false by default.",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/OkTransitTimeResponseV2"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAccepted"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/TemporarilyUnavailable"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "TransitTimeResponseV2": {
+        "type": "array",
+        "description": "An array of transit times, with each entry corresponding to a specific service or \na combination of service and additional service. If the transit time cannot be calculated \nfor a service, the entry will include an errorMessage explaining the reason.\n",
+        "items": {
+          "$ref": "#/components/schemas/TransitTimeV2"
+        }
+      },
+      "TransitTimeV2": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "$ref": "#/components/schemas/Service"
+          },
+          "estimatedTimeOfArrival": {
+            "$ref": "#/components/schemas/EstimatedTimeOfArrival"
+          },
+          "isSupported": {
+            "type": "boolean",
+            "description": "Indicates if there is at least one depot that can handle either pickup or distribution for this service, regardless of the specific origin/destination.\n\nLogic:\n\n* True if any depot exists that supports pickup or distribution for the service.<br>\n* False if no such depot exists.<br>\n\nEssentially, isSupported is a broad check to determine if the service exists anywhere in the depot network.\n"
+          },
+          "isBookable": {
+            "type": "boolean",
+            "description": "Indicates if the service can actually be booked for a given origin and destination postal code.\n\nLogic:\n\n* Identify pickup depot: Is there a depot that covers pickup for the origin postal code?\n* Identify distribution depot: Is there a depot that covers distribution for the destination postal code?\n* Configuration check: If both a pickup and a distribution depot have been found (so normally it should be bookable), but there is a system/administrative error preventing these locations from linking properly, we still conceptually mark isBookable as true (because from a business standpoint, everything needed is in place, but there’s a config error).\n* If no depots support pickup or distribution for the origin/destination (meaning you cannot fulfill the shipment from start to end), then isBookable is false.\n"
+          },
+          "errorMessage": {
+            "type": "string",
+            "description": "Only present when Transit Time service was unable to calculate a route\nfor the given origin, destination, and service. Provides the message explaining the reason for the error.\n"
+          }
+        }
+      },
+      "TransitTimeResponse": {
+        "type": "array",
+        "description": "Array of transit times. One per service or service and additional service combination. If unable to calculate \ntransit time for a service, then that transit time will be filtered from list.\n",
+        "items": {
+          "$ref": "#/components/schemas/TransitTime"
+        }
+      },
+      "TransitTime": {
+        "type": "object",
+        "properties": {
+          "timeOfDeparture": {
+            "type": "string",
+            "description": "The time that the item is first handled and processed by PostNord. Could for example be the time it is \nhandled in a depot if there is pick up at customer or the time it is handled in a service point if it was \ndropped off by a private sender.\n",
+            "format": "date-time"
+          },
+          "latestTimeOfBooking": {
+            "type": "string",
+            "description": "The latest time for booking for PostNord to be able to pick-up the parcel the same day \n(only applicable for pick-up services). If booking is made before this time, then pick-up same day is possible.\nThis property is not considered in the transit time calculation\n",
+            "format": "date-time"
+          },
+          "latestTimeForDropOff": {
+            "type": "string",
+            "description": "The latest time to drop-off at service point for PostNord to pick it up and process the item the same day \n(only applicable for non pick up services, or if origin location was a service point). If item is dropped off \nlater than latestTimeForDropOff, then PostNord will attempt to handle item the next day. This property is not \nconsidered in the transit time calculation\n",
+            "format": "date-time"
+          },
+          "timeOfArrival": {
+            "type": "string",
+            "description": "Estimated time of arrival for the item. Can be null if dayRangeOfArrival is present instead.\n",
+            "format": "date-time"
+          },
+          "dayRangeOfArrival": {
+            "$ref": "#/components/schemas/TransitTimeDayRange"
+          },
+          "possibleDeviation": {
+            "type": "boolean",
+            "description": "true - if deviation of timeOfArrival can occur depending on exact origin or destination address."
+          },
+          "eveningPickUp": {
+            "type": "boolean",
+            "description": "true - if an evening pickup (after 21:00) was used for this route."
+          },
+          "serviceInformation": {
+            "$ref": "#/components/schemas/ServiceInformation"
+          },
+          "deliveryPoint": {
+            "$ref": "#/components/schemas/TransitTimeDeliveryPointDto"
+          }
+        }
+      },
+      "EstimatedTimeOfArrival": {
+        "type": "object",
+        "properties": {
+          "dateOfDeparture": {
+            "type": "string",
+            "description": "The date that the item is first handled and processed by PostNord.\nCould for example be the date it is \n\nhandled in a depot if there is pick up at customer or the date it is\nhandled in a service point if it was \n\ndropped off by a private sender.\n",
+            "format": "date"
+          },
+          "timeOfDeparture": {
+            "type": "string",
+            "description": "The date and time that the item is first handled and processed by PostNord.\nCould for example be the date and time it is \n\nhandled in a depot if there is pick up at customer or the date and time it \nis handled in a service point if it was \n\ndropped off by a private sender.\n",
+            "format": "date-time"
+          },
+          "timeOfArrival": {
+            "type": "string",
+            "description": "Estimated time of arrival for the item. Can be null if\ndayRangeOfArrival is present instead.\n",
+            "format": "date-time"
+          },
+          "dayRangeOfArrival": {
+            "$ref": "#/components/schemas/TransitTimeDayRange"
+          },
+          "latestTimeOfBooking": {
+            "type": "string",
+            "description": "The latest time for booking for PostNord to be able to pick-up the\nparcel the same day \n\n(only applicable for pick-up services). If booking is made before\nthis time, then pick-up same day is possible.\n\nThis property is not considered in the transit time calculation\n",
+            "format": "date-time"
+          },
+          "latestTimeForDropOff": {
+            "type": "string",
+            "description": "The latest time to drop-off at service point for PostNord to pick it\nup and process the item the same day \n\n(only applicable for non pick up services, or if origin location was\na service point). If item is dropped off \n\nlater than latestTimeForDropOff, then PostNord will attempt to\nhandle item the next day. This property is not \n\nconsidered in the transit time calculation\n",
+            "format": "date-time"
+          },
+          "eveningPickUp": {
+            "type": "boolean",
+            "description": "true - if an evening pickup (after 21:00) was used for this route."
+          },
+          "deliveryPoint": {
+            "$ref": "#/components/schemas/TransitTimeDeliveryPointDto"
+          }
+        },
+        "description": "Present when ETA calculation was successful. Contains necessary\ninformation about the planned route, such as Estimated Time of Arrival (ETA).\n"
+      },
+      "TransitTimeDayRange": {
+        "type": "object",
+        "properties": {
+          "daysMinimum": {
+            "type": "integer",
+            "description": "Minimum days for delivery"
+          },
+          "daysMaximum": {
+            "type": "integer",
+            "description": "Maximum days for delivery"
+          }
+        },
+        "description": "For some country codes or services, an exact time of arrival is not\nsupported. Instead this property might \n\nbe present to give an estimate of the time of arrival in a day range\nformat. Can be null if estimatedTimeOfArrival\n\nis present instead.\n"
+      },
+      "Service": {
+        "type": "object",
+        "properties": {
+          "basicServiceCode": {
+            "type": "string",
+            "description": "The code of the PostNord product\n* 17 (Mypack Home) \n* 18 (Parcel)\n* 19 (Mypack Collect)\n* ..\n"
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the PostNord product that the API used to calculated the\ntransit time\n"
+          },
+          "additionalServices": {
+            "type": "array",
+            "description": "Present if the service code was combined with one or several\nadditional service codes. Additional service code\n\ncan affect the final time of arrival. For example if additional\nservice code is \"before 9\"\n",
+            "items": {
+              "$ref": "#/components/schemas/AdditionalServiceV2"
+            }
+          }
+        }
+      },
+      "ServiceInformation": {
+        "type": "object",
+        "properties": {
+          "serviceCode": {
+            "type": "string",
+            "description": "The code of the PostNord product\n* 17 (Mypack Home) \n* 18 (Parcel)\n* 19 (Mypack Collect)\n* ..\n"
+          },
+          "groupCode": {
+            "type": "string",
+            "description": "Think of it as country code or \"DPD\". Valid values are;\n * SE for issuerCode=Z12\n * DK for issuerCode=Z11\n * NO for issuerCode=Z13\n * FI for issuerCode=Z14\n * DPD for DPD services\n"
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the PostNord product that the API used to calculated the transit time"
+          },
+          "pickup": {
+            "type": "boolean",
+            "description": "True - if service supports pickup at customer by default.\nFalse - if service instead supports drop off at service point by default\n"
+          },
+          "distribution": {
+            "type": "boolean",
+            "description": "True - if service supports distribution by default\nFalse - if service instead supports collection at a service point by default\n"
+          },
+          "additionalServices": {
+            "type": "array",
+            "description": "Present if the service code was combined with one or several additional service codes. Additional service code\ncan affect the final time of arrival. For example if additional service code is \"before 9\"\n",
+            "items": {
+              "$ref": "#/components/schemas/AdditionalService"
+            }
+          }
+        }
+      },
+      "TransitTimeDeliveryPointDto": {
+        "type": "object",
+        "properties": {
+          "locationId": {
+            "type": "string",
+            "description": "The production point ID of the service point"
+          },
+          "locationType": {
+            "type": "string",
+            "enum": [
+              "servicepoint"
+            ]
+          },
+          "countryCode": {
+            "type": "string",
+            "description": "Country code  of the service point as ISO 3166-1 alpha-2",
+            "example": "[\"SE\"]"
+          },
+          "name": {
+            "type": "string",
+            "description": "The name of the service point"
+          },
+          "postalCode": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string",
+            "description": "Street name and number of the delivery point"
+          },
+          "city": {
+            "type": "string",
+            "example": "[\"Stockholm\"]"
+          },
+          "isExpressDeliveryPoint": {
+            "type": "boolean",
+            "description": "True - if the service was express parcel. Not present if it wasn't\nan express parcel\n"
+          },
+          "collectionTime": {
+            "type": "string",
+            "description": "Shows the time of collection for express parcel. Only present if\nisExpressDeliveryPoint = true\n"
+          }
+        },
+        "description": "Present if the last link is a collection at a service point or if the\nservice was express service parcel (42). \n\nIf the last link was collection at a service point, then this object\nwill describe which service point that was \n\nchosen as part of the planned route (either default service point or the\none in the destination parameter). If \n\nservice code is express parcel, then this will show which service point\nthat handles the express parcel and \n\nthe collection time as well.\n"
+      },
+      "AdditionalService": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "PostNord additional service codes (comma separated)\n* 10 (Before 9:00)\n* 20 (Before 12:00)\n* ..\n"
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the additional service"
+          }
+        }
+      },
+      "AdditionalServiceV2": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "PostNord additional service codes (comma separated)\n* 10 (Before 9:00)\n* 20 (Before 12:00)\n* ..\n"
+          },
+          "additionalServiceCode": {
+            "type": "string",
+            "description": "The nordic code equivalent of the additional service\n* D6 (Before 9:00)\n* D7 (Before 12:00)\n* ..\n"
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the additional service"
+          }
+        }
+      },
+      "Health": {
+        "required": [
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "UP"
+            ]
+          }
+        }
+      },
+      "ParamValue": {
+        "required": [
+          "param"
+        ],
+        "type": "object",
+        "properties": {
+          "param": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        }
+      },
+      "Fault": {
+        "required": [
+          "explanationText"
+        ],
+        "type": "object",
+        "properties": {
+          "paramValues": {
+            "uniqueItems": true,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ParamValue"
+            }
+          },
+          "explanationText": {
+            "type": "string"
+          },
+          "faultCode": {
+            "type": "string"
+          }
+        }
+      },
+      "CompositeFault": {
+        "type": "object",
+        "properties": {
+          "faults": {
+            "uniqueItems": true,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Fault"
+            }
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "compositeFault": {
+            "$ref": "#/components/schemas/CompositeFault"
+          },
+          "message": {
+            "type": "string",
+            "description": "High level error message."
+          }
+        }
+      }
+    },
+    "responses": {
+      "OkTransitTimeResponse": {
+        "description": "OK. Was able to attempt to calculate transit times for given request. However, it is not guaranteed that there \nwill be any transit times in response. Response might be empty array. Reasons for empty array might be many, such\nas:\n* No first or last location was found for given post codes\n* PostNord does not support routing for given from and to and the service code\n* The route has yet to be configured in the transport information system\n",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/TransitTimeResponse"
+            },
+            "examples": {
+              "response": {
+                "value": [
+                  {
+                    "timeOfDeparture": "2021-08-23T19:15:00",
+                    "latestTimeOfBooking": "2021-08-23T14:00:00",
+                    "timeOfArrival": "2021-08-24T21:00:00",
+                    "possibleDeviation": false,
+                    "eveningPickUp": false,
+                    "serviceInformation": {
+                      "serviceCode": "17",
+                      "groupCode": "SE",
+                      "name": "PostNord MyPack Home",
+                      "pickup": true,
+                      "distribution": true
+                    }
+                  },
+                  {
+                    "timeOfDeparture": "2021-08-23T19:15:00",
+                    "latestTimeOfBooking": "2021-08-23T14:00:00",
+                    "timeOfArrival": "2021-08-24T18:00:00",
+                    "possibleDeviation": false,
+                    "eveningPickUp": false,
+                    "serviceInformation": {
+                      "serviceCode": "18",
+                      "groupCode": "SE",
+                      "name": "PostNord Parcel",
+                      "pickup": true,
+                      "distribution": true
+                    }
+                  },
+                  {
+                    "timeOfDeparture": "2021-08-23T19:15:00",
+                    "latestTimeOfBooking": "2021-08-23T14:00:00",
+                    "timeOfArrival": "2021-08-24T09:00:00",
+                    "possibleDeviation": false,
+                    "eveningPickUp": false,
+                    "serviceInformation": {
+                      "serviceCode": "18",
+                      "groupCode": "SE",
+                      "name": "PostNord Parcel",
+                      "pickup": true,
+                      "distribution": true,
+                      "additionalServices": [
+                        {
+                          "code": "10",
+                          "name": "Before 9"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "dayRangeOfArrival": {
+                      "daysMinimum": 3,
+                      "daysMaximum": 4
+                    },
+                    "serviceInformation": {
+                      "serviceCode": "18",
+                      "groupCode": "SE",
+                      "name": "PostNord Parcel",
+                      "pickup": true,
+                      "distribution": true,
+                      "additionalServices": [
+                        {
+                          "code": "20",
+                          "name": "Before 12"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "timeOfDeparture": "2021-08-23T14:00:00",
+                    "timeOfArrival": "2021-08-23T18:00:00",
+                    "possibleDeviation": false,
+                    "eveningPickUp": false,
+                    "serviceInformation": {
+                      "serviceCode": "19",
+                      "groupCode": "SE",
+                      "name": "PostNord MyPack Collect",
+                      "pickup": true,
+                      "distribution": false
+                    },
+                    "deliveryPoint": {
+                      "locationId": "570973",
+                      "locationType": "servicepoint",
+                      "countryCode": "SE",
+                      "name": "ICA NÄRA ARMÉGATAN",
+                      "isExpressServicePoint": false
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "OkTransitTimeResponseV2": {
+        "description": "OK. Indicates whether the transit times could be calculated for the given request. \nThe response may include either an 'estimatedTimeOfArrival' for successful calculations or an \nerrorMessage for unsuccessful ones.\nPossible reasons for a response with an errorMessage include:\n\n* No first or last location was found for given post codes\n\n* PostNord does not support routing for given from and to and the\nservice code\n\n* The route has yet to be configured in the transport information system\n",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/TransitTimeResponseV2"
+            },
+            "examples": {
+              "responseWithoutCode": {
+                "summary": "Example response",
+                "value": [
+                  {
+                    "service": {
+                      "basicServiceCode": "17",
+                      "name": "PostNord MyPack Home"
+                    },
+                    "estimatedTimeOfArrival": {
+                      "dateOfDeparture": "2024-08-23",
+                      "timeOfDeparture": "2024-08-23T19:15:00",
+                      "latestTimeOfBooking": "2024-08-23T14:00:00",
+                      "timeOfArrival": "2024-08-24T21:00:00",
+                      "eveningPickUp": false
+                    },
+                    "isSupported": true,
+                    "isBookable": true
+                  },
+                  {
+                    "service": {
+                      "basicServiceCode": "18",
+                      "name": "PostNord Parcel"
+                    },
+                    "estimatedTimeOfArrival": {
+                      "dateOfDeparture": "2024-08-23",
+                      "timeOfDeparture": "2024-08-23T19:15:00",
+                      "latestTimeOfBooking": "2024-08-23T14:00:00",
+                      "timeOfArrival": "2024-08-24T18:00:00",
+                      "eveningPickUp": false
+                    },
+                    "isSupported": true,
+                    "isBookable": true
+                  },
+                  {
+                    "service": {
+                      "basicServiceCode": "18",
+                      "name": "PostNord Parcel",
+                      "additionalServices": {
+                        "additionalServiceCode": "D6",
+                        "name": "Before 9"
+                      }
+                    },
+                    "estimatedTimeOfArrival": {
+                      "dateOfDeparture": "2024-08-23",
+                      "timeOfDeparture": "2024-08-23T19:15:00",
+                      "latestTimeOfBooking": "2024-08-23T14:00:00",
+                      "timeOfArrival": "2024-08-24T09:00:00",
+                      "eveningPickUp": false
+                    },
+                    "isSupported": true,
+                    "isBookable": true
+                  },
+                  {
+                    "service": {
+                      "basicServiceCode": "18",
+                      "name": "PostNord Parcel",
+                      "additionalServices": {
+                        "additionalServiceCode": "D7",
+                        "name": "Before 12"
+                      }
+                    },
+                    "estimatedTimeOfArrival": {
+                      "dayRangeOfArrival": {
+                        "daysMinimum": 3,
+                        "daysMaximum": 4
+                      }
+                    },
+                    "isSupported": true,
+                    "isBookable": true
+                  },
+                  {
+                    "service": {
+                      "basicServiceCode": "19",
+                      "name": "PostNord MyPack Collect"
+                    },
+                    "estimatedTimeOfArrival": {
+                      "dateOfDeparture": "2024-08-23",
+                      "timeOfDeparture": "2024-08-23T14:00:00",
+                      "timeOfArrival": "2024-08-23T18:00:00",
+                      "eveningPickUp": false,
+                      "deliveryPoint": {
+                        "locationId": "570973",
+                        "locationType": "servicepoint",
+                        "countryCode": "SE",
+                        "name": "ICA NÄRA ARMÉGATAN",
+                        "isExpressServicePoint": false
+                      }
+                    },
+                    "isSupported": true,
+                    "isBookable": true
+                  },
+                  {
+                    "service": {
+                      "basicServiceCode": "22",
+                      "name": "PostNord Return Pickup"
+                    },
+                    "isSupported": false,
+                    "isBookable": false,
+                    "errorMessage": "Service SE-22 is not offered from postal code 17173"
+                  }
+                ]
+              },
+              "responseWithCode": {
+                "summary": "response with showInternalAdditionalServiceCode=true",
+                "value": [
+                  {
+                    "service": {
+                      "basicServiceCode": "17",
+                      "name": "PostNord MyPack Home"
+                    },
+                    "estimatedTimeOfArrival": {
+                      "dateOfDeparture": "2024-08-23",
+                      "timeOfDeparture": "2024-08-23T19:15:00",
+                      "latestTimeOfBooking": "2024-08-23T14:00:00",
+                      "timeOfArrival": "2024-08-24T21:00:00",
+                      "eveningPickUp": false
+                    },
+                    "isSupported": true,
+                    "isBookable": true
+                  },
+                  {
+                    "service": {
+                      "basicServiceCode": "18",
+                      "name": "PostNord Parcel"
+                    },
+                    "estimatedTimeOfArrival": {
+                      "dateOfDeparture": "2024-08-23",
+                      "timeOfDeparture": "2024-08-23T19:15:00",
+                      "latestTimeOfBooking": "2024-08-23T14:00:00",
+                      "timeOfArrival": "2024-08-24T18:00:00",
+                      "eveningPickUp": false
+                    },
+                    "isSupported": true,
+                    "isBookable": true
+                  },
+                  {
+                    "service": {
+                      "basicServiceCode": "18",
+                      "name": "PostNord Parcel",
+                      "additionalServices": [
+                        {
+                          "code": "10",
+                          "additionalServiceCode": "D6",
+                          "name": "Before 9"
+                        }
+                      ]
+                    },
+                    "estimatedTimeOfArrival": {
+                      "dateOfDeparture": "2024-08-23",
+                      "timeOfDeparture": "2024-08-23T19:15:00",
+                      "latestTimeOfBooking": "2024-08-23T14:00:00",
+                      "timeOfArrival": "2024-08-24T09:00:00",
+                      "eveningPickUp": false
+                    },
+                    "isSupported": true,
+                    "isBookable": true
+                  },
+                  {
+                    "service": {
+                      "basicServiceCode": "18",
+                      "name": "PostNord Parcel",
+                      "additionalServices": [
+                        {
+                          "code": "20",
+                          "additionalServiceCode": "D7",
+                          "name": "Before 12"
+                        }
+                      ]
+                    },
+                    "estimatedTimeOfArrival": {
+                      "dayRangeOfArrival": {
+                        "daysMinimum": 3,
+                        "daysMaximum": 4
+                      }
+                    },
+                    "isSupported": true,
+                    "isBookable": true
+                  },
+                  {
+                    "service": {
+                      "basicServiceCode": "19",
+                      "name": "PostNord MyPack Collect"
+                    },
+                    "estimatedTimeOfArrival": {
+                      "dateOfDeparture": "2024-08-23",
+                      "timeOfDeparture": "2024-08-23T14:00:00",
+                      "timeOfArrival": "2024-08-23T18:00:00",
+                      "eveningPickUp": false,
+                      "deliveryPoint": {
+                        "locationId": "570973",
+                        "locationType": "servicepoint",
+                        "countryCode": "SE",
+                        "name": "ICA NÄRA ARMÉGATAN",
+                        "isExpressServicePoint": false
+                      }
+                    },
+                    "isSupported": true,
+                    "isBookable": true
+                  },
+                  {
+                    "service": {
+                      "basicServiceCode": "22",
+                      "name": "PostNord Return Pickup"
+                    },
+                    "isSupported": false,
+                    "isBookable": false,
+                    "errorMessage": "Service SE-22 is not offered from postal code 17173"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "BadRequest": {
+        "description": "The server cannot or will not process the request due to something that\nis perceived to be a client error (e.g., malformed request syntax,\ninvalid request message framing, or deceptive request routing)\n\nFault codes:\n* Missing required field API-008\n* Invalid input API-009\n",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "Unauthenticated": {
+        "description": "API-key or authentication token is missing/invalid.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "MethodNotAccepted": {
+        "description": "The method received in the request-line is known by the origin server\nbut not supported by the target resource.\n",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "InternalServerError": {
+        "description": "The server is currently unable to handle the request due to a temporary\noverload or scheduled maintenance, which will likely be alleviated after\nsome delay.\n",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "TemporarilyUnavailable": {
+        "description": "The server is currently unable to handle the request due to a temporary\noverload or scheduled maintenance, which will likely be alleviated after\nsome delay.\n",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "parameters": {
+      "ApiKey": {
+        "name": "apikey",
+        "in": "query",
+        "description": "The unique consumer (client) identifier 32 characters",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "x-data-threescale-name": "user_keys"
+      },
+      "StartTime": {
+        "name": "startTime",
+        "in": "query",
+        "description": "Better described as the hand over time. The time for which PostNord has\nreceived the parcel from the customer or private sender. Format is local date time\n",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "example": "2024-12-01T08:00"
+      },
+      "StartTimeAddressOrigin": {
+        "name": "startTime",
+        "in": "query",
+        "description": "Better described as the hand over time. The time for which PostNord has received the parcel from the customer or \nprivate sender. Format is local date time\n",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "example": "2023-12-01T08:00"
+      },
+      "StartTimeLocationOrigin": {
+        "name": "startTime",
+        "in": "query",
+        "description": "The time for which the parcel is at its origin location. Format is local date time\n",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "example": "2023-12-01T08:00"
+      },
+      "ServiceCodes": {
+        "name": "serviceCodes",
+        "in": "query",
+        "description": "Comma-separated PostNord service codes. Only Nordic Codes are allowed. \nFor more details, visit PostNord Valid Services & Addon Codes.\n* 17 (Mypack Home) \n* 18 (Parcel)\n* 19 (Mypack Collect)\n* ..\n",
+        "required": false,
+        "style": "form",
+        "explode": false,
+        "schema": {
+          "type": "array",
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "AdditionalServiceCodes": {
+        "name": "additionalServiceCodes",
+        "in": "query",
+        "description": "Comma-separated PostNord additional service codes. Only Nordic Codes are allowed. \nFor more details, visit PostNord Valid Services & Addon Codes.\n* D6 (Before 9:00)\n* D7 (Before 12:00)\n* ..\n",
+        "required": false,
+        "style": "form",
+        "explode": false,
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "OriginStreetName": {
+        "name": "originStreetName",
+        "in": "query",
+        "description": "Street name of origin. Providing this will allow for more accurate results",
+        "required": false,
+        "schema": {
+          "type": "string"
+        },
+        "example": "Terminalvägen"
+      },
+      "OriginStreetNumber": {
+        "name": "originStreetNumber",
+        "in": "query",
+        "description": "Street number of origin. Providing this will allow for more accurate results",
+        "required": false,
+        "schema": {
+          "type": "string"
+        },
+        "example": "24"
+      },
+      "OriginAddress": {
+        "name": "originAddress",
+        "in": "query",
+        "description": "The full address of the origin. Providing this will allow for more\naccurate results. The format should be 'street name' followed by 'street number'.\n",
+        "required": false,
+        "schema": {
+          "type": "string"
+        },
+        "example": "Testvägen 3"
+      },
+      "OriginPostCode": {
+        "name": "originPostCode",
+        "in": "query",
+        "description": "Post code of origin",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "example": "17173"
+      },
+      "OriginPostalCode": {
+        "name": "originPostalCode",
+        "in": "query",
+        "description": "Post code of origin",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "example": 17173
+      },
+      "OriginCountryCode": {
+        "name": "originCountryCode",
+        "in": "query",
+        "description": "Origin country code of address or location as ISO 3166-1 alpha-2",
+        "required": true,
+        "schema": {
+          "pattern": "^[A-Za-z]{2}$",
+          "type": "string"
+        },
+        "example": "SE"
+      },
+      "DestinationAddress": {
+        "name": "destinationAddress",
+        "in": "query",
+        "description": "The full address of the destination. Providing this will allow for more\naccurate results. The format should be 'street name' followed by 'street number'.\n",
+        "required": false,
+        "schema": {
+          "type": "string"
+        },
+        "example": "Testvägen 3"
+      },
+      "DestinationStreetName": {
+        "name": "destinationStreetName",
+        "in": "query",
+        "description": "Street name of destination. Providing this will allow for more accurate results",
+        "required": false,
+        "schema": {
+          "type": "string"
+        },
+        "example": "Glimmervägen"
+      },
+      "DestinationStreetNumber": {
+        "name": "destinationStreetNumber",
+        "in": "query",
+        "description": "Street number of destination. Providing this will allow for more accurate results",
+        "required": false,
+        "schema": {
+          "type": "string"
+        },
+        "example": "10"
+      },
+      "DestinationPostCode": {
+        "name": "destinationPostCode",
+        "in": "query",
+        "description": "Post code of destination",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "example": "17173"
+      },
+      "DestinationPostalCode": {
+        "name": "destinationPostalCode",
+        "in": "query",
+        "description": "Post code of destination",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "example": 17173
+      },
+      "DestinationCountryCode": {
+        "name": "destinationCountryCode",
+        "in": "query",
+        "description": "Destination country code of address or location as ISO 3166-1 alpha-2",
+        "required": true,
+        "schema": {
+          "pattern": "^[A-Za-z]{2}$",
+          "type": "string"
+        },
+        "example": "SE"
+      },
+      "DestinationProductionPointId": {
+        "name": "destinationProductionPointId",
+        "in": "query",
+        "description": "The production point id for location of destination",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "example": 135201
+      },
+      "DestinationProductionPointType": {
+        "name": "destinationProductionPointType",
+        "in": "query",
+        "description": "The type of production point for the destination location.",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "enum": [
+            "depot",
+            "hub",
+            "servicepoint",
+            "customer"
+          ]
+        }
+      },
+      "OriginProductionPointId": {
+        "name": "originProductionPointId",
+        "in": "query",
+        "description": "The production point id for location of origin",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "example": 169101
+      },
+      "OriginProductionPointType": {
+        "name": "originProductionPointType",
+        "in": "query",
+        "description": "The type of production point for the origin location.",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "enum": [
+            "depot",
+            "hub",
+            "servicepoint",
+            "customer"
+          ]
+        }
+      },
+      "DestinationLocationId": {
+        "name": "destinationLocationId",
+        "in": "query",
+        "description": "The production point id for location of destination",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "example": 135201
+      },
+      "DestinationLocationType": {
+        "name": "destinationLocationType",
+        "in": "query",
+        "description": "The type of production point for the destination location.",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "enum": [
+            "depot",
+            "hub",
+            "servicepoint",
+            "customer"
+          ]
+        }
+      },
+      "OriginLocationId": {
+        "name": "originLocationId",
+        "in": "query",
+        "description": "The production point id for location of origin",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "example": 169101
+      },
+      "OriginLocationType": {
+        "name": "originLocationType",
+        "in": "query",
+        "description": "The type of production point for the origin location.",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "enum": [
+            "depot",
+            "hub",
+            "servicepoint",
+            "customer"
+          ]
+        }
+      },
+      "ShowInternalAdditionalServiceCode": {
+        "name": "showInternalAdditionalServiceCode",
+        "in": "query",
+        "description": "Option to show the internal additional service code in the response. This is set to false by default.",
+        "required": false,
+        "schema": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    }
+  }
+}
