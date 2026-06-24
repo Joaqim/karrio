@@ -73,7 +73,29 @@
             "contact": {
               "contactName": "John Sender",
               "emailAddress": "sender@example.com",
-              "phoneNo": "+46701234567"
+              "phoneNo": "+46701234567",
+              "smsNo": "+46701234567"
+            }
+          }
+        },
+        "consignee": {
+          "issuerCode": "Z12",
+          "party": {
+            "nameIdentification": {
+              "name": "ACME Receiver AB",
+              "companyName": "ACME Receiver AB"
+            },
+            "address": {
+              "streets": ["Terminalvagen 24"],
+              "postalCode": "17173",
+              "city": "Solna",
+              "countryCode": "SE"
+            },
+            "contact": {
+              "contactName": "Jane Receiver",
+              "emailAddress": "receiver@example.com",
+              "phoneNo": "+46709876543",
+              "smsNo": "+46709876543"
             }
           }
         },
@@ -92,7 +114,8 @@
             "contact": {
               "contactName": "John Sender",
               "emailAddress": "sender@example.com",
-              "phoneNo": "+46701234567"
+              "phoneNo": "+46701234567",
+              "smsNo": "+46701234567"
             }
           },
           "reference": {
