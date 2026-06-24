@@ -1,14 +1,97 @@
 {
-  "shipmentResponse": {
-    "trackingNumber": "1Z999999999999999",
-    "shipmentIdentifier": "SHIP123456",
-    "labelType": "PDF",
-    "label": "base64_encoded_label_data",
-    "documents": {
-      "invoice": "base64_encoded_invoice_data"
-    },
-    "meta": {
-      "serviceCode": "EXPRESS"
+  "bookingResponse": {
+    "bookingId": "BOOK-0001",
+    "idInformation": [
+      {
+        "status": "OK",
+        "references": {
+          "shipment": [
+            {
+              "referenceNo": "ORDER-7788",
+              "referenceType": "CU",
+              "referenceDesc": "Customer order number"
+            }
+          ],
+          "item": [
+            {
+              "referenceNo": "ITEM-1",
+              "referenceType": "ON",
+              "referenceDesc": "Item reference"
+            }
+          ]
+        },
+        "ids": [
+          {
+            "idType": "itemId",
+            "value": "00373500454541020957",
+            "printId": "373500454541020957"
+          },
+          {
+            "idType": "shipmentId",
+            "value": "SHIP-0001",
+            "printId": "SHIP-0001"
+          }
+        ],
+        "urls": [
+          {
+            "type": "TRACKING",
+            "url": "https://tracking.postnord.com/se/?id=00373500454541020957"
+          }
+        ],
+        "attributes": [
+          {
+            "param": "deliveryDate",
+            "value": "2026-06-26"
+          }
+        ],
+        "errorResponse": {
+          "message": "High level error message.",
+          "compositeFault": {
+            "faults": [
+              {
+                "explanationText": "Explanation of the fault",
+                "faultCode": "FAULT_CODE",
+                "paramValues": [
+                  {
+                    "param": "field",
+                    "value": "value"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "handlingResponse": {
+      "message": "High level error message.",
+      "compositeFault": {
+        "faults": [
+          {
+            "explanationText": "Explanation of the fault",
+            "faultCode": "FAULT_CODE",
+            "paramValues": [
+              {
+                "param": "field",
+                "value": "value"
+              }
+            ]
+          }
+        ]
+      }
     }
-  }
+  },
+  "labelPrintout": [
+    {
+      "itemIds": ["00373500454541020957"],
+      "printout": {
+        "id": "1",
+        "type": "LABEL",
+        "labelFormat": "PDF",
+        "encoding": "base64",
+        "uriResource": "https://api2.postnord.com/rest/shipment/v3/labels/ids/pdf/1",
+        "data": "JVBERi0xLjQK"
+      }
+    }
+  ]
 }

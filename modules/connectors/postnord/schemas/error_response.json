@@ -1,10 +1,16 @@
 {
-  "errorResponse": {
-    "errors": [
+  "message": "High level error message.",
+  "compositeFault": {
+    "faults": [
       {
-        "code": "ERROR_CODE",
-        "message": "Error message description",
-        "details": "Additional error details"
+        "explanationText": "The apikey is invalid or expired",
+        "faultCode": "INVALID_APIKEY",
+        "paramValues": [
+          {
+            "param": "apikey",
+            "value": "***"
+          }
+        ]
       }
     ]
   }
