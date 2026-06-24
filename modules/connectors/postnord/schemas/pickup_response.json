@@ -1,0 +1,53 @@
+{
+  "bookingId": "PICKUP-555",
+  "references": {
+    "shipment": [
+      {"referenceType": "ON", "referenceNo": "PICKUP-REF-1"}
+    ]
+  },
+  "idInformation": [
+    {
+      "status": "OK",
+      "references": {
+        "item": [],
+        "shipment": [
+          {"referenceType": "IL", "referenceNo": "ILPN0001"}
+        ]
+      },
+      "ids": [
+        {"idType": "pickupId", "value": "PU-1", "printId": "PU-1"}
+      ],
+      "urls": [
+        {"type": "label", "url": "https://example.com/label"}
+      ],
+      "errorResponse": {
+        "message": "",
+        "compositeFault": {
+          "faults": [
+            {
+              "explanationText": "",
+              "faultCode": "",
+              "paramValues": [
+                {"param": "", "value": ""}
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "handlingResponse": {
+    "message": "",
+    "compositeFault": {
+      "faults": [
+        {
+          "explanationText": "",
+          "faultCode": "",
+          "paramValues": [
+            {"param": "", "value": ""}
+          ]
+        }
+      ]
+    }
+  }
+}
