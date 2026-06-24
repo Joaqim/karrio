@@ -41,6 +41,16 @@ def shipment_cancel_request(
     payload: models.ShipmentCancelRequest,
     settings: provider_utils.Settings,
 ) -> lib.Serializable:
+    options = payload.options or {}
+    service = options.get("service")
+
+    # Deletion reuses the booking EdiInstruction schema, which still REQUIRES
+    # service, parties, and a goodsItem with at least one items[] entry even
+    # when only deleting. ShipmentCancelRequest carries no original shipper or
+    # parcels, so parties/service are reduced to safe minimal values: the
+    # consignor identifies the agreement holder, and the goodsItem references
+    # the parcel/tracking id (shipment_identifier) being deleted. service is
+    # only emitted when an optional payload option supplies it.
     request = postnord_req.ShipmentRequestType(
         messageDate=datetime.datetime.now().isoformat(timespec="seconds"),
         updateIndicator="Deletion",
@@ -54,6 +64,35 @@ def shipment_cancel_request(
                 shipmentIdentification=postnord_req.ShipmentIdentificationType(
                     shipmentId=payload.shipment_identifier,
                 ),
+                service=lib.identity(
+                    postnord_req.ServiceType(basicServiceCode=service)
+                    if service
+                    else None
+                ),
+                parties=postnord_req.PartiesType(
+                    consignor=postnord_req.ConsignType(
+                        issuerCode=settings.issuer_code,
+                        partyIdentification=lib.identity(
+                            postnord_req.PartyIdentificationType(
+                                partyId=settings.customer_number,
+                                partyIdType="160",
+                            )
+                            if settings.customer_number
+                            else None
+                        ),
+                    ),
+                ),
+                goodsItem=[
+                    postnord_req.GoodsItemType(
+                        items=[
+                            postnord_req.ItemType(
+                                itemIdentification=postnord_req.ItemIdentificationType(
+                                    itemId=payload.shipment_identifier,
+                                ),
+                            )
+                        ],
+                    )
+                ],
             )
         ],
     )

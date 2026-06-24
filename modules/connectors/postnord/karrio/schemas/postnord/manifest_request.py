@@ -23,8 +23,33 @@ class FreeTextType:
 
 
 @attr.s(auto_attribs=True)
-class NumberOfPackagesType:
+class GrossWeightType:
+    value: typing.Optional[float] = None
+    unit: typing.Optional[str] = None
+
+
+@attr.s(auto_attribs=True)
+class ItemIdentificationType:
+    itemId: typing.Optional[str] = None
+    itemIdType: typing.Optional[str] = None
+
+
+@attr.s(auto_attribs=True)
+class ItemType:
+    itemIdentification: typing.Optional[ItemIdentificationType] = jstruct.JStruct[ItemIdentificationType]
+    grossWeight: typing.Optional[GrossWeightType] = jstruct.JStruct[GrossWeightType]
+
+
+@attr.s(auto_attribs=True)
+class NumberOfPackageType:
     value: typing.Optional[int] = None
+
+
+@attr.s(auto_attribs=True)
+class GoodsItemType:
+    packageTypeCode: typing.Optional[str] = None
+    numberOfPackageTypeCodeItems: typing.Optional[NumberOfPackageType] = jstruct.JStruct[NumberOfPackageType]
+    items: typing.Optional[typing.List[ItemType]] = jstruct.JList[ItemType]
 
 
 @attr.s(auto_attribs=True)
@@ -97,19 +122,14 @@ class ShipmentIdentificationType:
 
 
 @attr.s(auto_attribs=True)
-class TotalGrossWeightType:
-    value: typing.Optional[float] = None
-    unit: typing.Optional[str] = None
-
-
-@attr.s(auto_attribs=True)
 class ShipmentType:
     shipmentIdentification: typing.Optional[ShipmentIdentificationType] = jstruct.JStruct[ShipmentIdentificationType]
     dateAndTimes: typing.Optional[DateAndTimesType] = jstruct.JStruct[DateAndTimesType]
     service: typing.Optional[ServiceType] = jstruct.JStruct[ServiceType]
-    numberOfPackages: typing.Optional[NumberOfPackagesType] = jstruct.JStruct[NumberOfPackagesType]
-    totalGrossWeight: typing.Optional[TotalGrossWeightType] = jstruct.JStruct[TotalGrossWeightType]
+    numberOfPackages: typing.Optional[NumberOfPackageType] = jstruct.JStruct[NumberOfPackageType]
+    totalGrossWeight: typing.Optional[GrossWeightType] = jstruct.JStruct[GrossWeightType]
     freeText: typing.Optional[typing.List[FreeTextType]] = jstruct.JList[FreeTextType]
+    goodsItem: typing.Optional[typing.List[GoodsItemType]] = jstruct.JList[GoodsItemType]
     parties: typing.Optional[PartiesType] = jstruct.JStruct[PartiesType]
 
 

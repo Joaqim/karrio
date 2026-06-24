@@ -32,6 +32,26 @@
           "text": "Pick up at loading dock"
         }
       ],
+      "goodsItem": [
+        {
+          "packageTypeCode": "PC",
+          "numberOfPackageTypeCodeItems": {
+            "value": 1
+          },
+          "items": [
+            {
+              "itemIdentification": {
+                "itemId": "00373500454541020957",
+                "itemIdType": "SSCC"
+              },
+              "grossWeight": {
+                "value": 1.5,
+                "unit": "KGM"
+              }
+            }
+          ]
+        }
+      ],
       "parties": {
         "consignor": {
           "issuerCode": "Z12",
