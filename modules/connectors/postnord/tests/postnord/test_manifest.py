@@ -162,6 +162,11 @@ ManifestRequest = {
 
 ManifestResponse = """{
   "bookingId": "PICKUP-555",
+  "references": {
+    "shipment": [
+      {"referenceType": "IL", "referenceNo": "ILPN0001"}
+    ]
+  },
   "idInformation": [
     {"status": "OK", "ids": [{"idType": "pickupId", "value": "PU-1"}]}
   ]
@@ -187,6 +192,7 @@ ParsedManifestResponse = [
         "meta": {
             "booking_id": "PICKUP-555",
             "pickup_ids": ["PU-1"],
+            "references": ["ILPN0001"],
         },
     },
     [],

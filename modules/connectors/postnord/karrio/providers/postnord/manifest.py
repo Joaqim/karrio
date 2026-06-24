@@ -46,6 +46,9 @@ def _extract_details(
         if _id.value
     ]
 
+    references = getattr(response.references, "shipment", None) or []
+    reference_nos = [ref.referenceNo for ref in references if ref.referenceNo]
+
     return models.ManifestDetails(
         carrier_id=settings.carrier_id,
         carrier_name=settings.carrier_name,
@@ -53,6 +56,7 @@ def _extract_details(
         meta=dict(
             booking_id=response.bookingId,
             pickup_ids=pickup_ids or None,
+            references=reference_nos or None,
         ),
     )
 

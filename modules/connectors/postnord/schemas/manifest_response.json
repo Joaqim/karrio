@@ -1,5 +1,13 @@
 {
   "bookingId": "PICKUP-BOOK-0001",
+  "references": {
+    "shipment": [
+      {
+        "referenceType": "IL",
+        "referenceNo": "ILPN0001"
+      }
+    ]
+  },
   "idInformation": [
     {
       "status": "OK",

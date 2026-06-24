@@ -49,7 +49,19 @@ class IDInformationType:
 
 
 @attr.s(auto_attribs=True)
+class ShipmentType:
+    referenceType: typing.Optional[str] = None
+    referenceNo: typing.Optional[str] = None
+
+
+@attr.s(auto_attribs=True)
+class ReferencesType:
+    shipment: typing.Optional[typing.List[ShipmentType]] = jstruct.JList[ShipmentType]
+
+
+@attr.s(auto_attribs=True)
 class ManifestResponseType:
     bookingId: typing.Optional[str] = None
+    references: typing.Optional[ReferencesType] = jstruct.JStruct[ReferencesType]
     idInformation: typing.Optional[typing.List[IDInformationType]] = jstruct.JList[IDInformationType]
     handlingResponse: typing.Optional[ResponseType] = jstruct.JStruct[ResponseType]
