@@ -20,6 +20,8 @@
 >
 > **v1.4 revision note:** Two design changes after a deeper codebase investigation. **Rating** is redesigned (D9, supersedes the v1.0 bespoke `ConnectionConfig.rate_table`): it now uses Karrio's first-class static-rate mechanism — `Settings` inherits `karrio.universal.mappers.rating_proxy.RatingMixinSettings` and the proxy calls `RatingMixinProxy.get_rates` (no carrier HTTP call), exactly the `generic` carrier pattern. `DEFAULT_SERVICES` in `units.py` ships as the seed catalog and per-merchant contract prices live in the server-side `RateSheet` entity attached to `CarrierConnection.rate_sheet`. **Service Points** deferral (D6) is confirmed against the codebase: Karrio has **no** unified service-point/pickup-location contract (no SDK proxy op, no `CarrierCapabilities` entry, no Django REST route, no GraphQL query, no frontend type); the only related construct is the duck-typed LSP plugin pattern. Service Points remains out of scope.
 
+> **v1.5 revision note:** D2 is **superseded** by D10. Mapping `Manifest.create()` onto `/v3/pickups` forced a degenerate SE→SE consignee and conflated two distinct volatilities (end-of-day manifest vs. courier collection). PostNord's pickup is now a **first-class Pickup API** (D10): `Pickup.schedule()` → `POST /rest/shipment/v3/pickups`, with the swagger-confirmed consignor-only body (no consignee). `Manifest.create()` is an explicit `not_supported` no-op, since PostNord has no scan-form manifest. `Pickup.update`/`Pickup.cancel` are honest `not_supported` placeholders pending the corresponding endpoints. Inline references below to `Manifest.create → /v3/pickups` reflect the historical v1.0–v1.4 design and are retained for provenance; the implemented behavior is D10.
+
 ---
 
 ## Table of Contents
@@ -85,7 +87,7 @@ The authoritative Booking (EDI) spec resolves the central design question: every
 | # | Decision | Choice | Rationale | Date |
 |---|----------|--------|-----------|------|
 | D1 | Rating given no public rate API | Static rates via Karrio's universal engine (see D9) | Prices are contract-specific and unexposed. Static, no carrier call: `RatingMixinSettings`/`RatingMixinProxy.get_rates` match zones/weights and emit `RateDetails`; per-merchant prices live in the server `RateSheet`, seeded by `DEFAULT_SERVICES`. Keeps rate-driven flows working without fabricating carrier data. | 2026-06-24 |
-| D2 | Manifest given no manifest API | Map to Booking `/v3/pickups` | No native manifest/EOD endpoint (EDI file flow retired 2024). The Booking spec's `createPickups` is the nearest physical-handover mechanism and lives in the same API. | 2026-06-24 |
+| D2 | Manifest given no manifest API | ~~Map to Booking `/v3/pickups`~~ **Superseded by D10** | No native manifest/EOD endpoint (EDI file flow retired 2024). The pickup mapping forced a degenerate SE→SE consignee and conflated manifest with courier collection; replaced by a first-class Pickup API (D10), with `Manifest.create` an explicit `not_supported` no-op. | 2026-06-24 |
 | D3 | API generation / auth | apikey EDI generation (per supplied spec) | `postnord-booking.swagger.json` is `SECURED: False`, apikey query param. Authoritative spec supersedes the web-sourced OAuth2 claim. Resolves v1.0's Q1. | 2026-06-24 |
 | D4 | Connector location/pattern | `modules/connectors/postnord/`, direct carrier | First-party carrier with its own API, not an aggregator. | 2026-06-24 |
 | D5 | Reference carriers | SEKO (auth) + USPS (structure) | SEKO models apikey auth; USPS models JSON provider/test/manifest layout. | 2026-06-24 |
@@ -93,6 +95,7 @@ The authoritative Booking (EDI) spec resolves the central design question: every
 | D7 | Tracking depth | Link-only (no events) | Supplied `postnord-tracking.swagger.json` returns only a tracking URL, not events. `get_tracking` populates `tracking_url` + generic status; events deferred to a future Track & Trace v5/v7 integration. | 2026-06-24 |
 | D8 | Cancellation | Blocked (safe placeholder) | REST `/v3/edi` ignores `updateIndicator: "Deletion"` and books a duplicate (verified live); real cancel needs the id-based `deleteEdiRequest` endpoint absent from the swagger. Connector sends a safe `{ids:[{id}]}` placeholder (rejected without booking) pending PostNord's v3 REST reference manual. | 2026-06-24 |
 | D9 | Rating mechanism | Karrio universal RatingMixin + server RateSheet | Replaces the bespoke `ConnectionConfig.rate_table`; reuses zone/weight matching, surcharges, CSV import, and rate-sheet CRUD; verified against the `generic` carrier | 2026-06-24 |
+| D10 | Pickup vs. manifest (supersedes D2) | First-class Pickup API (`Pickup.schedule` → `POST /v3/pickups`); `Manifest.create` is `not_supported` | The Booking spec's `createPickups` is a courier-collection booking, not a manifest. Exposing it as `Pickup.schedule` matches the volatility (consignor-only body, swagger-confirmed no consignee) and removes the degenerate SE→SE fallback the manifest mapping required. `Pickup.update`/`Pickup.cancel` are `not_supported` placeholders pending endpoints. | 2026-06-24 |
 
 ### Edge Cases Requiring Input
 
