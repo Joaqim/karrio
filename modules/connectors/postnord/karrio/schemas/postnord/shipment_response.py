@@ -84,6 +84,7 @@ class PrintoutType:
 class LabelPrintoutType:
     itemIds: typing.Optional[typing.List[str]] = None
     printout: typing.Optional[PrintoutType] = jstruct.JStruct[PrintoutType]
+    printoutComposition: typing.Optional[typing.Dict[str, int]] = None
 
 
 @attr.s(auto_attribs=True)
