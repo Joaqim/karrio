@@ -162,13 +162,16 @@ ManifestRequest = {
 
 ManifestResponse = """{
   "bookingId": "PICKUP-555",
-  "references": {
-    "shipment": [
-      {"referenceType": "IL", "referenceNo": "ILPN0001"}
-    ]
-  },
   "idInformation": [
-    {"status": "OK", "ids": [{"idType": "pickupId", "value": "PU-1"}]}
+    {
+      "status": "OK",
+      "references": {
+        "shipment": [
+          {"referenceType": "IL", "referenceNo": "ILPN0001"}
+        ]
+      },
+      "ids": [{"idType": "pickupId", "value": "PU-1"}]
+    }
   ]
 }"""
 

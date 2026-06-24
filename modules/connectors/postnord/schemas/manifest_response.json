@@ -11,6 +11,15 @@
   "idInformation": [
     {
       "status": "OK",
+      "references": {
+        "item": [],
+        "shipment": [
+          {
+            "referenceType": "IL",
+            "referenceNo": "ILPN0001"
+          }
+        ]
+      },
       "ids": [
         {
           "idType": "pickupId",
