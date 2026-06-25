@@ -13,6 +13,12 @@ class ConnectionConfig(lib.Enum):
     shipping_options = lib.OptionEnum("shipping_options", list)
     shipping_services = lib.OptionEnum("shipping_services", list)
 
+    # When enabled, rate() calls PostNord's Transit Time API to enrich rates
+    # with accurate transit days, estimated delivery, and per-service
+    # bookability. Requires the apikey be subscribed to PostNord's Transit Time
+    # product; otherwise the call returns 403 "Invalid API Key". Default off.
+    enable_transit_times = lib.OptionEnum("enable_transit_times", bool, False)
+
 
 class LabelType(lib.StrEnum):
     """PostNord supported label/printout formats."""
