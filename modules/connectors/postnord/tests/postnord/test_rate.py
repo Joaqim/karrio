@@ -5,16 +5,20 @@ PRICE resolution is served from Karrio's first-class static-rate mechanism
 per-merchant prices arrive via the server-side RateSheet (modeled here by the
 fixture's ``services``).
 
-On top of that, ``rate()`` always calls PostNord's Transit Time V2 API
-(``GET /rest/transport/v2/transittime/addresstoaddress``) to enrich each rate
-with accurate transit days and an estimated delivery date, and to drop services
-PostNord reports as not bookable. A transit outage degrades gracefully: prices
-are still returned with their static transit days and a warning Message.
+Transit-time enrichment is opt-in via the ``enable_transit_times`` connection
+config flag (default off), because PostNord returns 403 "Invalid API Key" on the
+Transit Time API for keys not subscribed to that product. With the default
+gateway no carrier call is made and rates use their static transit days. With
+``gateway_with_transit`` the Transit Time V2 API
+(``GET /rest/transport/v2/transittime/addresstoaddress``) is called once per
+request to enrich transit days, add an estimated delivery date, and drop
+services PostNord reports as not bookable. A transit outage degrades gracefully:
+prices are still returned with their static transit days and a warning Message.
 """
 
 import unittest
-from unittest.mock import patch, ANY
-from .fixture import gateway
+from unittest.mock import patch
+from .fixture import gateway, gateway_with_transit
 
 import karrio.sdk as karrio
 import karrio.lib as lib
@@ -26,11 +30,39 @@ class TestPostNordRating(unittest.TestCase):
         self.maxDiff = None
         self.RateRequest = models.RateRequest(**RatePayload)
 
+    def test_get_rates_makes_no_http_call(self):
+        # Default gateway: transit enrichment is off, so rate() issues no
+        # carrier call (restores the pre-transit no-carrier-call invariant).
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            karrio.Rating.fetch(self.RateRequest).from_(gateway)
+
+        mock.assert_not_called()
+
+    def test_parse_rate_response(self):
+        # Default gateway: static output with the service-level transit_days and
+        # no estimated_delivery enrichment.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            parsed_response = (
+                karrio.Rating.fetch(self.RateRequest).from_(gateway).parse()
+            )
+
+        mock.assert_not_called()
+        self.assertListEqual(lib.to_dict(parsed_response), StaticParsedRateResponse)
+
+    def test_parse_rate_response_no_matching_zone(self):
+        # A destination outside every service zone yields empty rates and no
+        # crash. The fixture's zones only cover SE, so a US recipient matches no
+        # zone. No transit dependency on the default gateway.
+        request = models.RateRequest(**NoZoneRatePayload)
+        parsed_response = karrio.Rating.fetch(request).from_(gateway).parse()
+
+        self.assertListEqual(lib.to_dict(parsed_response), NoZoneParsedRateResponse)
+
     def test_get_rates_issues_transit_call(self):
-        # rate() now calls the Transit Time V2 API once per request.
+        # Opt-in gateway: rate() calls the Transit Time V2 API once per request.
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
             mock.return_value = "[]"
-            karrio.Rating.fetch(self.RateRequest).from_(gateway)
+            karrio.Rating.fetch(self.RateRequest).from_(gateway_with_transit)
             url = mock.call_args.kwargs["url"]
 
         self.assertIn(
@@ -46,38 +78,32 @@ class TestPostNordRating(unittest.TestCase):
         self.assertIn("serviceCodes=18", url)
         self.assertEqual(mock.call_args.kwargs["method"], "GET")
 
-    def test_parse_rate_response(self):
-        # Transit enrichment overrides transit_days and adds estimated_delivery;
-        # the unrequested service (17) marked isBookable=false is dropped.
+    def test_parse_rate_response_transit_enriched(self):
+        # Opt-in gateway: transit enrichment overrides transit_days and adds
+        # estimated_delivery; the service (17) marked isBookable=false is dropped.
         request = models.RateRequest(**AllServicesRatePayload)
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
             mock.return_value = TransitTimeResponse
-            parsed_response = karrio.Rating.fetch(request).from_(gateway).parse()
+            parsed_response = (
+                karrio.Rating.fetch(request).from_(gateway_with_transit).parse()
+            )
 
-        self.assertListEqual(lib.to_dict(parsed_response), ParsedRateResponse)
+        self.assertListEqual(lib.to_dict(parsed_response), EnrichedParsedRateResponse)
 
     def test_parse_rate_response_transit_degraded(self):
-        # When the transit call fails, prices are still returned with their
-        # static transit_days, no bookability filtering, and a warning Message.
+        # Opt-in gateway: when the transit call fails, prices are still returned
+        # with their static transit_days, no bookability filtering, and exactly
+        # one warning Message.
         request = models.RateRequest(**AllServicesRatePayload)
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
             mock.side_effect = Exception("transit api unavailable")
-            parsed_response = karrio.Rating.fetch(request).from_(gateway).parse()
+            parsed_response = (
+                karrio.Rating.fetch(request).from_(gateway_with_transit).parse()
+            )
 
         self.assertListEqual(
             lib.to_dict(parsed_response), DegradedParsedRateResponse
         )
-
-    def test_parse_rate_response_no_matching_zone(self):
-        # A destination outside every service zone yields empty rates and no
-        # crash. The fixture's zones only cover SE, so a US recipient matches no
-        # zone (and the transit call returns nothing relevant).
-        request = models.RateRequest(**NoZoneRatePayload)
-        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
-            mock.return_value = "[]"
-            parsed_response = karrio.Rating.fetch(request).from_(gateway).parse()
-
-        self.assertListEqual(lib.to_dict(parsed_response), NoZoneParsedRateResponse)
 
 
 if __name__ == "__main__":
@@ -151,7 +177,38 @@ TransitTimeResponse = lib.to_json(
     ]
 )
 
-ParsedRateResponse = [
+# Default path (transit off): static service-level transit_days (2), no
+# estimated_delivery, and no messages.
+StaticParsedRateResponse = [
+    [
+        {
+            "carrier_id": "postnord",
+            "carrier_name": "postnord",
+            "currency": "SEK",
+            "service": "postnord_parcel",
+            "total_charge": 89.0,
+            "transit_days": 2,
+            "extra_charges": [
+                {
+                    "amount": 89.0,
+                    "currency": "SEK",
+                    "name": "Base Charge",
+                }
+            ],
+            "meta": {
+                "carrier_service_code": "18",
+                "service_name": "PostNord Parcel",
+                "shipping_charges": 89.0,
+                "shipping_currency": "SEK",
+            },
+        }
+    ],
+    [],
+]
+
+# Opt-in path (transit on): code 18 transit_days overridden to 1 with an
+# estimated_delivery; code 17 dropped as not bookable.
+EnrichedParsedRateResponse = [
     [
         {
             "carrier_id": "postnord",

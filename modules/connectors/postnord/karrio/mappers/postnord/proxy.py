@@ -11,22 +11,32 @@ class Proxy(proxy.Proxy):
     settings: provider_settings.Settings
 
     def get_rates(self, request: lib.Serializable) -> lib.Deserializable:
-        """Resolve static prices and enrich with PostNord transit times.
+        """Resolve static prices, optionally enriching with transit times.
 
         PostNord has no live money-rate API, so PRICE resolution delegates to
-        the universal rating mixin (server-side RateSheet). On top of that, one
-        ``GET /rest/transport/v2/transittime/addresstoaddress`` call is issued
-        per rate request to obtain accurate transit days, estimated delivery
-        dates, and per-service bookability. The transit results are threaded to
-        ``parse_rate_response`` via the returned ``Deserializable.ctx``.
+        the universal rating mixin (server-side RateSheet). Transit-time
+        enrichment is opt-in via the ``enable_transit_times`` connection config
+        flag (default off), because PostNord returns 403 "Invalid API Key" on
+        the Transit Time API for keys not subscribed to that product. When the
+        flag is disabled the universal rate result is returned unchanged with no
+        carrier call.
+
+        When enabled, one ``GET /rest/transport/v2/transittime/addresstoaddress``
+        call is issued per rate request to obtain accurate transit days,
+        estimated delivery dates, and per-service bookability. The transit
+        results are threaded to ``parse_rate_response`` via the returned
+        ``Deserializable.ctx``.
 
         A transit outage never breaks price rating: the call is guarded, and on
         failure an empty result set plus a ``transit_degraded`` marker is placed
         on the context so the parser can surface a warning and skip filtering.
         """
-        payload = request.serialize()
         rate_response = RatingMixinProxy.get_rates(self, request)
 
+        if not self.settings.connection_config.enable_transit_times.state:
+            return rate_response
+
+        payload = request.serialize()
         transit_ctx = self._get_transit_times(payload)
 
         return lib.Deserializable(
