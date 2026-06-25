@@ -61,6 +61,7 @@ def parse_rate_response(
                 carrier_id=settings.carrier_id,
                 carrier_name=settings.carrier_name,
                 code="transit_time_unavailable",
+                level="warning",
                 message=(
                     "PostNord transit-time enrichment was unavailable; rates use "
                     "static transit days and no serviceability filtering."
