@@ -229,6 +229,7 @@ DegradedParsedRateResponse = [
             "carrier_id": "postnord",
             "carrier_name": "postnord",
             "code": "transit_time_unavailable",
+            "level": "warning",
             "message": (
                 "PostNord transit-time enrichment was unavailable; rates use "
                 "static transit days and no serviceability filtering."
