@@ -137,12 +137,21 @@ class CarrierSettings(serializers.Serializer):
 
 
 class APIError(serializers.Serializer):
+    # All four are optional on the SDK ``Message`` model (default ``None``), so
+    # the serializer must accept null when messages round-trip as input (e.g.
+    # saving a shipment draft that echoes a carrier's rate messages back).
     message = serializers.CharField(
-        required=False, help_text="The error or warning message"
+        required=False, allow_null=True, help_text="The error or warning message"
     )
-    code = serializers.CharField(required=False, help_text="The message code")
-    level = serializers.CharField(required=False, help_text="The message level")
-    details = serializers.DictField(required=False, help_text="any additional details")
+    code = serializers.CharField(
+        required=False, allow_null=True, help_text="The message code"
+    )
+    level = serializers.CharField(
+        required=False, allow_null=True, help_text="The message level"
+    )
+    details = serializers.DictField(
+        required=False, allow_null=True, help_text="any additional details"
+    )
 
 
 class Message(APIError):
