@@ -22,7 +22,10 @@ def parse_error_response(
     * a top-level ``errorResponse`` wrapper (alternate error envelope);
     * a per-item ``idInformation[].errorResponse`` (partial failures reported
       inline at HTTP 200/201);
-    * a top-level ``faults[]`` list on the tracking ``LinksResponse``.
+    * a top-level ``faults[]`` list on the tracking ``LinksResponse``;
+    * a nested API-gateway envelope ``{"error": {status_code, error_type,
+      message}}`` for auth/authorization failures (e.g. 403 "Invalid API Key"
+      when the key is not authorized for that API product).
     """
     responses = response if isinstance(response, list) else [response]
 
@@ -87,10 +90,34 @@ def parse_error_response(
         for body, fault in faults
     ]
 
+    # PostNord's API-gateway / auth errors use a nested envelope
+    # {"error": {"status_code", "error_type", "message"}} — e.g. 403 "Invalid
+    # API Key" when the apikey is not authorized for that API product (each
+    # PostNord API is separately authorized), not that the key is malformed.
+    # lib.request returns this body to the parser, so surface it as an explicit
+    # error rather than swallowing it.
+    gateway_messages = [
+        models.Message(
+            carrier_id=settings.carrier_id,
+            carrier_name=settings.carrier_name,
+            code=lib.identity(
+                err.get("error_type")
+                or (str(err["status_code"]) if err.get("status_code") is not None else None)
+            ),
+            level="error",
+            message=_authorization_message(err),
+            details=lib.to_dict({**kwargs, "status_code": err.get("status_code")})
+            or None,
+        )
+        for res in responses
+        for err in [res.get("error")]
+        if isinstance(err, dict) and (err.get("message") or err.get("error_type"))
+    ]
+
     # A failed request with an unrecognized non-empty body must still surface
     # a message rather than being silently swallowed.
     has_unparsed_error = bool(error_bodies) and not any(faults)
-    if has_unparsed_error:
+    if has_unparsed_error and not gateway_messages:
         return [
             models.Message(
                 carrier_id=settings.carrier_id,
@@ -106,7 +133,7 @@ def parse_error_response(
             )
         ]
 
-    return messages
+    return [*messages, *gateway_messages]
 
 
 def _faults(body: dict) -> typing.List[dict]:
@@ -129,3 +156,17 @@ def _sub_type(fault: dict) -> typing.Optional[str]:
 
 def _has_fault(error_response: dict) -> bool:
     return any(_faults(error_response)) or bool(error_response.get("message"))
+
+
+def _authorization_message(err: dict) -> typing.Optional[str]:
+    """Clarify PostNord's gateway 403: the apikey is not authorized for the
+    requested API product (each PostNord API is separately authorized), not that
+    the key is malformed."""
+    message = err.get("message")
+    forbidden = err.get("status_code") == 403 or (
+        err.get("error_type") or ""
+    ).lower() == "forbidden"
+    if forbidden:
+        note = "the PostNord API key is not authorized for this service/product"
+        return f"{message}: {note}" if message else note
+    return message
