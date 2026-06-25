@@ -71,6 +71,7 @@ karrio_gls @ file://${PWD}/modules/connectors/gls
 karrio_hermes @ file://${PWD}/modules/connectors/hermes
 karrio_landmark @ file://${PWD}/modules/connectors/landmark
 karrio_laposte @ file://${PWD}/modules/connectors/laposte
+karrio_postnord @ file://${PWD}/modules/connectors/postnord
 karrio_purolator @ file://${PWD}/modules/connectors/purolator
 karrio_sapient @ file://${PWD}/community/plugins/sapient
 karrio_seko @ file://${PWD}/modules/connectors/seko
