@@ -5,14 +5,17 @@ Karrio's first-class static-rate mechanism: per-merchant contract prices live in
 the server-side RateSheet and are resolved against the connection's service
 levels by the universal rating mixin.
 
-On top of that price resolution, ``rate()`` always calls PostNord's Transit
-Time API (``GET /rest/transport/v2/transittime/addresstoaddress``) to enrich
-each rate with an accurate ``transit_days`` and estimated delivery date, and to
-drop services that PostNord reports as not bookable for the requested
-origin/destination. This is a deliberate relaxation of the connector's
-"rating performs no carrier call" property (decision D9): the transit lookup is
-issued from the proxy and its parsed results are threaded to this parser via the
-``Deserializable.ctx`` channel.
+On top of that price resolution, ``rate()`` can optionally call PostNord's
+Transit Time API (``GET /rest/transport/v2/transittime/addresstoaddress``) to
+enrich each rate with an accurate ``transit_days`` and estimated delivery date,
+and to drop services that PostNord reports as not bookable for the requested
+origin/destination. Enrichment is opt-in via the ``enable_transit_times``
+connection config flag (default off), because PostNord returns 403 "Invalid API
+Key" on the Transit Time API for keys not subscribed to that product. When the
+flag is off, no carrier call is made and rates pass through with their static
+``transit_days`` (decision D9: "rating performs no carrier call"). When enabled,
+the transit lookup is issued from the proxy and its parsed results are threaded
+to this parser via the ``Deserializable.ctx`` channel.
 
 If the transit call is unavailable (network error, non-200, or unparseable
 body), price rating still succeeds: the proxy attaches an empty transit context
@@ -37,11 +40,13 @@ def parse_rate_response(
     _response: lib.Deserializable,
     settings: provider_utils.Settings,
 ) -> typing.Tuple[typing.List[models.RateDetails], typing.List[models.Message]]:
-    """Resolve static prices, then merge PostNord transit-time enrichment.
+    """Resolve static prices, then merge any PostNord transit-time enrichment.
 
     The universal parser produces base ``RateDetails`` (prices) from the static
-    rate sheet. Transit results parsed by the proxy arrive on ``_response.ctx``
-    keyed by ``carrier_service_code`` (PostNord ``basicServiceCode``). For each
+    rate sheet. When transit enrichment is enabled, transit results parsed by
+    the proxy arrive on ``_response.ctx`` keyed by ``carrier_service_code``
+    (PostNord ``basicServiceCode``); when it is disabled the ctx is empty and
+    rates pass through unchanged with their static ``transit_days``. For each
     rate we override ``transit_days`` from the matching transit result, record
     the estimated delivery date in ``meta["estimated_delivery"]``, and drop any
     rate whose matching transit result is ``isBookable == false``. When the
