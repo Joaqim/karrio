@@ -117,6 +117,19 @@ class TestPostNordShipment(unittest.TestCase):
                 lib.to_dict(parsed_response), ParsedPartialFailureResponse
             )
 
+    def test_parse_authorization_error(self):
+        # PostNord's API-gateway 403 envelope must surface a clear authorization
+        # error (the key is not authorized for this product), not a silent
+        # generic failure.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = AuthErrorResponse
+            parsed_response = (
+                karrio.Shipment.create(self.ShipmentRequest).from_(gateway).parse()
+            )
+            self.assertListEqual(
+                lib.to_dict(parsed_response), ParsedAuthErrorResponse
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
@@ -355,6 +368,33 @@ ParsedErrorResponse = [
                 }
             },
         },
+    ],
+]
+
+# PostNord API-gateway / auth error envelope (403 not authorized for the product).
+AuthErrorResponse = """{
+  "error": {
+    "status_code": 403,
+    "error_type": "Forbidden",
+    "message": "Invalid API Key",
+    "xrequestid": "278b9442a7efatapi28363581782383141"
+  }
+}"""
+
+ParsedAuthErrorResponse = [
+    None,
+    [
+        {
+            "carrier_id": "postnord",
+            "carrier_name": "postnord",
+            "code": "Forbidden",
+            "level": "error",
+            "message": (
+                "Invalid API Key: the PostNord API key is not authorized for "
+                "this service/product"
+            ),
+            "details": {"status_code": 403},
+        }
     ],
 ]
 
