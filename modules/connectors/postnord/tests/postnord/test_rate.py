@@ -90,6 +90,24 @@ class TestPostNordRating(unittest.TestCase):
 
         self.assertListEqual(lib.to_dict(parsed_response), EnrichedParsedRateResponse)
 
+    def test_parse_rate_response_ignores_service_variants(self):
+        # Regression: the transit response returns one entry per service variant
+        # (base + additionalService combos). A not-bookable variant (18+Q1) must
+        # NOT clobber the bookable base service (18), which previously dropped all
+        # services except those with a single entry.
+        request = models.RateRequest(**AllServicesRatePayload)
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = VariantTransitResponse
+            rates, messages = (
+                karrio.Rating.fetch(request).from_(gateway_with_transit).parse()
+            )
+
+        offered = [rate.service for rate in rates]
+        self.assertIn("postnord_parcel", offered)
+        self.assertNotIn(
+            "service_not_bookable", [m.code for m in messages]
+        )
+
     def test_parse_rate_response_transit_degraded(self):
         # Opt-in gateway: when the transit call fails, prices are still returned
         # with their static transit_days, no bookability filtering, and exactly
@@ -173,6 +191,37 @@ TransitTimeResponse = lib.to_json(
             },
             "isSupported": True,
             "isBookable": False,
+            "errorMessage": "Service SE-17 is not offered from postal code 17173",
+        },
+    ]
+)
+
+# Variant entries (additionalServices) must NOT clobber the bookable base
+# service: code 18's base entry is bookable, but a later 18+Q1 variant is not.
+# The base service must remain available.
+VariantTransitResponse = lib.to_json(
+    [
+        {
+            "service": {"basicServiceCode": "18", "name": "PostNord Parcel"},
+            "estimatedTimeOfArrival": {
+                "dateOfDeparture": "2024-08-23",
+                "timeOfDeparture": "2024-08-23T19:15:00",
+                "timeOfArrival": "2024-08-24T21:00:00",
+            },
+            "isSupported": True,
+            "isBookable": True,
+        },
+        {
+            "service": {
+                "basicServiceCode": "18",
+                "name": "PostNord Parcel",
+                "additionalServices": [
+                    {"additionalServiceCode": "Q1", "name": "Time agreed delivery"}
+                ],
+            },
+            "isSupported": True,
+            "isBookable": False,
+            "errorMessage": "Service SE-18-Q1 is not offered from postal code 17173",
         },
     ]
 )
@@ -233,7 +282,16 @@ EnrichedParsedRateResponse = [
             },
         }
     ],
-    [],
+    [
+        {
+            "carrier_id": "postnord",
+            "carrier_name": "postnord",
+            "code": "service_not_bookable",
+            "level": "info",
+            "message": "Service SE-17 is not offered from postal code 17173",
+            "details": {"service": "postnord_mypack_home"},
+        }
+    ],
 ]
 
 DegradedParsedRateResponse = [
