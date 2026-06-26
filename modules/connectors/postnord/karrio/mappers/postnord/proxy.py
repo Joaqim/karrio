@@ -192,10 +192,18 @@ def _parse_transit_times(response):
     ``dayRangeOfArrival.daysMaximum`` fallback), and an ``isBookable`` flag.
 
     Returns ``{basicServiceCode: {transit_days, estimated_delivery,
-    is_bookable}}`` on an array body (an empty array yields an empty map, a
-    successful "no transit info" result, not a degrade), or ``None`` to signal
-    degrade when the body is missing, not a list (e.g. an error object), or
-    unparseable.
+    is_bookable, error_message}}`` on an array body (an empty array yields an
+    empty map, a successful "no transit info" result, not a degrade), or
+    ``None`` to signal degrade when the body is missing, not a list (e.g. an
+    error object), or unparseable.
+
+    The response returns one entry per service *variant*: the bare service plus
+    one per additional-service combination (e.g. ``18``, ``18+D6``, ``18+Q1``),
+    and the variants frequently differ in bookability for a given route. The
+    connector's catalog is keyed on the bare ``basicServiceCode`` only, so only
+    the base entry (no ``additionalServices``) is mapped — otherwise a
+    not-bookable variant would clobber a bookable base service and wrongly drop
+    it from the rates.
     """
     if not response:
         return None
@@ -208,7 +216,10 @@ def _parse_transit_times(response):
     for entry in entries:
         if not isinstance(entry, dict):
             continue
-        code = (entry.get("service") or {}).get("basicServiceCode")
+        service = entry.get("service") or {}
+        if service.get("additionalServices"):
+            continue  # variant entry; the catalog only has bare service codes
+        code = service.get("basicServiceCode")
         if not code:
             continue
 
@@ -217,6 +228,7 @@ def _parse_transit_times(response):
             transit_days=_compute_transit_days(eta),
             estimated_delivery=_estimated_delivery(eta),
             is_bookable=entry.get("isBookable"),
+            error_message=entry.get("errorMessage"),
         )
 
     return results
