@@ -76,6 +76,7 @@ def parse_rate_response(
         return rates, messages
 
     enriched: typing.List[models.RateDetails] = []
+    unavailable: typing.List[typing.Tuple[models.RateDetails, dict]] = []
     for rate in rates:
         code = (rate.meta or {}).get("carrier_service_code")
         transit = transit_by_code.get(code) if code is not None else None
@@ -85,6 +86,7 @@ def parse_rate_response(
             continue
 
         if transit.get("is_bookable") is False:
+            unavailable.append((rate, transit))
             continue
 
         transit_days = transit.get("transit_days")
@@ -104,4 +106,22 @@ def parse_rate_response(
             )
         )
 
-    return enriched, messages
+    # Inform why a service was dropped rather than removing it silently:
+    # PostNord reports per-route bookability and usually a reason (e.g. "Service
+    # SE-18-Q1 is not offered from postal code ...").
+    dropped_messages = [
+        models.Message(
+            carrier_id=settings.carrier_id,
+            carrier_name=settings.carrier_name,
+            code="service_not_bookable",
+            level="info",
+            message=lib.identity(
+                transit.get("error_message")
+                or f"{rate.service} is not bookable for this route."
+            ),
+            details=lib.to_dict({"service": rate.service}) or None,
+        )
+        for rate, transit in unavailable
+    ]
+
+    return enriched, [*messages, *dropped_messages]
