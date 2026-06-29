@@ -28,7 +28,7 @@
 
 > **v1.8 revision note:** Two refinements to D11's `isBookable` filtering after live testing with an authorized Transit Time key. (1) The V2 response returns one entry per service *variant* (the bare service plus additional-service combinations, e.g. `18`, `18+D6`, `18+Q1`), and variants differ in per-route bookability; the parser now maps only the **base entry** (no `additionalServices`) per `basicServiceCode`, because the catalog is keyed on bare service codes — previously a not-bookable variant clobbered (last-write-wins) the bookable base service and dropped it, leaving only single-entry services like Return Pickup. (2) When a base service is genuinely not bookable for the route, `rate()` now surfaces an informational `service_not_bookable` message carrying PostNord's reason (e.g. "Service SE-18-Q1 is not offered from postal code …") instead of dropping it silently.
 
----
+> **v1.9 revision note:** The transit degrade message now states the cause and points to the opt-in toggle. The proxy classifies the failure (`transit_degrade_reason`): a 401/403 gateway envelope (key not authorized for the Transit Time product) yields a `transit_time_unauthorized` warning explaining that the key lacks a Transit Time subscription and advising the user to turn off `enable_transit_times` in the connection settings; other failures keep the generic `transit_time_unavailable` warning, also pointing to the opt-in setting. This makes the warning attributable (paired with the dashboard fix that renders `carrier_name:carrier_id` provenance on messages) and actionable when several connections of the same carrier differ in product access.
 
 ## Table of Contents
 
