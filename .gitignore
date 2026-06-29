@@ -115,6 +115,8 @@ venv.bak/
 .direnv
 !.envrc
 /result*
+# we are intentionally not using flake inputs, see ./flake.nix
+/flake.lock
 
 # node
 node_modules

@@ -1,18 +1,35 @@
-{
-  description = "Karrio modules + plugins Python development environment";
+# IMPORTANT: This flake intentionally has ZERO inputs.
+#
+# nixpkgs is imported via fetchTarball in nix/nixpkgs.nix, bypassing the
+# flake input system. This is critical for `nix develop` performance.
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+# DO NOT add flake inputs (nixpkgs, flake-parts, git-hooks, etc.).
+# Instead, use fetchTarball or callPackage in nix/ files.
+{
+  description = "Karrio Python development environment";
 
   outputs =
-    { nixpkgs, ... }:
+    { ... }:
     let
-      inherit (nixpkgs) lib;
-      forAllSystems = lib.genAttrs lib.systems.flakeExposed;
+      systems = [
+        "x86_64-linux"
+        "aarch64-linux"
+        "aarch64-darwin"
+        "x86_64-darwin"
+      ];
+      eachSystem =
+        f:
+        builtins.listToAttrs (
+          map (system: {
+            name = system;
+            value = f (import ./nix/nixpkgs.nix { inherit system; });
+          }) systems
+        );
     in
     {
-      devShells = forAllSystems (system: {
+      devShells = eachSystem (pkgs: {
         default = import ./nix/dev-shell.nix {
-          pkgs = nixpkgs.legacyPackages.${system};
+          inherit pkgs;
         };
       });
     };
