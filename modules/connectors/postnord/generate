@@ -10,6 +10,6 @@ kcli codegen generate "${SCHEMAS}/pickup_request.json" "${LIB_MODULES}/pickup_re
 kcli codegen generate "${SCHEMAS}/pickup_response.json" "${LIB_MODULES}/pickup_response.py"
 kcli codegen generate "${SCHEMAS}/shipment_request.json" "${LIB_MODULES}/shipment_request.py"
 kcli codegen generate "${SCHEMAS}/shipment_response.json" "${LIB_MODULES}/shipment_response.py"
-kcli codegen generate "${SCHEMAS}/tracking_request.json" "${LIB_MODULES}/tracking_request.py"
-kcli codegen generate "${SCHEMAS}/tracking_response.json" "${LIB_MODULES}/tracking_response.py"
+# Tracking (Track & Trace v7) and the transit/service-point GET endpoints are
+# dict-parsed (no generated schema), so no tracking codegen line here.
 
