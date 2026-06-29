@@ -151,14 +151,21 @@ class ServicePointContext(lib.StrEnum):
 
 
 class TrackingStatus(lib.Enum):
-    """Maps carrier tracking status codes to normalized Karrio statuses.
+    """Maps PostNord Track & Trace v7 ``ItemStatus`` values to Karrio statuses.
 
-    The supplied tracking API is link-only (D7) and returns no events, so
-    tracking yields a single neutral status. These mappings are retained for
-    a future Track & Trace v5/v7 events upgrade.
+    The v7 ``findByIdentifier`` response carries an ``ItemStatus`` enum on each
+    item (``status``/``eventStatus``). These 13 values are normalized to
+    ``karrio.core.units.TrackerStatus`` names; unmapped/``OTHER`` values fall
+    back to ``in_transit`` at the call site.
     """
 
-    in_transit = ["IN_TRANSIT"]
+    delivered = ["DELIVERED"]
+    in_transit = ["EN_ROUTE", "INFORMED", "CREATED", "OTHER"]
+    ready_for_pickup = ["AVAILABLE_FOR_DELIVERY", "AVAILABLE_FOR_DELIVERY_PAR_LOC"]
+    delivery_delayed = ["DELAYED", "EXPECTED_DELAY"]
+    delivery_failed = ["DELIVERY_IMPOSSIBLE", "DELIVERY_REFUSED"]
+    return_to_sender = ["RETURNED"]
+    on_hold = ["STOPPED"]
 
 
 # PostNord publishes no live money-rate API; prices are per-merchant contract
