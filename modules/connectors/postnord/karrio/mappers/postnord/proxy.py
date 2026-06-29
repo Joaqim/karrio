@@ -49,8 +49,11 @@ class Proxy(proxy.Proxy):
 
         Returns ``{"transit_results": {basicServiceCode: {transit_days,
         estimated_delivery, is_bookable}}}`` on success, or
-        ``{"transit_results": {}, "transit_degraded": True}`` when the call
-        fails, returns a non-200 body, or cannot be parsed.
+        ``{"transit_results": {}, "transit_degraded": True,
+        "transit_degrade_reason": ...}`` when the call fails, returns a non-200
+        body, or cannot be parsed. ``transit_degrade_reason`` is ``"unauthorized"``
+        when PostNord rejects the key for the Transit Time product (401/403), so
+        the parser can explain the cause and point to the opt-in setting.
         """
         service_codes = ",".join(
             s.carrier_service_code
@@ -76,7 +79,11 @@ class Proxy(proxy.Proxy):
 
         results = _parse_transit_times(response)
         if results is None:
-            return {"transit_results": {}, "transit_degraded": True}
+            return {
+                "transit_results": {},
+                "transit_degraded": True,
+                "transit_degrade_reason": _degrade_reason(response),
+            }
 
         return {"transit_results": results}
 
@@ -232,6 +239,20 @@ def _parse_transit_times(response):
         )
 
     return results
+
+
+def _degrade_reason(response):
+    """Classify why the transit lookup degraded.
+
+    Returns ``"unauthorized"`` when PostNord's API-gateway rejected the key for
+    the Transit Time product (the nested ``{"error": {"status_code": 401|403}}``
+    envelope), else ``None`` for network/unparseable/other failures.
+    """
+    body = lib.failsafe(lambda: lib.to_dict(response))
+    error = body.get("error") if isinstance(body, dict) else None
+    if isinstance(error, dict) and error.get("status_code") in (401, 403):
+        return "unauthorized"
+    return None
 
 
 def _estimated_delivery(eta: dict):
