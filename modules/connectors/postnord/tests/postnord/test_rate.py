@@ -123,6 +123,20 @@ class TestPostNordRating(unittest.TestCase):
             lib.to_dict(parsed_response), DegradedParsedRateResponse
         )
 
+    def test_parse_rate_response_transit_unauthorized(self):
+        # Opt-in gateway: a 403 (key not authorized for Transit Time) degrades
+        # with a message that names the cause and points to the opt-in setting.
+        request = models.RateRequest(**AllServicesRatePayload)
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = AuthTransitResponse
+            parsed_response = (
+                karrio.Rating.fetch(request).from_(gateway_with_transit).parse()
+            )
+
+        self.assertListEqual(
+            lib.to_dict(parsed_response), AuthDegradedParsedRateResponse
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
@@ -347,7 +361,82 @@ DegradedParsedRateResponse = [
             "level": "warning",
             "message": (
                 "PostNord transit-time enrichment was unavailable; rates use "
-                "static transit days and no serviceability filtering."
+                "static transit days and no serviceability filtering. You can "
+                "turn off the 'enable_transit_times' option in the connection "
+                "settings."
+            ),
+        }
+    ],
+]
+
+# Transit auth failure (403 gateway envelope): the degrade message names the
+# cause and points to the opt-in setting.
+AuthTransitResponse = """{
+  "error": {
+    "status_code": 403,
+    "error_type": "Forbidden",
+    "message": "Invalid API Key"
+  }
+}"""
+
+AuthDegradedParsedRateResponse = [
+    [
+        {
+            "carrier_id": "postnord",
+            "carrier_name": "postnord",
+            "currency": "SEK",
+            "service": "postnord_parcel",
+            "total_charge": 89.0,
+            "transit_days": 2,
+            "extra_charges": [
+                {
+                    "amount": 89.0,
+                    "currency": "SEK",
+                    "name": "Base Charge",
+                }
+            ],
+            "meta": {
+                "carrier_service_code": "18",
+                "service_name": "PostNord Parcel",
+                "shipping_charges": 89.0,
+                "shipping_currency": "SEK",
+            },
+        },
+        {
+            "carrier_id": "postnord",
+            "carrier_name": "postnord",
+            "currency": "SEK",
+            "service": "postnord_mypack_home",
+            "total_charge": 99.0,
+            "transit_days": 2,
+            "extra_charges": [
+                {
+                    "amount": 99.0,
+                    "currency": "SEK",
+                    "name": "Base Charge",
+                }
+            ],
+            "meta": {
+                "carrier_service_code": "17",
+                "service_name": "PostNord MyPack Home",
+                "shipping_charges": 99.0,
+                "shipping_currency": "SEK",
+            },
+        },
+    ],
+    [
+        {
+            "carrier_id": "postnord",
+            "carrier_name": "postnord",
+            "code": "transit_time_unauthorized",
+            "level": "warning",
+            "message": (
+                "PostNord transit-time enrichment is unavailable for this "
+                "connection: the API key is not authorized for the Transit Time "
+                "product. Rates use static transit days and no serviceability "
+                "filtering. If this connection's key has no Transit Time "
+                "subscription, turn off the 'enable_transit_times' option in the "
+                "connection settings to remove this notice."
             ),
         }
     ],

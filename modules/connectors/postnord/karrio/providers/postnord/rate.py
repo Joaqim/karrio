@@ -60,17 +60,36 @@ def parse_rate_response(
     degraded: bool = bool(ctx.get("transit_degraded"))
 
     if degraded:
+        unauthorized = ctx.get("transit_degrade_reason") == "unauthorized"
+        message = (
+            (
+                "PostNord transit-time enrichment is unavailable for this "
+                "connection: the API key is not authorized for the Transit Time "
+                "product. Rates use static transit days and no serviceability "
+                "filtering. If this connection's key has no Transit Time "
+                "subscription, turn off the 'enable_transit_times' option in the "
+                "connection settings to remove this notice."
+            )
+            if unauthorized
+            else (
+                "PostNord transit-time enrichment was unavailable; rates use "
+                "static transit days and no serviceability filtering. You can "
+                "turn off the 'enable_transit_times' option in the connection "
+                "settings."
+            )
+        )
         messages = [
             *messages,
             models.Message(
                 carrier_id=settings.carrier_id,
                 carrier_name=settings.carrier_name,
-                code="transit_time_unavailable",
-                level="warning",
-                message=(
-                    "PostNord transit-time enrichment was unavailable; rates use "
-                    "static transit days and no serviceability filtering."
+                code=lib.identity(
+                    "transit_time_unauthorized"
+                    if unauthorized
+                    else "transit_time_unavailable"
                 ),
+                level="warning",
+                message=message,
             ),
         ]
         return rates, messages
