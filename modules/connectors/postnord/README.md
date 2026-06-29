@@ -66,13 +66,13 @@ Connection config options (under the connection's config):
 | Rating | Static rates from the connection's service levels / server-side RateSheet (no carrier call by default). Optionally enriched with live transit times when `enable_transit_times` is on. |
 | Shipment | Booking + PDF label retrieval in one call (`/rest/shipment/v3/edi/labels/pdf`). |
 | Pickup | Courier collection booking (`Pickup.schedule`). |
-| Tracking | Link-only: returns a tracking URL plus a generic status (see limitations). |
+| Tracking | Event-based via Track & Trace v7 (`findByIdentifier`); degrades to link-only (tracking URL + generic status) when the key isn't authorized for the T&T product. |
 | Returns | Booked via the shipment create flow with a return service code. |
 | Service points | Connector-local lookup (`gateway.proxy.find_service_points`). |
 
 ## Limitations
 
-Tracking is link-only: the supplied Track & Trace URL API returns only a tracking URL, so `get_tracking` populates `tracking_url` plus a single generic status and emits no events. An events-based upgrade (Track & Trace v5/v7) is a planned follow-up.
+Tracking uses PostNord Track & Trace v7 (`findByIdentifier`) for full event history and normalized statuses. Per-product authorization applies (as with Transit Time): if the key is not subscribed to the Track & Trace product, tracking degrades gracefully to link-only — a tracking URL plus a single generic status, no events.
 
 Cancellation is not available over the REST API: PostNord's REST `/v3/edi` ignores `updateIndicator: "Deletion"` and re-books a duplicate, and the id-based delete endpoint is absent from the published spec. The connector therefore never cancels and never reports a false success — cancel returns an explicit failure message pending PostNord's v3 REST reference manual.
 

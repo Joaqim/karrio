@@ -5,7 +5,7 @@
 | Project | Karrio |
 | Version | 1.0 |
 | Date | 2026-06-29 |
-| Status | Planning |
+| Status | Implemented (Q1-A) |
 | Owner | PostNord connector |
 | Type | Enhancement |
 | Reference | [PRD_POSTNORD_INTEGRATION.md](./PRD_POSTNORD_INTEGRATION.md) (D7), [conformance-ralph-report.md](../docs/notes/postnord/conformance-ralph-report.md) |
@@ -42,7 +42,7 @@ This PRD scopes that upgrade against the vendored `track-and-trace-v7-findbyrefe
 
 | # | Question | Context | Options | Status |
 |---|----------|---------|---------|--------|
-| Q1 | How do we key the v7 call? | Vendored spec = `GET /v7/trackandtrace/customernumber/{customerNumber}/reference/{reference}/public`. karrio's `get_tracking` receives `tracking_number` (= the allocated **itemId**), not the client **reference**. `customerNumber` is in settings; `reference` is the `shipmentId` we set at booking (`payload.reference`). | A) Obtain the v7 **findByIdentifier/by-itemId** spec from PostNord (natural fit for tracking_number) — **recommended**; B) Track **by reference** (treat the tracking input as the client reference + settings `customer_number`) — works only when users track by their own reference, not our returned itemId; C) Hybrid: try itemId surface, fall back | ⏳ blocking — needs PostNord spec or product decision |
+| Q1 | How do we key the v7 call? | Vendored spec = `GET /v7/trackandtrace/customernumber/{customerNumber}/reference/{reference}/public`. karrio's `get_tracking` receives `tracking_number` (= the allocated **itemId**), not the client **reference**. `customerNumber` is in settings; `reference` is the `shipmentId` we set at booking (`payload.reference`). | A) Obtain the v7 **findByIdentifier/by-itemId** spec from PostNord (natural fit for tracking_number) — **recommended**; B) Track **by reference** (treat the tracking input as the client reference + settings `customer_number`) — works only when users track by their own reference, not our returned itemId; C) Hybrid: try itemId surface, fall back | ✅ Resolved (A): PostNord supplied the v7 `findByIdentifier` spec; `id` accepts the itemId (= `tracking_number`). Implemented. |
 | Q2 | Is Track & Trace v7 a separately-authorized product? | Like Transit Time, the key may 403 on v7. | Live-validate; degrade to link-only on 401/403 | ⏳ live-test |
 | Q3 | Exact `eventStatus` → `TrackerStatus` mapping | 13 PostNord values vs karrio's `TrackerStatus` set | See proposed mapping; confirm names against `karrio.core.units.TrackerStatus` | ⏳ confirm at impl |
 
