@@ -15,7 +15,7 @@ class Settings(provider_utils.Settings, rating_proxy.RatingMixinSettings):
 
     # PostNord uses a single apikey credential (query param) for all operations.
     apikey: str = None
-    issuer_code: str = "Z12"
+    issuer_code: provider_utils.IssuerCode = "Z12"
     customer_number: str = None
     application_id: str = None
 

@@ -3,13 +3,19 @@ import karrio.core as core
 
 
 class IssuerCode(lib.Enum):
-    """PostNord issuer/market codes identifying the entity holding the agreement."""
+    """PostNord issuer/market codes identifying the entity holding the agreement.
+
+    Member name is the Z-code sent to the Booking API; the value is the market
+    name and documents the code (it is not used for the connection dropdown,
+    which lists the member names).
+    """
 
     Z11 = "Denmark"
     Z12 = "Sweden"
     Z13 = "Norway"
     Z14 = "Finland"
-    ZDL = "Direct Link"
+    # ZDL (Direct Link) is a valid PostNord issuer per the Booking spec but is
+    # excluded here because it is absent from the merchant service catalog.
 
 
 class Settings(core.Settings):
@@ -21,7 +27,7 @@ class Settings(core.Settings):
     """
 
     apikey: str
-    issuer_code: str = "Z12"
+    issuer_code: IssuerCode = "Z12"
     customer_number: str = None
     application_id: str = None
 
