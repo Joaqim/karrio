@@ -55,26 +55,57 @@ class PackagingType(lib.StrEnum):
 
 
 class ShippingService(lib.StrEnum):
-    """PostNord basicServiceCode values."""
+    """PostNord basicServiceCode values.
 
+    Reconciled against the authoritative merchant service catalog
+    (issuerCode/service pairs). basicServiceCode is a free-form string in
+    PostNord's Booking API (no closed enum), so these are the products the
+    merchant's PostNord agreement exposes.
+    """
+
+    # Parcel — domestic & Nordic
     postnord_mypack_home = "17"
+    postnord_mypack_home_no = "32"          # Norway variant of MyPack Home
     postnord_parcel = "18"
+    postnord_parcel_special = "57"
     postnord_mypack_collect = "19"
+    postnord_home_small = "11"              # delivery-options labels 11 "mailbox (SE)"
+    postnord_mypack_home_small = "30"
+    postnord_retail_delivery = "59"
+    postnord_foretagspaket_comeback = "51"
+
+    # Returns
     postnord_return_pickup = "20"
+    postnord_return = "24"
+
+    # Express / InNight
+    postnord_innight = "48"
+    postnord_innight_reverse = "49"
+
+    # Pallet & freight
     postnord_pallet = "52"
-    postnord_postpaket_utrikes = "91"
-
-    # Codes 11 and 86 appear as serviceCode values in worked bookingInstructions
-    # example payloads in delivery-options.swagger.json (mailbox, express-mailbox),
-    # the same instructions the Booking API consumes.
-    postnord_mailbox = "11"
-    postnord_express_mailbox = "86"
-
-    # Codes 30 and 83 are documented in the delivery-options DeliveryType narrative
-    # (home-small, groupage) and are not contradicted by the booking spec, which
-    # accepts any basicServiceCode string.
-    postnord_home_small = "30"
+    postnord_pallett_special = "53"
+    postnord_tompallsdistribution = "37"    # delivery-options also uses "37" as an additionalServiceCode
     postnord_groupage = "83"
+    postnord_road_freight_europe = "84"     # Denmark markets this code as "Groupage Small"
+    postnord_part_loads = "85"
+
+    # International parcel
+    postnord_postpaket_utrikes = "91"       # "International Parcel"; Denmark markets as "EMS"
+
+    # Letters & registered mail (bookable on the create path; not on the rate path)
+    postnord_tracked = "04"                 # Denmark "PostNord Tracked" / "Tracked Letters"
+    postnord_tracked_letter = "34"
+    postnord_export_letter = "UX"           # "Export Letter Sweden"
+    postnord_varubrev_first_class = "86"    # delivery-options labels 86 "express-mailbox (SE)"
+    postnord_expressbrev = "LX"
+    postnord_rek = "RR"                     # registered mail
+    postnord_rek_retur = "RK"
+    postnord_rek_extra = "RL"
+    postnord_rekommanderet_brev = "RE"      # Denmark
+    postnord_rekommanderet_quickbrev = "RQ" # Denmark
+    postnord_varde = "VV"                   # insured value
+    postnord_afleveringsattest = "AF"       # Denmark; PackagingType.postnord_half_pallet also uses "AF" (different API field)
 
 
 class ShippingOption(lib.Enum):
@@ -238,5 +269,146 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
         domicile=False,
         international=True,
         zones=[models.ServiceZone(label="International", rate=0.0)],
+    ),
+    # Parcel & freight services (letters/registered mail are enum-only, not rated).
+    models.ServiceLevel(
+        service_name="PostNord Home Small",
+        service_code="postnord_home_small",
+        carrier_service_code="11",
+        currency="SEK",
+        transit_days=2,
+        domicile=True,
+        international=False,
+        zones=[models.ServiceZone(label="Sweden/Norway", rate=0.0, country_codes=["SE", "NO"])],
+    ),
+    models.ServiceLevel(
+        service_name="PostNord Return",
+        service_code="postnord_return",
+        carrier_service_code="24",
+        currency="SEK",
+        transit_days=3,
+        domicile=True,
+        international=False,
+        zones=[models.ServiceZone(label="Nordic", rate=0.0, country_codes=["SE", "NO", "DK", "FI"])],
+    ),
+    models.ServiceLevel(
+        service_name="PostNord MyPack Home Small",
+        service_code="postnord_mypack_home_small",
+        carrier_service_code="30",
+        currency="SEK",
+        transit_days=2,
+        domicile=True,
+        international=False,
+        zones=[models.ServiceZone(label="Nordic", rate=0.0, country_codes=["SE", "NO", "DK"])],
+    ),
+    models.ServiceLevel(
+        service_name="PostNord MyPack Home",
+        service_code="postnord_mypack_home_no",
+        carrier_service_code="32",
+        currency="SEK",
+        transit_days=2,
+        domicile=True,
+        international=False,
+        zones=[models.ServiceZone(label="Norway", rate=0.0, country_codes=["NO"])],
+    ),
+    models.ServiceLevel(
+        service_name="PostNord Tompallsdistribution",
+        service_code="postnord_tompallsdistribution",
+        carrier_service_code="37",
+        currency="SEK",
+        transit_days=3,
+        domicile=True,
+        international=False,
+        zones=[models.ServiceZone(label="Sweden", rate=0.0, country_codes=["SE"])],
+    ),
+    models.ServiceLevel(
+        service_name="PostNord InNight",
+        service_code="postnord_innight",
+        carrier_service_code="48",
+        currency="SEK",
+        transit_days=1,
+        domicile=True,
+        international=False,
+        zones=[models.ServiceZone(label="Nordic", rate=0.0, country_codes=["SE", "NO", "DK", "FI"])],
+    ),
+    models.ServiceLevel(
+        service_name="PostNord InNight Reverse",
+        service_code="postnord_innight_reverse",
+        carrier_service_code="49",
+        currency="SEK",
+        transit_days=1,
+        domicile=True,
+        international=False,
+        zones=[models.ServiceZone(label="Nordic", rate=0.0, country_codes=["SE", "NO", "FI"])],
+    ),
+    models.ServiceLevel(
+        service_name="Företagspaket Comeback",
+        service_code="postnord_foretagspaket_comeback",
+        carrier_service_code="51",
+        currency="SEK",
+        transit_days=3,
+        domicile=True,
+        international=False,
+        zones=[models.ServiceZone(label="Sweden", rate=0.0, country_codes=["SE"])],
+    ),
+    models.ServiceLevel(
+        service_name="PALL.ETT Special",
+        service_code="postnord_pallett_special",
+        carrier_service_code="53",
+        currency="SEK",
+        transit_days=3,
+        domicile=True,
+        international=False,
+        zones=[models.ServiceZone(label="Sweden", rate=0.0, country_codes=["SE"])],
+    ),
+    models.ServiceLevel(
+        service_name="PostNord Parcel Special",
+        service_code="postnord_parcel_special",
+        carrier_service_code="57",
+        currency="SEK",
+        transit_days=2,
+        domicile=True,
+        international=False,
+        zones=[models.ServiceZone(label="Nordic", rate=0.0, country_codes=["SE", "DK", "FI", "NO"])],
+    ),
+    models.ServiceLevel(
+        service_name="Retail Delivery",
+        service_code="postnord_retail_delivery",
+        carrier_service_code="59",
+        currency="SEK",
+        transit_days=2,
+        domicile=True,
+        international=False,
+        zones=[models.ServiceZone(label="Sweden", rate=0.0, country_codes=["SE", "FI", "NO"])],
+    ),
+    models.ServiceLevel(
+        service_name="PostNord Groupage",
+        service_code="postnord_groupage",
+        carrier_service_code="83",
+        currency="SEK",
+        transit_days=3,
+        domicile=True,
+        international=False,
+        zones=[models.ServiceZone(label="Nordic", rate=0.0, country_codes=["SE", "NO", "DK", "FI"])],
+    ),
+    models.ServiceLevel(
+        service_name="Road Freight Europe",
+        service_code="postnord_road_freight_europe",
+        carrier_service_code="84",
+        currency="SEK",
+        transit_days=4,
+        domicile=False,
+        international=True,
+        zones=[models.ServiceZone(label="Europe", rate=0.0)],
+    ),
+    models.ServiceLevel(
+        service_name="PostNord Part Loads",
+        service_code="postnord_part_loads",
+        carrier_service_code="85",
+        currency="SEK",
+        transit_days=4,
+        domicile=False,
+        international=True,
+        zones=[models.ServiceZone(label="Nordic/Europe", rate=0.0, country_codes=["SE", "NO", "DK", "FI", "DE"])],
     ),
 ]
