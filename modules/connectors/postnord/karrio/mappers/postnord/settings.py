@@ -34,7 +34,22 @@ class Settings(provider_utils.Settings, rating_proxy.RatingMixinSettings):
 
     @property
     def shipping_services(self) -> typing.List[models.ServiceLevel]:
-        if any(self.services or []):
-            return self.services
+        services = (
+            self.services
+            if any(self.services or [])
+            else provider_units.DEFAULT_SERVICES
+        )
 
-        return provider_units.DEFAULT_SERVICES
+        # issuer_code may be the IssuerCode enum member or the raw "Z12" string.
+        issuer_code = getattr(self.issuer_code, "name", None) or str(
+            self.issuer_code or ""
+        )
+        connection_config = self.connection_config
+
+        return [
+            service
+            for service in services
+            if provider_units.is_service_available(
+                service.service_code, issuer_code, connection_config
+            )
+        ]
