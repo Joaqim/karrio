@@ -18,7 +18,13 @@ prices are still returned with their static transit days and a warning Message.
 
 import unittest
 from unittest.mock import patch
-from .fixture import gateway, gateway_with_transit
+from .fixture import (
+    gateway,
+    gateway_with_transit,
+    gateway_letters_off,
+    gateway_letters_on,
+    gateway_letters_z11,
+)
 
 import karrio.sdk as karrio
 import karrio.lib as lib
@@ -137,6 +143,41 @@ class TestPostNordRating(unittest.TestCase):
             lib.to_dict(parsed_response), AuthDegradedParsedRateResponse
         )
 
+    def test_letter_services_hidden_by_default(self):
+        # Gated letter products (34, UX) are withheld unless their opt-in toggle
+        # is enabled; only the ungated international parcel service is offered.
+        request = models.RateRequest(**InternationalRatePayload)
+        rates, _ = karrio.Rating.fetch(request).from_(gateway_letters_off).parse()
+
+        offered = {rate.service for rate in rates}
+        self.assertEqual(offered, {"postnord_postpaket_utrikes"})
+
+    def test_letter_services_offered_when_enabled(self):
+        # With both toggles on and the Sweden issuer (Z12), both letter products
+        # join the international parcel service.
+        request = models.RateRequest(**InternationalRatePayload)
+        rates, _ = karrio.Rating.fetch(request).from_(gateway_letters_on).parse()
+
+        offered = {rate.service for rate in rates}
+        self.assertEqual(
+            offered,
+            {
+                "postnord_postpaket_utrikes",
+                "postnord_tracked_letter",
+                "postnord_export_letter",
+            },
+        )
+
+    def test_export_letter_requires_sweden_issuer(self):
+        # Under the Denmark issuer (Z11) the export letter is withheld even with
+        # its toggle on; the tracked letter (no issuer restriction) is offered.
+        request = models.RateRequest(**InternationalRatePayload)
+        rates, _ = karrio.Rating.fetch(request).from_(gateway_letters_z11).parse()
+
+        offered = {rate.service for rate in rates}
+        self.assertIn("postnord_tracked_letter", offered)
+        self.assertNotIn("postnord_export_letter", offered)
+
 
 if __name__ == "__main__":
     unittest.main()
@@ -180,6 +221,23 @@ RatePayload = {
 # Request both catalog services so isBookable filtering is observable.
 AllServicesRatePayload = {
     **RatePayload,
+    "services": [],
+}
+
+# International shipment (SE->DE) requesting all services, used to observe which
+# international-flagged services (including gated letter products) are offered.
+InternationalRatePayload = {
+    **RatePayload,
+    "recipient": {
+        "address_line1": "Friedrichstrasse 43",
+        "city": "Berlin",
+        "postal_code": "10117",
+        "country_code": "DE",
+        "person_name": "Jane Receiver",
+        "company_name": "Receiver GmbH",
+        "phone_number": "+493012345678",
+        "email": "receiver@example.com",
+    },
     "services": [],
 }
 
