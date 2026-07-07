@@ -22,9 +22,9 @@ class TestPostNordShipment(unittest.TestCase):
         self.assertEqual(lib.to_dict(request.serialize()), ShipmentRequest)
 
     def test_create_shipment_request_new_service(self):
-        # postnord_express_mailbox must route to basicServiceCode "86"
+        # postnord_varubrev_first_class must route to basicServiceCode "86"
         # (evidence: delivery-options bookingInstructions worked example).
-        payload = {**ShipmentPayload, "service": "postnord_express_mailbox"}
+        payload = {**ShipmentPayload, "service": "postnord_varubrev_first_class"}
         request = gateway.mapper.create_shipment_request(
             models.ShipmentRequest(**payload)
         )
