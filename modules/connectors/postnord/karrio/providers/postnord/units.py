@@ -19,6 +19,11 @@ class ConnectionConfig(lib.Enum):
     # product; otherwise the call returns 403 "Invalid API Key". Default off.
     enable_transit_times = lib.OptionEnum("enable_transit_times", bool, False)
 
+    # Opt-in toggles for gated letter services (see SERVICE_AVAILABILITY). Off by
+    # default so the rate catalog is unchanged until a merchant enables them.
+    offer_tracked_letter = lib.OptionEnum("offer_tracked_letter", bool, False)
+    offer_export_letter = lib.OptionEnum("offer_export_letter", bool, False)
+
 
 class LabelType(lib.StrEnum):
     """PostNord supported label/printout formats."""
@@ -411,4 +416,83 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
         international=True,
         zones=[models.ServiceZone(label="Nordic/Europe", rate=0.0, country_codes=["SE", "NO", "DK", "FI", "DE"])],
     ),
+    # Letter products — rateable but gated (see SERVICE_AVAILABILITY): hidden
+    # until the merchant opts in, and export letter is scoped to the Sweden
+    # issuer. International, unrestricted zone; rate=0.0 overridden by rate sheet.
+    models.ServiceLevel(
+        service_name="PostNord Tracked Letter",
+        service_code="postnord_tracked_letter",
+        carrier_service_code="34",
+        currency="SEK",
+        transit_days=3,
+        domicile=False,
+        international=True,
+        zones=[models.ServiceZone(label="International", rate=0.0)],
+    ),
+    models.ServiceLevel(
+        service_name="PostNord Export Letter",
+        service_code="postnord_export_letter",
+        carrier_service_code="UX",
+        currency="SEK",
+        transit_days=4,
+        domicile=False,
+        international=True,
+        zones=[models.ServiceZone(label="International", rate=0.0)],
+    ),
 ]
+
+
+class ServiceAvailabilityRule(typing.NamedTuple):
+    """Gating rule applied to a rate-catalog ``service_code``.
+
+    ``allowed_issuer_codes`` restricts the service to connections whose
+    ``issuer_code`` is one of the given Z-codes (``None`` = any issuer).
+    ``required_config`` names a ``ConnectionConfig`` bool option that must be
+    enabled for the service to be offered (``None`` = always offered).
+    """
+
+    allowed_issuer_codes: typing.Optional[typing.FrozenSet[str]] = None
+    required_config: typing.Optional[str] = None
+
+
+# Services absent from this registry are unconditionally offered, preserving the
+# default catalog. Gated entries surface only when their issuer/toggle rule passes.
+SERVICE_AVAILABILITY: typing.Dict[str, ServiceAvailabilityRule] = {
+    "postnord_tracked_letter": ServiceAvailabilityRule(
+        required_config="offer_tracked_letter",
+    ),
+    "postnord_export_letter": ServiceAvailabilityRule(
+        allowed_issuer_codes=frozenset({"Z12"}),
+        required_config="offer_export_letter",
+    ),
+}
+
+
+def is_service_available(
+    service_code: str,
+    issuer_code: str,
+    connection_config: lib.units.Options,
+) -> bool:
+    """Return whether a catalog service is offered for this connection.
+
+    A service not listed in ``SERVICE_AVAILABILITY`` is always available. A gated
+    service is offered only when the connection's ``issuer_code`` is permitted
+    and its required opt-in ``ConnectionConfig`` flag is enabled; a missing flag
+    is treated as disabled (fail closed).
+    """
+    rule = SERVICE_AVAILABILITY.get(service_code)
+    if rule is None:
+        return True
+
+    if (
+        rule.allowed_issuer_codes is not None
+        and issuer_code not in rule.allowed_issuer_codes
+    ):
+        return False
+
+    if rule.required_config is not None:
+        option = getattr(connection_config, rule.required_config, None)
+        if option is None or not option.state:
+            return False
+
+    return True
