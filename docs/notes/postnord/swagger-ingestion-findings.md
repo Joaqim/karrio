@@ -13,7 +13,7 @@ All specs authenticate with a single `apikey` query parameter, consistent with t
 | D7 Tracking events | track-and-trace v7 findByReference | Blocked on correct surface (wrong identifier) | M–L |
 | Rating transit/ETA | transit-time v1/v2 | Actionable (needs D9 sign-off) | M |
 | D6 Service Points | servicepoints v5 | Actionable (product-deferred) | S–M |
-| Service-code enrichment | delivery-options | Actionable low-effort win | S |
+| Service-code enrichment | delivery-options + service_codes.csv | Done — reconciled to units.py (7c24443f) | — |
 | Manifest | assign-items-to-loadcarriers | Not applicable — confirms D10 | — |
 
 ## Confirmed dead ends (ground truth)
@@ -38,10 +38,22 @@ This maps to `RateDetails.transit_days` (compute from departure→arrival, or `d
 The decision hinge is D9's load-bearing "rating performs no carrier call" property: a per-rate call breaks it (adds api-key dependency, latency, a failure mode), so the recommendation is an opt-in enrichment that preserves the static no-call default.
 Open items before implementation: a source for `startTime` (default to now / next business day, or a new option), confirming the Nordic `basicServiceCode` values align with `DEFAULT_SERVICES`, and D9 sign-off.
 
-Service-code enrichment from delivery-options is a low-effort win independent of any endpoint integration.
-The `BookingInstructions` schema documents the service-code vocabulary, which already aligns with the connector's `ShippingService` enum (17 home, 18 parcel-b2b, 19 parcel-locker/service-point, 52 pallet) and adds codes not yet enumerated: 11 (mailbox), 30 (home-small), 86 (express-mailbox), 83 (groupage), additional-service 65.
-These can enrich `units.py` enums after cross-checking against the booking spec (the delivery-options descriptions may lag PostNord's authoritative terms).
-The endpoint itself (`POST /v1/deliveryoptions/bywarehouse`) is a checkout/dashboard-time API returning selectable options with localized text and time windows; full integration needs a checkout/frontend surface that does not exist today, so the immediate value is the code vocabulary, not the call.
+### Service-code catalog — resolved via direct PostNord export
+
+Service-code enrichment is resolved, superseding the tentative delivery-options vocabulary with a catalog exported directly from PostNord.
+The `service_codes.csv` export (a 3,484-line file deduplicating to 32 distinct basic service codes) is the authoritative product catalog for the merchant's PostNord agreement.
+For each code it carries a name, the issuer zones (Denmark, Finland, Norway, Sweden), an `adnlServiceCode` additional-service compatibility matrix, `allowedConsignorCountry`/`allowedConsigneeCountry` deliverability, and a `mandatory` flag.
+No vendored swagger defines a closed enum for `basicServiceCode` — `booking.swagger.json` types it as a free-form string (minLength 1, maxLength 10, example "19") — so this export, not the swagger, is the authority for the service vocabulary.
+
+The export corrects two labels the delivery-options spec supplied tentatively, confirming the earlier caveat that its descriptions may lag PostNord's authoritative terms: code 11 is "PostNord Home Small" (not "mailbox"), and code 86 is "Varubrev 1:a Klass" (not "express-mailbox"); code 30 is "MyPack Home Small".
+Every code, including the letter and registered-mail products, carries real additional-service rows, indicating they are bookable services rather than documentation artifacts.
+Two cross-field code reuses are recorded in `units.py`: the catalog lists 37 as a basic service ("Tompallsdistribution") while delivery-options uses "37" as an `additionalServiceCode` example, and the catalog's letter code "AF" (Afleveringsattest, Denmark) collides by string with `PackagingType.postnord_half_pallet = "AF"`, a `packageTypeCode` on a different API field.
+
+The catalog was reconciled into `units.py`: `ShippingService` expanded from 10 to 32 codes (fixing the guessed 11/86 names and renaming 30 to `postnord_mypack_home_small`), and `DEFAULT_SERVICES` from 6 to 20 parcel/freight service levels with catalog-derived country zones, while letter and registered products remain enum-only (bookable but not rated).
+The connection form's `issuer_code` was reconciled to a Z11–Z14 dropdown sourced from the export's `issuerCode` values.
+Reconciled in commits `7c24443f` (service codes) and `17c20d66` (issuer dropdown).
+
+The delivery-options endpoint itself (`POST /v1/deliveryoptions/bywarehouse`) remains a checkout/dashboard-time API returning selectable options with localized text and time windows; full integration still needs a checkout/frontend surface that does not exist today, so its value was the code vocabulary, now superseded by the direct export.
 
 Service Points (D6) remains the LSP-plugin shape, confirmed.
 `servicepoints v5` offers three lookups — `GET /v5/servicepoints/{nearest/bycoordinates, bypostalcode, nearest/byaddress}` — returning a service-point model (id, name, visiting/delivery address, opening hours, easting/northing coordinates + SRID, `routeDistance`, drop-off/pickup/buy capabilities).
