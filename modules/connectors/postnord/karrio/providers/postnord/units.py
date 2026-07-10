@@ -236,8 +236,8 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
         currency="SEK",
         transit_days=3,
         domicile=True,
-        international=False,
-        zones=[models.ServiceZone(label="Sweden", rate=0.0, country_codes=["SE"])],
+        international=True,
+        zones=[models.ServiceZone(label="Nordic", rate=0.0, country_codes=["SE", "NO", "DK", "FI"])],
     ),
     models.ServiceLevel(
         service_name="PostNord Return Pickup",
@@ -256,7 +256,7 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
         currency="SEK",
         transit_days=3,
         domicile=True,
-        international=False,
+        international=True,
         zones=[
             models.ServiceZone(
                 label="Nordic",
@@ -293,7 +293,7 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
         currency="SEK",
         transit_days=3,
         domicile=True,
-        international=False,
+        international=True,
         zones=[models.ServiceZone(label="Nordic", rate=0.0, country_codes=["SE", "NO", "DK", "FI"])],
     ),
     models.ServiceLevel(
@@ -333,7 +333,7 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
         currency="SEK",
         transit_days=1,
         domicile=True,
-        international=False,
+        international=True,
         zones=[models.ServiceZone(label="Nordic", rate=0.0, country_codes=["SE", "NO", "DK", "FI"])],
     ),
     models.ServiceLevel(
@@ -343,7 +343,7 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
         currency="SEK",
         transit_days=1,
         domicile=True,
-        international=False,
+        international=True,
         zones=[models.ServiceZone(label="Nordic", rate=0.0, country_codes=["SE", "NO", "FI"])],
     ),
     models.ServiceLevel(
@@ -373,7 +373,7 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
         currency="SEK",
         transit_days=2,
         domicile=True,
-        international=False,
+        international=True,
         zones=[models.ServiceZone(label="Nordic", rate=0.0, country_codes=["SE", "DK", "FI", "NO"])],
     ),
     models.ServiceLevel(
@@ -383,7 +383,7 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
         currency="SEK",
         transit_days=2,
         domicile=True,
-        international=False,
+        international=True,
         zones=[models.ServiceZone(label="Sweden", rate=0.0, country_codes=["SE", "FI", "NO"])],
     ),
     models.ServiceLevel(
@@ -393,7 +393,7 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
         currency="SEK",
         transit_days=3,
         domicile=True,
-        international=False,
+        international=True,
         zones=[models.ServiceZone(label="Nordic", rate=0.0, country_codes=["SE", "NO", "DK", "FI"])],
     ),
     models.ServiceLevel(
