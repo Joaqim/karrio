@@ -41,6 +41,14 @@ _settings = dict(
 # Default gateway: transit-time enrichment OFF (no carrier call on rate()).
 gateway = karrio.gateway["postnord"].create(dict(_settings))
 
+# Full-catalog gateway: an empty ``services`` list makes ``shipping_services``
+# fall back to the connector's ``DEFAULT_SERVICES`` catalog, so cross-border
+# Nordic services (e.g. MyPack Collect) are resolved from the static catalog
+# rather than the two SE-only services the default gateway pins.
+gateway_default_catalog = karrio.gateway["postnord"].create(
+    dict(_settings, services=[])
+)
+
 # Opt-in gateway: transit-time enrichment ON via connection config.
 gateway_with_transit = karrio.gateway["postnord"].create(
     dict(_settings, config=dict(enable_transit_times=True))

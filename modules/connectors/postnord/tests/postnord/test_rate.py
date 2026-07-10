@@ -20,6 +20,7 @@ import unittest
 from unittest.mock import patch
 from .fixture import (
     gateway,
+    gateway_default_catalog,
     gateway_with_transit,
     gateway_letters_off,
     gateway_letters_on,
@@ -63,6 +64,20 @@ class TestPostNordRating(unittest.TestCase):
         parsed_response = karrio.Rating.fetch(request).from_(gateway).parse()
 
         self.assertListEqual(lib.to_dict(parsed_response), NoZoneParsedRateResponse)
+
+    def test_parse_rate_response_mypack_collect_cross_border(self):
+        # Regression: MyPack Collect (carrier code 19) is a Nordic cross-border
+        # service, so a SE->FI request must be covered. The full DEFAULT_SERVICES
+        # catalog is exercised via the empty-services gateway; a rate is returned
+        # and no destination_not_supported message is surfaced.
+        request = models.RateRequest(**MyPackCollectCrossBorderPayload)
+        rates, messages = (
+            karrio.Rating.fetch(request).from_(gateway_default_catalog).parse()
+        )
+
+        offered = [rate.service for rate in rates]
+        self.assertIn("postnord_mypack_collect", offered)
+        self.assertNotIn("destination_not_supported", [m.code for m in messages])
 
     def test_get_rates_issues_transit_call(self):
         # Opt-in gateway: rate() calls the Transit Time V2 API once per request.
@@ -513,6 +528,24 @@ NoZoneRatePayload = {
         "email": "receiver@example.com",
     },
     "services": [],
+}
+
+# Nordic cross-border shipment (SE->FI) explicitly requesting MyPack Collect.
+# Kemi is a Finnish city; the recipient country_code FI must match the service's
+# Nordic zone once the catalog models MyPack Collect as international.
+MyPackCollectCrossBorderPayload = {
+    **RatePayload,
+    "recipient": {
+        "address_line1": "Valtakatu 1",
+        "city": "Kemi",
+        "postal_code": "94100",
+        "country_code": "FI",
+        "person_name": "Jane Receiver",
+        "company_name": "Receiver Oy",
+        "phone_number": "+358401234567",
+        "email": "receiver@example.com",
+    },
+    "services": ["postnord_mypack_collect"],
 }
 
 NoZoneParsedRateResponse = [
