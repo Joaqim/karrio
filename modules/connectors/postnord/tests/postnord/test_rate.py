@@ -79,6 +79,22 @@ class TestPostNordRating(unittest.TestCase):
         self.assertIn("postnord_mypack_collect", offered)
         self.assertNotIn("destination_not_supported", [m.code for m in messages])
 
+    def test_parse_rate_response_home_services_cross_border(self):
+        # Regression: Home Small (11), MyPack Home Small (30), and MyPack Home
+        # (Norway, 32) carry Nordic zones, so a SE->NO request must be covered.
+        # All three resolve from DEFAULT_SERVICES via the empty-services gateway
+        # and no destination_not_supported message is surfaced.
+        request = models.RateRequest(**HomeServicesCrossBorderPayload)
+        rates, messages = (
+            karrio.Rating.fetch(request).from_(gateway_default_catalog).parse()
+        )
+
+        offered = [rate.service for rate in rates]
+        self.assertIn("postnord_home_small", offered)
+        self.assertIn("postnord_mypack_home_small", offered)
+        self.assertIn("postnord_mypack_home_no", offered)
+        self.assertNotIn("destination_not_supported", [m.code for m in messages])
+
     def test_get_rates_issues_transit_call(self):
         # Opt-in gateway: rate() calls the Transit Time V2 API once per request.
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
@@ -546,6 +562,28 @@ MyPackCollectCrossBorderPayload = {
         "email": "receiver@example.com",
     },
     "services": ["postnord_mypack_collect"],
+}
+
+# Nordic cross-border shipment (SE->NO) requesting the three home/mypack-home
+# services whose Nordic zones were latently unreachable while the catalog
+# modeled them as domestic-only.
+HomeServicesCrossBorderPayload = {
+    **RatePayload,
+    "recipient": {
+        "address_line1": "Karl Johans gate 1",
+        "city": "Oslo",
+        "postal_code": "0150",
+        "country_code": "NO",
+        "person_name": "Jane Receiver",
+        "company_name": "Receiver AS",
+        "phone_number": "+4721234567",
+        "email": "receiver@example.com",
+    },
+    "services": [
+        "postnord_home_small",
+        "postnord_mypack_home_small",
+        "postnord_mypack_home_no",
+    ],
 }
 
 NoZoneParsedRateResponse = [
