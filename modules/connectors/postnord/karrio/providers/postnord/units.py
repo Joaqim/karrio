@@ -4,11 +4,46 @@ import karrio.core.units as units
 import karrio.core.models as models
 
 
+class LabelType(lib.StrEnum):
+    """PostNord label file formats.
+
+    PostNord selects the file format by *endpoint path* (``/labels/pdf`` vs
+    ``/labels/zpl``), not by a body/query field, so this enum resolves the
+    unified ``payload.label_type`` to the value threaded through
+    ``Serializable.ctx`` to the proxy.
+    """
+
+    PDF = "PDF"
+    ZPL = "ZPL"
+
+    """ Unified label type mapping """
+    PDF_4x6 = PDF
+    ZPL_4x6 = ZPL
+
+
+class LabelSize(lib.StrEnum):
+    """PostNord physical label-size tokens (the ``labelType`` query parameter).
+
+    ``standard`` (190×105mm) and ``small`` (75×105mm) apply to both endpoints;
+    ``ste`` (190×105mm, special alignment) is PDF-only and ignored/defaulted on
+    the ZPL endpoint. An unset size sends no ``labelType`` and PostNord defaults
+    to ``standard``.
+    """
+
+    standard = "standard"
+    small = "small"
+    ste = "ste"
+
+
 class ConnectionConfig(lib.Enum):
     """PostNord connection configuration options."""
 
-    label_type = lib.OptionEnum("label_type", str, "PDF")
-    label_format = lib.OptionEnum("label_format", str, "A4")
+    # Per-connection default label file format (PDF/ZPL); overridden per request
+    # by payload.label_type. Selected by endpoint path in the proxy.
+    label_type = lib.OptionEnum("label_type", LabelType, "PDF")
+    # PostNord physical label size, sent as the labelType query parameter.
+    # Unset -> no labelType param -> PostNord defaults to standard.
+    label_size = lib.OptionEnum("label_size", LabelSize)
 
     shipping_options = lib.OptionEnum("shipping_options", list)
     shipping_services = lib.OptionEnum("shipping_services", list)
@@ -23,17 +58,6 @@ class ConnectionConfig(lib.Enum):
     # default so the rate catalog is unchanged until a merchant enables them.
     offer_tracked_letter = lib.OptionEnum("offer_tracked_letter", bool, False)
     offer_export_letter = lib.OptionEnum("offer_export_letter", bool, False)
-
-
-class LabelType(lib.StrEnum):
-    """PostNord supported label/printout formats."""
-
-    PDF = "PDF"
-    ZPL = "ZPL"
-
-    """ Unified label type mapping """
-    PDF_4x6 = PDF
-    ZPL_4x6 = ZPL
 
 
 class PackagingType(lib.StrEnum):

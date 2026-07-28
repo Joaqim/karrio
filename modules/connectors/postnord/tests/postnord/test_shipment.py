@@ -2,7 +2,7 @@
 
 import unittest
 from unittest.mock import patch, ANY
-from .fixture import gateway
+from .fixture import gateway, gateway_small_label, gateway_zpl_label
 
 import karrio.sdk as karrio
 import karrio.lib as lib
@@ -129,6 +129,61 @@ class TestPostNordShipment(unittest.TestCase):
             self.assertListEqual(
                 lib.to_dict(parsed_response), ParsedAuthErrorResponse
             )
+
+
+class TestPostNordLabel(unittest.TestCase):
+    def setUp(self):
+        self.maxDiff = None
+
+    def test_create_shipment_zpl_routes_zpl_endpoint(self):
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = "{}"
+            payload = {**ShipmentPayload, "label_type": "ZPL"}
+            karrio.Shipment.create(models.ShipmentRequest(**payload)).from_(gateway)
+            self.assertIn(
+                "/rest/shipment/v3/edi/labels/zpl", mock.call_args[1]["url"]
+            )
+
+    def test_create_shipment_config_label_type_routes_zpl_endpoint(self):
+        # Connection-config label_type=ZPL with payload label_type unset resolves
+        # the format from the connection default and routes to the ZPL endpoint
+        # via the threaded ctx.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = "{}"
+            karrio.Shipment.create(
+                models.ShipmentRequest(**ShipmentPayload)
+            ).from_(gateway_zpl_label)
+            self.assertIn(
+                "/rest/shipment/v3/edi/labels/zpl", mock.call_args[1]["url"]
+            )
+
+    def test_create_shipment_defaults_pdf_endpoint(self):
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = "{}"
+            karrio.Shipment.create(
+                models.ShipmentRequest(**ShipmentPayload)
+            ).from_(gateway)
+            self.assertIn(
+                "/rest/shipment/v3/edi/labels/pdf", mock.call_args[1]["url"]
+            )
+
+    def test_create_shipment_label_size_query(self):
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = "{}"
+            karrio.Shipment.create(
+                models.ShipmentRequest(**ShipmentPayload)
+            ).from_(gateway_small_label)
+            self.assertIn("labelType=small", mock.call_args[1]["url"])
+
+    def test_create_shipment_default_label_size_absent(self):
+        # Unset label_size sends no labelType override (PostNord defaults to
+        # standard); _url drops the None value.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = "{}"
+            karrio.Shipment.create(
+                models.ShipmentRequest(**ShipmentPayload)
+            ).from_(gateway)
+            self.assertNotIn("labelType", mock.call_args[1]["url"])
 
 
 if __name__ == "__main__":
