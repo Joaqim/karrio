@@ -55,8 +55,8 @@ Connection config options (under the connection's config):
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `label_type` | `PDF` | Label document type |
-| `label_format` | `A4` | Label page format |
+| `label_type` | `PDF` | Per-connection default label file format (`PDF` or `ZPL`), overridden per request by the shipment `label_type`. PostNord selects the format by endpoint path (`/labels/pdf` vs `/labels/zpl`). |
+| `label_size` | — (unset) | PostNord physical label size, sent as the `labelType` query parameter: `standard` (190×105mm), `small` (75×105mm), or `ste` (PDF-only). Unset omits the parameter and PostNord defaults to `standard`. |
 | `enable_transit_times` | `false` | Opt-in: call the Transit Time API to enrich `transit_days`/estimated delivery and filter by serviceability. Requires the key to be subscribed to the Transit Time product. |
 
 ## Supported operations
