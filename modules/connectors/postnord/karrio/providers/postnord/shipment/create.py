@@ -106,6 +106,15 @@ def shipment_request(
     recipient = lib.to_address(payload.recipient)
     packages = lib.to_packages(payload.parcels)
     service = provider_units.ShippingService.map(payload.service).value_or_key
+
+    # File format is selected by endpoint path in the proxy; resolve
+    # payload.label_type -> connection default -> PDF and thread it via ctx.
+    label_type = lib.identity(
+        provider_units.LabelType.map(
+            payload.label_type or settings.connection_config.label_type.state
+        ).value
+        or provider_units.LabelType.PDF.value
+    )
     options = lib.to_shipping_options(
         payload.options,
         package_options=packages.options,
@@ -220,4 +229,6 @@ def shipment_request(
         ],
     )
 
-    return lib.Serializable(request, lib.to_dict, dict(shipment_id=shipment_id))
+    return lib.Serializable(
+        request, lib.to_dict, dict(shipment_id=shipment_id, label_type=label_type)
+    )
