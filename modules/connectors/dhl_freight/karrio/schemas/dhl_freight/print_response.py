@@ -7,6 +7,7 @@ import typing
 class ReportType:
     name: typing.Optional[str] = None
     content: typing.Optional[str] = None
+    contentType: typing.Optional[str] = None
     type: typing.Optional[str] = None
     valid: typing.Optional[bool] = None
 

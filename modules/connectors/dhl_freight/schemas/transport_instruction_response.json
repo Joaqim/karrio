@@ -1,7 +1,19 @@
 {
-  "shipment": {
+  "status": "OK",
+  "transportInstruction": {
     "id": "70123456789012345",
     "productCode": "212",
+    "shippingDate": "2026-08-12",
+    "pickupDate": "2026-08-12",
+    "requestedDeliveryDate": "2026-08-14",
+    "plannedDeliveryDate": "2026-08-14",
+    "totalNumberOfPieces": 1,
+    "totalWeight": 380.0,
+    "totalVolume": 0.864,
+    "routingCode": "SE-GOT-01",
+    "references": [
+      { "qualifier": "CNR", "value": "REF123" }
+    ],
     "payerCode": { "code": "DAP", "location": "" },
     "parties": [
       {
@@ -29,27 +41,16 @@
     "pieces": [
       {
         "id": ["003700000000000123"],
+        "goodsType": "Machinery Parts",
+        "packageType": "PAL",
         "numberOfPieces": 1,
-        "weight": 380.0
+        "weight": 380.0,
+        "volume": 0.864,
+        "width": 80.0,
+        "height": 90.0,
+        "length": 120.0,
+        "stackable": true
       }
     ]
-  },
-  "options": {
-    "label": true,
-    "waybill": false,
-    "returnLabel": false,
-    "guarantee": false,
-    "shipmentList": false,
-    "shipmentListType": "Consignee",
-    "qrCode": false,
-    "licensePlateBarCode": "GS1",
-    "itemStartSequence": 1,
-    "pageOptions": {
-      "pageType": "Label",
-      "marginLeft": 0,
-      "marginTop": 0,
-      "padding": 0,
-      "paddingTop": 0
-    }
   }
 }
