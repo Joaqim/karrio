@@ -1,0 +1,306 @@
+{
+  "openapi": "3.0.4",
+  "info": {
+    "title": "HomeDeliveryLocator API",
+    "version": "2.10.0"
+  },
+  "servers": [
+    {
+      "url": "https://test-api.freight-logistics.dhl.com/homedeliverylocatorapi/v1/"
+    }
+  ],
+  "paths": {
+    "/homedeliverylocator/getadditionalservices": {
+      "post": {
+        "tags": [
+          "HomeDeliveryLocator"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdditionalServicesRequest"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdditionalServicesRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdditionalServicesRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdditionalServicesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "GetAdditionalServices response",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdditionalServicesReply"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdditionalServicesReply"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdditionalServicesReply"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/homedeliverylocator/validateadditionalservices": {
+      "post": {
+        "tags": [
+          "HomeDeliveryLocator"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdditionalServicesValidationRequest"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdditionalServicesValidationRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdditionalServicesValidationRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdditionalServicesValidationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "AdditionalServicesValidation response",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdditionalServicesValidationReply"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdditionalServicesValidationReply"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdditionalServicesValidationReply"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/homedeliverylocator/ping": {
+      "get": {
+        "tags": [
+          "HomeDeliveryLocator"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AdditionalServicesReply": {
+        "type": "object",
+        "properties": {
+          "replyStatus": {
+            "$ref": "#/components/schemas/ReplyStatusType"
+          },
+          "replyStatusDescription": {
+            "type": "string"
+          },
+          "customerName": {
+            "type": "string"
+          },
+          "replyText": {
+            "type": "string"
+          },
+          "replyTextAdditional": {
+            "type": "string"
+          },
+          "additionalServices": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "AdditionalServicesRequest": {
+        "type": "object",
+        "properties": {
+          "agreementNo": {
+            "type": "string"
+          },
+          "postalCode": {
+            "type": "string"
+          },
+          "cityName": {
+            "type": "string"
+          },
+          "deliveryType": {
+            "$ref": "#/components/schemas/DeliveryType"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AdditionalServicesValidationReply": {
+        "type": "object",
+        "properties": {
+          "customerName": {
+            "type": "string"
+          },
+          "replyStatus": {
+            "$ref": "#/components/schemas/ReplyStatusType"
+          },
+          "replyStatusDescription": {
+            "type": "string"
+          },
+          "replyText": {
+            "type": "string"
+          },
+          "replyTextAdditional": {
+            "type": "string"
+          },
+          "productCode": {
+            "type": "string"
+          },
+          "party": {
+            "$ref": "#/components/schemas/Party"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AdditionalServicesValidationRequest": {
+        "type": "object",
+        "properties": {
+          "agreementNo": {
+            "type": "string"
+          },
+          "postalCode": {
+            "type": "string"
+          },
+          "cityName": {
+            "type": "string"
+          },
+          "deliveryType": {
+            "$ref": "#/components/schemas/DeliveryType"
+          },
+          "additionalServices": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryType": {
+        "enum": [
+          "Delivery",
+          "Return"
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "Party": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "address1": {
+            "type": "string"
+          },
+          "address2": {
+            "type": "string"
+          },
+          "countryCode": {
+            "type": "string"
+          },
+          "postalCode": {
+            "type": "string"
+          },
+          "cityName": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReplyStatusType": {
+        "enum": [
+          "Ok",
+          "NoDataFound",
+          "CustomerError",
+          "PostcodeError",
+          "ServiceCombError",
+          "ParameterError",
+          "Unknown"
+        ],
+        "type": "integer",
+        "format": "int32"
+      }
+    },
+    "securitySchemes": {
+      "Client key": {
+        "type": "apiKey",
+        "description": "Please insert your client key",
+        "name": "client-key",
+        "in": "header"
+      }
+    }
+  },
+  "security": [
+    {
+      "Client key": [
+        "client-key"
+      ]
+    }
+  ],
+  "tags": [
+    {
+      "name": "HomeDeliveryLocator"
+    }
+  ]
+}

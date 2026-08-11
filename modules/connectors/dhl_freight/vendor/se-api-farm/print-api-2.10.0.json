@@ -1,0 +1,1527 @@
+{
+  "openapi": "3.0.4",
+  "info": {
+    "title": "Print API",
+    "version": "2.10.0"
+  },
+  "servers": [
+    {
+      "url": "https://test-api.freight-logistics.dhl.com/printapi/v1/"
+    }
+  ],
+  "paths": {
+    "/print/ping": {
+      "get": {
+        "tags": [
+          "Print"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/print/printdocuments": {
+      "post": {
+        "tags": [
+          "Print"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrintOptions"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrintOptions"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrintOptions"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrintOptions"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "List of reports with name and content as Base64",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrintResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrintResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrintResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/print/printmultipledocuments": {
+      "post": {
+        "tags": [
+          "Print"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrintOptionsMultiple"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrintOptionsMultiple"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrintOptionsMultiple"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrintOptionsMultiple"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "List of reports with name and content as Base64",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrintResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrintResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrintResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/print/printdocumentsbyid": {
+      "post": {
+        "tags": [
+          "Print"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrintOptionsById"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrintOptionsById"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrintOptionsById"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrintOptionsById"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "List of reports with name and content as Base64",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrintResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrintResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrintResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AdditionalInformation": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "stringValue": {
+            "type": "string"
+          },
+          "dateValue": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "numericValue": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AdditionalServicesDTO": {
+        "type": "object",
+        "properties": {
+          "bookIn": {
+            "type": "boolean"
+          },
+          "carryingHelpPickup": {
+            "type": "boolean"
+          },
+          "carryingHelpToRoomOfChoice": {
+            "type": "boolean"
+          },
+          "cashOnDelivery": {
+            "$ref": "#/components/schemas/CashOnDeliveryOptions"
+          },
+          "collectionAtTerminal": {
+            "type": "boolean"
+          },
+          "customsCustomersOwnDeclaration": {
+            "$ref": "#/components/schemas/CustomsCustomersOwnDeclarationOptions"
+          },
+          "customsHandlingFullService": {
+            "type": "boolean"
+          },
+          "customsHandlingStandard": {
+            "type": "boolean"
+          },
+          "customsJointDeclaration": {
+            "$ref": "#/components/schemas/CustomsJointDeclarationOptions"
+          },
+          "dangerousGoods": {
+            "type": "boolean"
+          },
+          "dangerousGoodsDomestic": {
+            "type": "boolean"
+          },
+          "dangerousGoodsLimitedQuantity": {
+            "type": "boolean"
+          },
+          "deliveryAtConstructionSite": {
+            "type": "boolean"
+          },
+          "deliveryMonitoringArrivedAtDhlTerminal": {
+            "$ref": "#/components/schemas/DeliveryMonitoringOptions"
+          },
+          "deliveryMonitoringCollectedByReciever": {
+            "$ref": "#/components/schemas/DeliveryMonitoringOptions"
+          },
+          "deliveryMonitoringDelivered": {
+            "$ref": "#/components/schemas/DeliveryMonitoringOptions"
+          },
+          "deliveryMonitoringNotCollectedByReciever": {
+            "$ref": "#/components/schemas/DeliveryMonitoringOptions"
+          },
+          "deliveryMonitoringOutForDelivery": {
+            "$ref": "#/components/schemas/DeliveryMonitoringOptions"
+          },
+          "deliveryMonitoringPickup": {
+            "$ref": "#/components/schemas/DeliveryMonitoringOptions"
+          },
+          "deliveryWithIdControl": {
+            "type": "boolean"
+          },
+          "deliveryWithoutIdControl": {
+            "type": "boolean"
+          },
+          "deliveryWithoutProofOfDelivery": {
+            "type": "boolean"
+          },
+          "doorstepDelivery": {
+            "$ref": "#/components/schemas/DoorstepDeliveryOptions"
+          },
+          "emptyPalletPickup": {
+            "type": "boolean"
+          },
+          "eurPalletExchange": {
+            "$ref": "#/components/schemas/EURPalletExchangeOptions"
+          },
+          "eveningDeliveryZoneA": {
+            "type": "boolean"
+          },
+          "eveningDeliveryZoneB": {
+            "type": "boolean"
+          },
+          "eveningDeliveryZoneC": {
+            "type": "boolean"
+          },
+          "eveningDeliveryZoneD": {
+            "type": "boolean"
+          },
+          "eveningDeliveryZoneE": {
+            "type": "boolean"
+          },
+          "freightSubsidy": {
+            "$ref": "#/components/schemas/FreightSubsidyOptions"
+          },
+          "greenFreight": {
+            "type": "boolean"
+          },
+          "hardcopyProofOfDelivery": {
+            "$ref": "#/components/schemas/HardcopyProofOfDeliveryOptions"
+          },
+          "indoorDelivery": {
+            "type": "boolean"
+          },
+          "installation": {
+            "$ref": "#/components/schemas/InstallationOptions"
+          },
+          "installationAdvanced": {
+            "$ref": "#/components/schemas/InstallationAdvancedOptions"
+          },
+          "insurance": {
+            "$ref": "#/components/schemas/InsuranceOptions"
+          },
+          "highValueShipment": {
+            "$ref": "#/components/schemas/HighValueShipmentOptions"
+          },
+          "m20": {
+            "$ref": "#/components/schemas/M20Options"
+          },
+          "m40": {
+            "$ref": "#/components/schemas/M40Options"
+          },
+          "m60": {
+            "$ref": "#/components/schemas/M60Options"
+          },
+          "nonStackable": {
+            "type": "boolean"
+          },
+          "notification": {
+            "type": "boolean"
+          },
+          "notificationECE": {
+            "type": "boolean"
+          },
+          "notificationByLetter": {
+            "type": "boolean"
+          },
+          "onlineAppointmentBooking": {
+            "$ref": "#/components/schemas/OnlineAppointmentBookingOptions"
+          },
+          "packagingRemoval": {
+            "type": "boolean"
+          },
+          "preAdvice": {
+            "type": "boolean"
+          },
+          "preAdviceByDriver": {
+            "$ref": "#/components/schemas/PreAdviceByDriverOptions"
+          },
+          "driverPreAdviceDelivery": {
+            "type": "boolean"
+          },
+          "preAdviceNorway": {
+            "type": "boolean"
+          },
+          "priorityServiceG7": {
+            "type": "boolean"
+          },
+          "priorityServiceG10": {
+            "type": "boolean"
+          },
+          "priorityServiceG12": {
+            "type": "boolean"
+          },
+          "removalOfReplacedGoods": {
+            "$ref": "#/components/schemas/RemovalOfReplacedGoodsOptions"
+          },
+          "sortAndQuantity": {
+            "$ref": "#/components/schemas/SortAndQuantityOptions"
+          },
+          "tailLiftLoading": {
+            "type": "boolean"
+          },
+          "tailLiftUnloading": {
+            "type": "boolean"
+          },
+          "thermoCold": {
+            "$ref": "#/components/schemas/ThermoColdOptions"
+          },
+          "thermoFreeze": {
+            "$ref": "#/components/schemas/ThermoFreezeOptions"
+          },
+          "thermoWarm": {
+            "$ref": "#/components/schemas/ThermoWarmOptions"
+          },
+          "timeDefiniteLoading": {
+            "$ref": "#/components/schemas/TimeDefiniteLoadingOptions"
+          },
+          "timeDefiniteUnloading": {
+            "$ref": "#/components/schemas/TimeDefiniteUnloadingOptions"
+          },
+          "truck": {
+            "type": "boolean"
+          },
+          "twoManHandling": {
+            "type": "boolean"
+          },
+          "voecSupplyVAT": {
+            "$ref": "#/components/schemas/VoecSupplyVATOptions"
+          },
+          "weekendDelivery": {
+            "type": "boolean"
+          },
+          "fixedDeliveryDate": {
+            "$ref": "#/components/schemas/FixedDeliveryDateOptions"
+          },
+          "climateNeutral": {
+            "type": "boolean"
+          },
+          "bookInWithInfo": {
+            "$ref": "#/components/schemas/BookInWithInfoOptions"
+          },
+          "priorityServiceP10": {
+            "type": "boolean"
+          },
+          "priorityServiceP12": {
+            "type": "boolean"
+          },
+          "dropOffByConsignor": {
+            "type": "boolean"
+          },
+          "personalDelivery": {
+            "type": "boolean"
+          },
+          "preAdvicePickup": {
+            "type": "boolean"
+          },
+          "after12Delivery": {
+            "type": "boolean"
+          },
+          "timeSlotBookingPickup": {
+            "type": "boolean"
+          },
+          "timeSlotBookingDelivery": {
+            "type": "boolean"
+          },
+          "availablePickupTime": {
+            "$ref": "#/components/schemas/AvailablePickupTimeOptions"
+          },
+          "availableDeliveryTime": {
+            "$ref": "#/components/schemas/AvailableDeliveryTimeOptions"
+          },
+          "sideLoadingPickup": {
+            "type": "boolean"
+          },
+          "sideUnloadingDelivery": {
+            "type": "boolean"
+          },
+          "preAdviceByDriverPickup": {
+            "$ref": "#/components/schemas/PreAdviceByDriverPickupOptions"
+          },
+          "temperatureControlled": {
+            "$ref": "#/components/schemas/TemperatureControlledOptions"
+          },
+          "indoorDeliverySpecial": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Address": {
+        "type": "object",
+        "properties": {
+          "street": {
+            "type": "string"
+          },
+          "streetNumber": {
+            "type": "string"
+          },
+          "additionalAddressInfo": {
+            "type": "string"
+          },
+          "cityName": {
+            "type": "string"
+          },
+          "postalCode": {
+            "type": "string"
+          },
+          "countryCode": {
+            "type": "string"
+          },
+          "accessCode": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AvailableDeliveryTimeOptions": {
+        "required": [
+          "fromTime",
+          "toTime"
+        ],
+        "type": "object",
+        "properties": {
+          "fromTime": {
+            "minLength": 1,
+            "pattern": "^(?:[01]?\\d|2[0-3])(?::[0-5]\\d){1,2}$",
+            "type": "string"
+          },
+          "toTime": {
+            "minLength": 1,
+            "pattern": "^(?:[01]?\\d|2[0-3])(?::[0-5]\\d){1,2}$",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AvailablePickupTimeOptions": {
+        "required": [
+          "fromTime",
+          "toTime"
+        ],
+        "type": "object",
+        "properties": {
+          "fromTime": {
+            "minLength": 1,
+            "pattern": "^(?:[01]?\\d|2[0-3])(?::[0-5]\\d){1,2}$",
+            "type": "string"
+          },
+          "toTime": {
+            "minLength": 1,
+            "pattern": "^(?:[01]?\\d|2[0-3])(?::[0-5]\\d){1,2}$",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "BookInWithInfoOptions": {
+        "type": "object",
+        "properties": {
+          "contactDetails": {
+            "type": "string"
+          },
+          "contactDetailsType": {
+            "$ref": "#/components/schemas/ContactDetailsType"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CashOnDeliveryOptions": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "bankGiroNumber": {
+            "type": "string"
+          },
+          "plusGiroNumber": {
+            "type": "string"
+          },
+          "reference": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ContactDetailsType": {
+        "enum": [
+          "email",
+          "phonenumber",
+          "externalSystem",
+          "timeWindow",
+          "other"
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "CustomsCommodity": {
+        "type": "object",
+        "properties": {
+          "countryCodeOfOrigin": {
+            "type": "string"
+          },
+          "customsValueCurrency": {
+            "type": "string"
+          },
+          "customsValue": {
+            "type": "number",
+            "format": "double"
+          },
+          "hsItemId": {
+            "type": "string"
+          },
+          "commodityDescription": {
+            "type": "string"
+          },
+          "procedureCode": {
+            "type": "string"
+          },
+          "customsClearanceInstruction": {
+            "type": "string"
+          },
+          "netWeight": {
+            "type": "number",
+            "format": "double"
+          },
+          "numberOfUnits": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "additionalInformation": {
+            "type": "string"
+          },
+          "customsDeclarationNumberABT": {
+            "type": "string"
+          },
+          "certificateOfOrigin": {
+            "type": "string"
+          },
+          "certificateOfOriginFormGSP": {
+            "type": "string"
+          },
+          "importLicence": {
+            "type": "string"
+          },
+          "goodsDescription": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomsCustomersOwnDeclarationOptions": {
+        "type": "object",
+        "properties": {
+          "customsId": {
+            "type": "string"
+          },
+          "customsClearanceInstruction": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomsDocument": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/CustomsDocumentTypeEnum"
+          },
+          "transportMovement": {
+            "$ref": "#/components/schemas/TransportMovementEnum"
+          },
+          "invoiceDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "invoiceCurrency": {
+            "type": "string"
+          },
+          "invoiceAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "eori": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomsDocumentTypeEnum": {
+        "enum": [
+          "CommercialInvoice",
+          "ProformaInvoice",
+          "ExportLicence",
+          "T1Note",
+          "SAD"
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "CustomsInformation": {
+        "type": "object",
+        "properties": {
+          "customsDocuments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CustomsDocument"
+            }
+          },
+          "customsCommodities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CustomsCommodity"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomsJointDeclarationOptions": {
+        "type": "object",
+        "properties": {
+          "sfid": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryMonitoringOptions": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "smsPhoneNumber": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DoorstepDeliveryOptions": {
+        "type": "object",
+        "properties": {
+          "accessCode": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "EURPalletExchangeOptions": {
+        "type": "object",
+        "properties": {
+          "quantity": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "consignorPalletRegistrationNumber": {
+            "type": "string"
+          },
+          "consigneePalletRegistrationNumber": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "FixedDeliveryDateOptions": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "FreightSubsidyOptions": {
+        "type": "object",
+        "properties": {
+          "ncmNumber": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "HardcopyProofOfDeliveryOptions": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "HighValueShipmentOptions": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "number",
+            "format": "double"
+          },
+          "currency": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "InstallationAdvancedOptions": {
+        "type": "object",
+        "properties": {
+          "quantity": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "InstallationOptions": {
+        "type": "object",
+        "properties": {
+          "quantity": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "InsuranceOptions": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "number",
+            "format": "double"
+          },
+          "currency": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "LicenseBarCodeEnum": {
+        "enum": [
+          "GS1",
+          "Code128"
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "M20Options": {
+        "type": "object",
+        "properties": {
+          "quantity": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "M40Options": {
+        "type": "object",
+        "properties": {
+          "quantity": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "M60Options": {
+        "type": "object",
+        "properties": {
+          "quantity": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OnlineAppointmentBookingOptions": {
+        "type": "object",
+        "properties": {
+          "responseText": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PageOptions": {
+        "type": "object",
+        "properties": {
+          "pageType": {
+            "$ref": "#/components/schemas/PageTypeEnum"
+          },
+          "marginLeft": {
+            "type": "number",
+            "format": "double"
+          },
+          "marginTop": {
+            "type": "number",
+            "format": "double"
+          },
+          "padding": {
+            "type": "number",
+            "format": "double"
+          },
+          "paddingTop": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PageTypeEnum": {
+        "enum": [
+          "Label",
+          "Label2xPortraitA4",
+          "Label3xLandscapeA4",
+          "LabelCompact",
+          "LabelCompact2x2PortraitA4"
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "Party": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/PartyType"
+          },
+          "vatEoriSocialSecurityNumber": {
+            "type": "string"
+          },
+          "dhlNetworkId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "contactName": {
+            "type": "string"
+          },
+          "references": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "address": {
+            "$ref": "#/components/schemas/Address"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "fax": {
+            "type": "string"
+          },
+          "subType": {
+            "$ref": "#/components/schemas/PartySubType"
+          },
+          "vat": {
+            "$ref": "#/components/schemas/PartyVAT"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PartySubType": {
+        "enum": [
+          "ParcelShop",
+          "ParcelStation",
+          "Servicepoint",
+          "Locker",
+          "Postoffice",
+          "Postbank"
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "PartyType": {
+        "enum": [
+          "AccessPoint",
+          "Buyer",
+          "Consignor",
+          "Consignee",
+          "Delivery",
+          "FreightPayer",
+          "Pickup"
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "PartyVAT": {
+        "type": "object",
+        "properties": {
+          "countryCode": {
+            "type": "string"
+          },
+          "number": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PayerCode": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Piece": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "goodsType": {
+            "type": "string"
+          },
+          "packageType": {
+            "type": "string"
+          },
+          "marksAndNumbers": {
+            "type": "string"
+          },
+          "numberOfPieces": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "weight": {
+            "type": "number",
+            "format": "double"
+          },
+          "volume": {
+            "type": "number",
+            "format": "double"
+          },
+          "loadingMeters": {
+            "type": "number",
+            "format": "double"
+          },
+          "loadingMetres": {
+            "type": "number",
+            "format": "double"
+          },
+          "palletPlaces": {
+            "type": "number",
+            "format": "double"
+          },
+          "width": {
+            "type": "number",
+            "format": "double"
+          },
+          "height": {
+            "type": "number",
+            "format": "double"
+          },
+          "length": {
+            "type": "number",
+            "format": "double"
+          },
+          "stackable": {
+            "type": "boolean"
+          },
+          "circumference": {
+            "type": "number",
+            "format": "double",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PreAdviceByDriverOptions": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PreAdviceByDriverPickupOptions": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PrintDocumentReportOptions": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ReportOptions"
+          }
+        ],
+        "properties": {
+          "itemStartSequence": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PrintOptions": {
+        "type": "object",
+        "properties": {
+          "shipment": {
+            "$ref": "#/components/schemas/Shipment"
+          },
+          "options": {
+            "$ref": "#/components/schemas/PrintDocumentReportOptions"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PrintOptionsById": {
+        "type": "object",
+        "properties": {
+          "shipmentIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "options": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ReportOptions"
+              },
+              {
+                "$ref": "#/components/schemas/PrintDocumentReportOptions"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "PrintOptionsMultiple": {
+        "type": "object",
+        "properties": {
+          "shipments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Shipment"
+            }
+          },
+          "options": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ReportOptions"
+              },
+              {
+                "$ref": "#/components/schemas/PrintDocumentReportOptions"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "PrintReport": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "contentType": {
+            "type": "string",
+            "readOnly": true
+          },
+          "type": {
+            "type": "string"
+          },
+          "valid": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PrintResult": {
+        "type": "object",
+        "properties": {
+          "reports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PrintReport"
+            },
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Reference": {
+        "type": "object",
+        "properties": {
+          "qualifier": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RemovalOfReplacedGoodsOptions": {
+        "type": "object",
+        "properties": {
+          "quantity": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReportOptions": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "boolean"
+          },
+          "shipmentList": {
+            "type": "boolean"
+          },
+          "shipmentListType": {
+            "$ref": "#/components/schemas/ShipmentListType"
+          },
+          "waybill": {
+            "type": "boolean"
+          },
+          "guarantee": {
+            "type": "boolean"
+          },
+          "returnLabel": {
+            "type": "boolean"
+          },
+          "licensePlateBarCode": {
+            "$ref": "#/components/schemas/LicenseBarCodeEnum"
+          },
+          "pageOptions": {
+            "$ref": "#/components/schemas/PageOptions"
+          },
+          "qrCode": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Shipment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "pickupConfirmationRequested": {
+            "type": "boolean"
+          },
+          "messageSenderInternalId": {
+            "type": "string"
+          },
+          "messageReceiverInternalId": {
+            "type": "string"
+          },
+          "productCode": {
+            "type": "string"
+          },
+          "featureCode": {
+            "type": "string"
+          },
+          "shippingDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "pickupDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "requestedDeliveryDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "plannedDeliveryDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deliveryInstruction": {
+            "type": "string"
+          },
+          "pickupInstruction": {
+            "type": "string"
+          },
+          "totalNumberOfPieces": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalWeight": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalVolume": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalLoadingMeters": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalLoadingMetres": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalPalletPlaces": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxPieceWeight": {
+            "type": "number",
+            "format": "double",
+            "readOnly": true
+          },
+          "minPieceWeight": {
+            "type": "number",
+            "format": "double",
+            "readOnly": true
+          },
+          "maxPieceHeight": {
+            "type": "number",
+            "format": "double",
+            "readOnly": true
+          },
+          "minPieceHeight": {
+            "type": "number",
+            "format": "double",
+            "readOnly": true
+          },
+          "goodsDescription": {
+            "type": "string"
+          },
+          "references": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Reference"
+            }
+          },
+          "payerCode": {
+            "$ref": "#/components/schemas/PayerCode"
+          },
+          "parties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Party"
+            }
+          },
+          "additionalServices": {
+            "$ref": "#/components/schemas/AdditionalServicesDTO"
+          },
+          "customsInformation": {
+            "$ref": "#/components/schemas/CustomsInformation"
+          },
+          "pieces": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Piece"
+            }
+          },
+          "routingCode": {
+            "type": "string"
+          },
+          "additionalInformation": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdditionalInformation"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ShipmentListType": {
+        "enum": [
+          "Consignee",
+          "Delivery"
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "SortAndQuantityOptions": {
+        "type": "object",
+        "properties": {
+          "sort": {
+            "type": "number",
+            "format": "double"
+          },
+          "quantity": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TemperatureControlledOptions": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "$ref": "#/components/schemas/ThermoType"
+          },
+          "min": {
+            "type": "number",
+            "format": "double"
+          },
+          "max": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ThermoColdOptions": {
+        "type": "object",
+        "properties": {
+          "min": {
+            "type": "number",
+            "format": "double"
+          },
+          "max": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ThermoFreezeOptions": {
+        "type": "object",
+        "properties": {
+          "min": {
+            "type": "number",
+            "format": "double"
+          },
+          "max": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ThermoType": {
+        "enum": [
+          "Custom",
+          "Cold",
+          "Ambient"
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "ThermoWarmOptions": {
+        "type": "object",
+        "properties": {
+          "min": {
+            "type": "number",
+            "format": "double"
+          },
+          "max": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TimeDefiniteLoadingOptions": {
+        "type": "object",
+        "properties": {
+          "dateTime": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TimeDefiniteUnloadingOptions": {
+        "type": "object",
+        "properties": {
+          "dateTime": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TransportMovementEnum": {
+        "enum": [
+          "Export",
+          "Import"
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "VoecSupplyVATOptions": {
+        "type": "object",
+        "properties": {
+          "vatId": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "Client key": {
+        "type": "apiKey",
+        "description": "Please insert your client key",
+        "name": "client-key",
+        "in": "header"
+      }
+    }
+  },
+  "security": [
+    {
+      "Client key": [
+        "client-key"
+      ]
+    }
+  ],
+  "tags": [
+    {
+      "name": "Print"
+    }
+  ]
+}
