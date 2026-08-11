@@ -8,15 +8,12 @@ generate_schema() {
     "${ROOT}/bin/cli" codegen generate "$1" "$2" --no-nice-property-names
 }
 
-# Authentication
-generate_schema "${SCHEMAS}/auth_response.json" "${LIB_MODULES}/auth_response.py"
-
 # Error response (always required)
 generate_schema "${SCHEMAS}/error_response.json" "${LIB_MODULES}/error_response.py"
 
-# Booking schemas
-generate_schema "${SCHEMAS}/booking_request.json" "${LIB_MODULES}/booking_request.py"
-generate_schema "${SCHEMAS}/booking_response.json" "${LIB_MODULES}/booking_response.py"
+# Transport instruction (booking) schemas
+generate_schema "${SCHEMAS}/transport_instruction_request.json" "${LIB_MODULES}/transport_instruction_request.py"
+generate_schema "${SCHEMAS}/transport_instruction_response.json" "${LIB_MODULES}/transport_instruction_response.py"
 
 # Print (label) schemas
 generate_schema "${SCHEMAS}/print_request.json" "${LIB_MODULES}/print_request.py"

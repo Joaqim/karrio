@@ -1,6 +1,12 @@
 {
   "status": "ERROR",
-  "validationErrors": [ { "field": "productCode", "errorCode": 100, "message": "invalid", "incompatibleFields": [] } ],
-  "title": "Bad Request",
-  "detail": "Invalid response type."
+  "errorMessage": "One or more validation errors occurred.",
+  "validationErrors": [
+    {
+      "field": "productCode",
+      "errorCode": 100,
+      "message": "The product code is invalid.",
+      "incompatibleFields": ["additionalServices.doorstepDelivery"]
+    }
+  ]
 }
