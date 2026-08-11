@@ -1,10 +1,10 @@
 from karrio.core.metadata import PluginMetadata
 
-from karrio.mappers.dhl_freight.mapper import Mapper
-from karrio.mappers.dhl_freight.proxy import Proxy
-from karrio.mappers.dhl_freight.settings import Settings
-import karrio.providers.dhl_freight.units as units
-import karrio.providers.dhl_freight.utils as utils
+from karrio.mappers.dhl_freight_sweden.mapper import Mapper
+from karrio.mappers.dhl_freight_sweden.proxy import Proxy
+from karrio.mappers.dhl_freight_sweden.settings import Settings
+import karrio.providers.dhl_freight_sweden.units as units
+import karrio.providers.dhl_freight_sweden.utils as utils
 
 # This METADATA object is used by Karrio to discover and register this plugin
 # when loaded through Python entrypoints or local plugin directories.
@@ -15,8 +15,8 @@ import karrio.providers.dhl_freight.utils as utils
 # capability is advertised. Capabilities are derived from the Proxy's public
 # methods (create_shipment only).
 METADATA = PluginMetadata(
-    id="dhl_freight",
-    label="DHL Freight",
+    id="dhl_freight_sweden",
+    label="DHL Freight Sweden",
     description="DHL Freight (Sweden API Farm) shipping integration for Karrio",
     # Integrations
     Mapper=Mapper,

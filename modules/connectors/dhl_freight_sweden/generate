@@ -1,5 +1,5 @@
 SCHEMAS=./schemas
-LIB_MODULES=./karrio/schemas/dhl_freight
+LIB_MODULES=./karrio/schemas/dhl_freight_sweden
 find "${LIB_MODULES}" -name "*.py" -exec rm -r {} \;
 touch "${LIB_MODULES}/__init__.py"
 

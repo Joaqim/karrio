@@ -2,7 +2,7 @@
 
 import karrio.lib as lib
 import karrio.api.proxy as proxy
-import karrio.mappers.dhl_freight.settings as provider_settings
+import karrio.mappers.dhl_freight_sweden.settings as provider_settings
 
 
 class Proxy(proxy.Proxy):

@@ -4,8 +4,8 @@ import typing
 import karrio.lib as lib
 import karrio.api.mapper as mapper
 import karrio.core.models as models
-import karrio.providers.dhl_freight as provider
-import karrio.mappers.dhl_freight.settings as provider_settings
+import karrio.providers.dhl_freight_sweden as provider
+import karrio.mappers.dhl_freight_sweden.settings as provider_settings
 
 
 class Mapper(mapper.Mapper):

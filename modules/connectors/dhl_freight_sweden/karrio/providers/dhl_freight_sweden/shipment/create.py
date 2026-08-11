@@ -1,16 +1,16 @@
 """Karrio DHL Freight shipment API implementation."""
 
-import karrio.schemas.dhl_freight.transport_instruction_request as dhl_freight_req
-import karrio.schemas.dhl_freight.transport_instruction_response as dhl_freight_res
-import karrio.schemas.dhl_freight.print_request as dhl_freight_print
-import karrio.schemas.dhl_freight.print_response as dhl_freight_report
+import karrio.schemas.dhl_freight_sweden.transport_instruction_request as dhl_freight_req
+import karrio.schemas.dhl_freight_sweden.transport_instruction_response as dhl_freight_res
+import karrio.schemas.dhl_freight_sweden.print_request as dhl_freight_print
+import karrio.schemas.dhl_freight_sweden.print_response as dhl_freight_report
 
 import typing
 import karrio.lib as lib
 import karrio.core.models as models
-import karrio.providers.dhl_freight.error as error
-import karrio.providers.dhl_freight.utils as provider_utils
-import karrio.providers.dhl_freight.units as provider_units
+import karrio.providers.dhl_freight_sweden.error as error
+import karrio.providers.dhl_freight_sweden.utils as provider_utils
+import karrio.providers.dhl_freight_sweden.units as provider_units
 
 
 def parse_shipment_response(

@@ -1,6 +1,6 @@
-# karrio.dhl_freight
+# karrio.dhl_freight_sweden
 
-This package is a DHL Freight extension of the [karrio](https://pypi.org/project/karrio) multi carrier shipping SDK.
+This package is a DHL Freight Sweden extension of the [karrio](https://pypi.org/project/karrio) multi carrier shipping SDK.
 
 It targets the DHL Freight Sweden API Farm and authenticates with a single `client-key` header (no token exchange).
 Phase 0 covers shipment booking with a printed label and a URL-only tracking link surfaced through the shipment `meta`.
@@ -12,18 +12,18 @@ Phase 0 covers shipment booking with a printed label and a URL-only tracking lin
 ## Installation
 
 ```bash
-pip install karrio.dhl_freight
+pip install karrio.dhl_freight_sweden
 ```
 
 ## Usage
 
 ```python
 import karrio.sdk as karrio
-from karrio.mappers.dhl_freight.settings import Settings
+from karrio.mappers.dhl_freight_sweden.settings import Settings
 
 
 # Initialize a carrier gateway
-dhl_freight = karrio.gateway["dhl_freight"].create(
+dhl_freight_sweden = karrio.gateway["dhl_freight_sweden"].create(
     Settings(
         client_key="...",       # DHL Freight Sweden API Farm client key (sent as the client-key header)
         account_number="...",    # freight-payer party id

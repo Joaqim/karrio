@@ -10,7 +10,7 @@ class Settings(core.Settings):
 
     @property
     def carrier_name(self):
-        return "dhl_freight"
+        return "dhl_freight_sweden"
 
     @property
     def server_url(self):
@@ -41,7 +41,7 @@ class Settings(core.Settings):
 
     @property
     def connection_config(self) -> lib.units.Options:
-        from karrio.providers.dhl_freight.units import ConnectionConfig
+        from karrio.providers.dhl_freight_sweden.units import ConnectionConfig
 
         return lib.to_connection_config(
             self.config or {},

@@ -1,8 +1,8 @@
-# PRD: DHL Freight integration
+# PRD: DHL Freight Sweden integration
 
 | Field | Value |
 |-------|-------|
-| Project | DHL Freight carrier connector (`dhl_freight`) |
+| Project | DHL Freight Sweden carrier connector (`dhl_freight_sweden`) |
 | Version | 1.1 |
 | Date | 2026-08-11 |
 | Status | Planning |
@@ -28,7 +28,7 @@
 
 ## Executive Summary
 
-Add a `dhl_freight` connector targeting the DHL Freight Sweden API Farm, covering shipment booking (with label) and a tracking link.
+Add a `dhl_freight_sweden` connector targeting the DHL Freight Sweden API Farm, covering shipment booking (with label) and a tracking link.
 The connector composes two API Farm services — the Transport Instruction API (booking) and the Print API (label) — into Karrio's single `shipment/create` contract, and surfaces a URL-only tracking link.
 It is used for domestic Swedish freight in our deployment and also supports international products to and from Sweden; DHL's own API validation remains authoritative, so no geographic gate is imposed.
 
@@ -130,7 +130,7 @@ label, or surface a DHL Freight tracking link through the Karrio unified API.
 ### Desired state
 
 ```
-A dhl_freight connector books a transport instruction, returns a printable
+A dhl_freight_sweden connector books a transport instruction, returns a printable
 label in one shipment/create call, and exposes a tracking id + tracking URL —
 authenticating with a single client-key header against the SE API Farm.
 ```
@@ -157,7 +157,7 @@ authenticating with a single client-key header against the SE API Farm.
 
 | Metric | Target | Priority |
 |--------|--------|----------|
-| Connector discovered as a plugin | `./bin/cli plugins show dhl_freight` succeeds | P0 |
+| Connector discovered as a plugin | `./bin/cli plugins show dhl_freight_sweden` succeeds | P0 |
 | Shipment create builds a valid booking + print request | `test_create_shipment_request` passes | P0 |
 | Shipment parse returns tracking id + label + tracking_url | `test_parse_shipment_response` passes | P0 |
 | Proxy issues booking + print to the correct API Farm URLs | `test_create_shipment` passes | P0 |
@@ -208,7 +208,7 @@ If the print call fails after a successful booking, the booking still exists at 
 
 ```
                         ┌────────────────────────────────────────┐
-                        │            dhl_freight connector        │
+                        │      dhl_freight_sweden connector      │
                         │                                         │
   Karrio unified   ┌────┴─────┐   ┌──────────┐   ┌────────────┐   │
   ShipmentRequest ─▶│ mapper / │──▶│  proxy   │──▶│  utils.py  │   │
@@ -371,33 +371,33 @@ Tracking (`tracking.py`) and cancel (`cancel.py`) remain documented deferred stu
 | Task | Files | Status | Effort |
 |------|-------|--------|--------|
 | Scaffold connector | `./bin/cli sdk add-extension` | Done | S |
-| Vendor raw specs (upstream filenames, git-tracked) | `modules/connectors/dhl_freight/vendor/se-api-farm/*.json` | Done | S |
-| Derive JSON generation samples from the vendored specs | `modules/connectors/dhl_freight/schemas/*.json` | In progress | M |
-| Configure + run generation | `generate`, `./bin/run-generate-on modules/connectors/dhl_freight` | In progress | S |
+| Vendor raw specs (upstream filenames, git-tracked) | `modules/connectors/dhl_freight_sweden/vendor/se-api-farm/*.json` | Done | S |
+| Derive JSON generation samples from the vendored specs | `modules/connectors/dhl_freight_sweden/schemas/*.json` | In progress | M |
+| Configure + run generation | `generate`, `./bin/run-generate-on modules/connectors/dhl_freight_sweden` | In progress | S |
 
 ### Phase 2: Settings, units, errors, proxy
 
 | Task | Files | Status | Effort |
 |------|-------|--------|--------|
-| Settings + resolvable server URL (config override, default-by-test_mode) + tracking_url + label_type | `karrio/providers/dhl_freight/utils.py`, `karrio/mappers/dhl_freight/settings.py` | Pending | M |
-| `ConnectionConfig.server_url` override + `label_type` | `karrio/providers/dhl_freight/units.py`, `karrio/plugins/dhl_freight/__init__.py` | Pending | S |
-| Services (full product set) / options enums | `karrio/providers/dhl_freight/units.py` | Pending | M |
-| Error parser (booking/print) | `karrio/providers/dhl_freight/error.py` | Pending | S |
-| Proxy: `create_shipment` (book→print) with `client-key` header | `karrio/mappers/dhl_freight/proxy.py` | Pending | M |
+| Settings + resolvable server URL (config override, default-by-test_mode) + tracking_url + label_type | `karrio/providers/dhl_freight_sweden/utils.py`, `karrio/mappers/dhl_freight_sweden/settings.py` | Pending | M |
+| `ConnectionConfig.server_url` override + `label_type` | `karrio/providers/dhl_freight_sweden/units.py`, `karrio/plugins/dhl_freight_sweden/__init__.py` | Pending | S |
+| Services (full product set) / options enums | `karrio/providers/dhl_freight_sweden/units.py` | Pending | M |
+| Error parser (booking/print) | `karrio/providers/dhl_freight_sweden/error.py` | Pending | S |
+| Proxy: `create_shipment` (book→print) with `client-key` header | `karrio/mappers/dhl_freight_sweden/proxy.py` | Pending | M |
 
 ### Phase 3: Providers
 
 | Task | Files | Status | Effort |
 |------|-------|--------|--------|
-| Shipment create request build + response parse (with `meta.tracking_url`) | `karrio/providers/dhl_freight/shipment/create.py` | Pending | L |
-| Public exports + plugin METADATA (shipping only) | `karrio/providers/dhl_freight/__init__.py`, `karrio/plugins/dhl_freight/__init__.py` | Pending | S |
-| Deferred stubs documented (`tracking.py`, `cancel.py`) | `karrio/providers/dhl_freight/{tracking.py,shipment/cancel.py}` | Pending | S |
+| Shipment create request build + response parse (with `meta.tracking_url`) | `karrio/providers/dhl_freight_sweden/shipment/create.py` | Pending | L |
+| Public exports + plugin METADATA (shipping only) | `karrio/providers/dhl_freight_sweden/__init__.py`, `karrio/plugins/dhl_freight_sweden/__init__.py` | Pending | S |
+| Deferred stubs documented (`tracking.py`, `cancel.py`) | `karrio/providers/dhl_freight_sweden/{tracking.py,shipment/cancel.py}` | Pending | S |
 
 ### Phase 4: Tests
 
 | Task | Files | Status | Effort |
 |------|-------|--------|--------|
-| Fixtures + shipment tests (book+print mocks) for the six fixture products | `tests/dhl_freight/fixture.py`, `test_shipment.py` | Pending | M |
+| Fixtures + shipment tests (book+print mocks) for the six fixture products | `tests/dhl_freight_sweden/fixture.py`, `test_shipment.py` | Pending | M |
 | Run suites, confirm plugin registration + capabilities | — | Pending | S |
 
 ---
@@ -434,9 +434,9 @@ The six fixture products (domestic 102, 401, 103; international 232, 202, 109) p
 
 ```bash
 source bin/activate-env
-python -m unittest discover -v -f modules/connectors/dhl_freight/tests
+python -m unittest discover -v -f modules/connectors/dhl_freight_sweden/tests
 ./bin/run-sdk-tests
-./bin/cli plugins show dhl_freight
+./bin/cli plugins show dhl_freight_sweden
 ```
 
 ---
@@ -458,7 +458,7 @@ python -m unittest discover -v -f modules/connectors/dhl_freight/tests
 
 ### Appendix A: Reference specs
 
-Vendored to `modules/connectors/dhl_freight/vendor/se-api-farm/` (upstream filenames, git-tracked; matches `gls` / `hermes` / `dpd_meta`).
+Vendored to `modules/connectors/dhl_freight_sweden/vendor/se-api-farm/` (upstream filenames, git-tracked; matches `gls` / `hermes` / `dpd_meta`).
 The DHL Freight Sweden API Farm OpenAPI 2.10.0 set includes, among others:
 
 - `transport-instruction-2.10.0.json` — booking (`/transportinstruction/sendtransportinstruction`)
