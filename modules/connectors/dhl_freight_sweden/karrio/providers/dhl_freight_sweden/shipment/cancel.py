@@ -12,7 +12,7 @@ rather than silently no-oping.
 import typing
 import karrio.lib as lib
 import karrio.core.models as models
-import karrio.providers.dhl_freight.utils as provider_utils
+import karrio.providers.dhl_freight_sweden.utils as provider_utils
 
 
 def parse_shipment_cancel_response(

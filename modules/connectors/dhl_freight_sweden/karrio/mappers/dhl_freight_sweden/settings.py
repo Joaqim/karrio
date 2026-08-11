@@ -1,7 +1,7 @@
 """Karrio DHL Freight client settings."""
 
 import attr
-import karrio.providers.dhl_freight.utils as provider_utils
+import karrio.providers.dhl_freight_sweden.utils as provider_utils
 
 
 @attr.s(auto_attribs=True)
@@ -15,7 +15,7 @@ class Settings(provider_utils.Settings):
     # generic properties
     id: str = None
     test_mode: bool = False
-    carrier_id: str = "dhl_freight"
+    carrier_id: str = "dhl_freight_sweden"
     account_country_code: str = "SE"
     metadata: dict = {}
     config: dict = {}

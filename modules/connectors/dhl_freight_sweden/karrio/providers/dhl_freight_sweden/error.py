@@ -3,8 +3,8 @@
 import typing
 import karrio.lib as lib
 import karrio.core.models as models
-import karrio.schemas.dhl_freight.error_response as dhl_freight
-import karrio.providers.dhl_freight.utils as provider_utils
+import karrio.schemas.dhl_freight_sweden.error_response as dhl_freight
+import karrio.providers.dhl_freight_sweden.utils as provider_utils
 
 
 def parse_error_response(

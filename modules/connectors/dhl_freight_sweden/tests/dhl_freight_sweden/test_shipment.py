@@ -87,7 +87,7 @@ class TestDHLFreightShipment(unittest.TestCase):
     # -- proxy: two sequential calls (book -> print) with client-key header
 
     def test_create_shipment(self):
-        with patch("karrio.mappers.dhl_freight.proxy.lib.request") as mock:
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
             mock.side_effect = [BookingResponse102, PrintResponse]
             karrio.Shipment.create(
                 models.ShipmentRequest(**ShipmentPayload102)
@@ -115,7 +115,7 @@ class TestDHLFreightShipment(unittest.TestCase):
     # -- parse response (book -> print => ShipmentDetails)
 
     def test_parse_shipment_response_102(self):
-        with patch("karrio.mappers.dhl_freight.proxy.lib.request") as mock:
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
             mock.side_effect = [BookingResponse102, PrintResponse]
             parsed_response = (
                 karrio.Shipment.create(models.ShipmentRequest(**ShipmentPayload102))
@@ -129,7 +129,7 @@ class TestDHLFreightShipment(unittest.TestCase):
         )
 
     def test_parse_shipment_response_232(self):
-        with patch("karrio.mappers.dhl_freight.proxy.lib.request") as mock:
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
             mock.side_effect = [BookingResponse232, PrintResponse]
             parsed_response = (
                 karrio.Shipment.create(models.ShipmentRequest(**ShipmentPayload232))
@@ -155,7 +155,7 @@ class TestDHLFreightShipment(unittest.TestCase):
         self._assert_labelled_parse(ShipmentPayload109, "TI-109-0001", 109)
 
     def _assert_labelled_parse(self, payload: dict, shipment_id: str, product: int):
-        with patch("karrio.mappers.dhl_freight.proxy.lib.request") as mock:
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
             mock.side_effect = [_booking(shipment_id, product), PrintResponse]
             details, messages = (
                 karrio.Shipment.create(models.ShipmentRequest(**payload))
@@ -176,7 +176,7 @@ class TestDHLFreightShipment(unittest.TestCase):
     # -- error parsing
 
     def test_parse_error_response(self):
-        with patch("karrio.mappers.dhl_freight.proxy.lib.request") as mock:
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
             mock.side_effect = [ErrorResponse, "{}"]
             parsed_response = (
                 karrio.Shipment.create(models.ShipmentRequest(**ShipmentPayload102))
@@ -219,8 +219,8 @@ def _booking(shipment_id: str, product: int) -> str:
 
 def _expected_details(shipment_id: str, product: str) -> dict:
     return {
-        "carrier_id": "dhl_freight",
-        "carrier_name": "dhl_freight",
+        "carrier_id": "dhl_freight_sweden",
+        "carrier_name": "dhl_freight_sweden",
         "tracking_number": shipment_id,
         "shipment_identifier": shipment_id,
         "label_type": "PDF",
@@ -461,15 +461,15 @@ ParsedErrorResponse = [
     None,
     [
         {
-            "carrier_id": "dhl_freight",
-            "carrier_name": "dhl_freight",
+            "carrier_id": "dhl_freight_sweden",
+            "carrier_name": "dhl_freight_sweden",
             "code": "4001",
             "message": "Unknown product code",
             "details": {"field": "productCode"},
         },
         {
-            "carrier_id": "dhl_freight",
-            "carrier_name": "dhl_freight",
+            "carrier_id": "dhl_freight_sweden",
+            "carrier_name": "dhl_freight_sweden",
             "code": "4002",
             "message": "Consignee address invalid",
             "details": {
