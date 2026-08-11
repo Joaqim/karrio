@@ -16,6 +16,6 @@ class Settings(provider_utils.Settings):
     id: str = None
     test_mode: bool = False
     carrier_id: str = "dhl_freight"
-    account_country_code: str = None
+    account_country_code: str = "SE"
     metadata: dict = {}
     config: dict = {}
