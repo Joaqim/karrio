@@ -2,7 +2,6 @@
 
 import karrio.lib as lib
 import karrio.api.proxy as proxy
-import karrio.schemas.dhl_freight.print_request as dhl_freight_print
 import karrio.mappers.dhl_freight.settings as provider_settings
 
 
@@ -40,9 +39,12 @@ class Proxy(proxy.Proxy):
                 url=f"{self.settings.print_url}/print/printdocuments",
                 data=lib.to_json(
                     dict(
-                        shipment=lib.to_dict(
-                            lib.to_object(dhl_freight_print.ShipmentType, instruction)
-                        ),
+                        # Re-send the shipment echoed by the booking response
+                        # intact: it is the same Shipment model the Print API
+                        # accepts, and round-tripping through the generated
+                        # print ShipmentType silently drops optional fields it
+                        # was not sampled with (totalNumberOfPieces, totalWeight).
+                        shipment=instruction,
                         options=ctx.get("print_options") or {},
                     )
                 ),
