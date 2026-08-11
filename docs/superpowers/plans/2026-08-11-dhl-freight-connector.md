@@ -1,8 +1,8 @@
-# DHL Freight connector implementation plan
+# DHL Freight Sweden connector implementation plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a Karrio `dhl_freight` connector for the DHL Freight Sweden API Farm that books transport instructions, returns a printed label in one `shipment/create` call, and surfaces a tracking id + tracking URL through the shipment `meta`.
+**Goal:** Build a Karrio `dhl_freight_sweden` connector for the DHL Freight Sweden API Farm that books transport instructions, returns a printed label in one `shipment/create` call, and surfaces a tracking id + tracking URL through the shipment `meta`.
 
 **Architecture:** `shipment/create` chains two API Farm services behind one proxy method — book (`POST /transportinstruction/sendtransportinstruction`, returns `transportInstruction.id`) then print (Print API, op TBD, returns label bytes). Every request carries a single `client-key` header; there is no token exchange, no cache. Tracking is URL-only: `shipment/create` stamps `meta.tracking_url` built from a DHL Freight Sweden portal template; no tracking API call is possible against the API Farm. No rating, no cancel/returns in Phase 0. Hosts default to the API Farm with a per-connection `server_url` override.
 
@@ -22,8 +22,8 @@
 ## File structure
 
 ```
-modules/connectors/dhl_freight/
-├── pyproject.toml                                   # scaffolded; entrypoint karrio.plugins.dhl_freight
+modules/connectors/dhl_freight_sweden/
+├── pyproject.toml                                   # scaffolded; entrypoint karrio.plugins.dhl_freight_sweden
 ├── generate                                         # scaffolded; edit CLI flags (camelCase API)
 ├── vendor/se-api-farm/                              # vendored SE API Farm OpenAPI 2.10.0 specs (git-tracked)
 │   ├── transport-instruction-2.10.0.json
@@ -38,17 +38,17 @@ modules/connectors/dhl_freight/
 │   ├── print_response.json
 │   └── error_response.json
 ├── karrio/
-│   ├── plugins/dhl_freight/__init__.py              # METADATA (shipping only)
-│   ├── mappers/dhl_freight/{__init__.py,mapper.py,proxy.py,settings.py}
-│   ├── providers/dhl_freight/
+│   ├── plugins/dhl_freight_sweden/__init__.py              # METADATA (shipping only)
+│   ├── mappers/dhl_freight_sweden/{__init__.py,mapper.py,proxy.py,settings.py}
+│   ├── providers/dhl_freight_sweden/
 │   │   ├── __init__.py                              # public exports
 │   │   ├── utils.py                                 # Settings: client_key, server_url override, tracking_url, label_type, connection_config
 │   │   ├── units.py                                 # ShippingService (full product set), ShippingOption, LabelLayout, ConnectionConfig
 │   │   ├── error.py                                 # validationErrors[] + errorMessage
 │   │   ├── tracking.py                              # deferred documented stub (not wired)
 │   │   └── shipment/{__init__.py,create.py,cancel.py}   # create implemented; cancel a deferred stub
-│   └── schemas/dhl_freight/                         # generated types (DO NOT EDIT)
-└── tests/dhl_freight/
+│   └── schemas/dhl_freight_sweden/                         # generated types (DO NOT EDIT)
+└── tests/dhl_freight_sweden/
     ├── fixture.py
     └── test_shipment.py
 ```
@@ -75,16 +75,16 @@ source ./bin/activate-env
 Rating is deferred; delete any scaffolded `rate.py` + `test_rate.py` so no `rating` capability is exposed (capabilities are derived from proxy methods). Keep `tracking.py` and `shipment/cancel.py` as deferred documented stubs — leave a module docstring noting they are not wired in Phase 0.
 
 ```bash
-rm -f modules/connectors/dhl_freight/karrio/providers/dhl_freight/rate.py
-rm -f modules/connectors/dhl_freight/tests/dhl_freight/test_rate.py
+rm -f modules/connectors/dhl_freight_sweden/karrio/providers/dhl_freight_sweden/rate.py
+rm -f modules/connectors/dhl_freight_sweden/tests/dhl_freight_sweden/test_rate.py
 ```
-Then remove any `rate` import from `karrio/providers/dhl_freight/__init__.py`. The package will not fully import until schemas are generated (Task 3) and providers are rewritten (Tasks 4-9) — the normal Karrio scaffold state.
+Then remove any `rate` import from `karrio/providers/dhl_freight_sweden/__init__.py`. The package will not fully import until schemas are generated (Task 3) and providers are rewritten (Tasks 4-9) — the normal Karrio scaffold state.
 
 ---
 
 ## Task 2: Vendor the raw specs (done)
 
-The DHL Freight Sweden API Farm OpenAPI 2.10.0 specs are vendored, git-tracked, at `modules/connectors/dhl_freight/vendor/se-api-farm/`.
+The DHL Freight Sweden API Farm OpenAPI 2.10.0 specs are vendored, git-tracked, at `modules/connectors/dhl_freight_sweden/vendor/se-api-farm/`.
 
 - [x] Committed as `vendor SE API Farm 2.10.0 OpenAPI specs`.
 
@@ -95,8 +95,8 @@ The DHL Freight Sweden API Farm OpenAPI 2.10.0 specs are vendored, git-tracked, 
 DHL Freight is a **camelCase** JSON API (`productCode`, `payerCode`, `shipmentIds`, `pageOptions`), so generation uses `--no-nice-property-names`.
 
 **Files:**
-- Create: `modules/connectors/dhl_freight/schemas/*.json`
-- Modify: `modules/connectors/dhl_freight/generate`
+- Create: `modules/connectors/dhl_freight_sweden/schemas/*.json`
+- Modify: `modules/connectors/dhl_freight_sweden/generate`
 
 - [ ] **Step 1: Write the five JSON samples** (distilled from `vendor/se-api-farm/` schemas — real field shapes, minimal but complete)
 
@@ -155,29 +155,29 @@ DHL Freight is a **camelCase** JSON API (`productCode`, `payerCode`, `shipmentId
 
 - [ ] **Step 2: Configure `generate` for camelCase**
 
-Edit `modules/connectors/dhl_freight/generate` so each schema is generated with `--no-nice-property-names`. Mirror the format of an existing camelCase connector's `generate` (e.g. `modules/connectors/mydhl/generate`). One line per JSON sample, e.g.:
+Edit `modules/connectors/dhl_freight_sweden/generate` so each schema is generated with `--no-nice-property-names`. Mirror the format of an existing camelCase connector's `generate` (e.g. `modules/connectors/mydhl/generate`). One line per JSON sample, e.g.:
 ```bash
-quicktype ... schemas/booking_request.json ... karrio/schemas/dhl_freight/booking_request.py --no-nice-property-names
-quicktype ... schemas/booking_response.json ... karrio/schemas/dhl_freight/booking_response.py --no-nice-property-names
-quicktype ... schemas/print_request.json ... karrio/schemas/dhl_freight/print_request.py --no-nice-property-names
-quicktype ... schemas/print_response.json ... karrio/schemas/dhl_freight/print_response.py --no-nice-property-names
-quicktype ... schemas/error_response.json ... karrio/schemas/dhl_freight/error_response.py --no-nice-property-names
+quicktype ... schemas/booking_request.json ... karrio/schemas/dhl_freight_sweden/booking_request.py --no-nice-property-names
+quicktype ... schemas/booking_response.json ... karrio/schemas/dhl_freight_sweden/booking_response.py --no-nice-property-names
+quicktype ... schemas/print_request.json ... karrio/schemas/dhl_freight_sweden/print_request.py --no-nice-property-names
+quicktype ... schemas/print_response.json ... karrio/schemas/dhl_freight_sweden/print_response.py --no-nice-property-names
+quicktype ... schemas/error_response.json ... karrio/schemas/dhl_freight_sweden/error_response.py --no-nice-property-names
 ```
 
 - [ ] **Step 3: Run generation + verify importable types**
 
 ```bash
-chmod +x modules/connectors/dhl_freight/generate
-./bin/run-generate-on modules/connectors/dhl_freight
-python -c "import karrio.schemas.dhl_freight.booking_request as s; print([x for x in dir(s) if x[0].isupper()])"
-python -c "import karrio.schemas.dhl_freight.print_request as s; print(dir(s))"
+chmod +x modules/connectors/dhl_freight_sweden/generate
+./bin/run-generate-on modules/connectors/dhl_freight_sweden
+python -c "import karrio.schemas.dhl_freight_sweden.booking_request as s; print([x for x in dir(s) if x[0].isupper()])"
+python -c "import karrio.schemas.dhl_freight_sweden.print_request as s; print(dir(s))"
 ```
 Note the exact class names emitted — later tasks import them (expect `Shipment`, `Party`, `Piece`, `PayerCode` for booking; `PrintOptionsById`/`ReportOptions`/`PageOptions` for print).
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add modules/connectors/dhl_freight/schemas modules/connectors/dhl_freight/generate modules/connectors/dhl_freight/karrio/schemas/dhl_freight
+git add modules/connectors/dhl_freight_sweden/schemas modules/connectors/dhl_freight_sweden/generate modules/connectors/dhl_freight_sweden/karrio/schemas/dhl_freight_sweden
 git commit -m "feat(dhl_freight): add schema samples and generate carrier types"
 ```
 
@@ -186,7 +186,7 @@ git commit -m "feat(dhl_freight): add schema samples and generate carrier types"
 ## Task 4: `utils.py` — Settings, hosts, tracking URL, label type
 
 **Files:**
-- Modify: `modules/connectors/dhl_freight/karrio/providers/dhl_freight/utils.py`
+- Modify: `modules/connectors/dhl_freight_sweden/karrio/providers/dhl_freight_sweden/utils.py`
 
 - [ ] **Step 1: Write the Settings class** (replace scaffolded body)
 
@@ -204,7 +204,7 @@ class Settings(core.Settings):
 
     @property
     def carrier_name(self):
-        return "dhl_freight"
+        return "dhl_freight_sweden"
 
     @property
     def server_url(self):
@@ -227,7 +227,7 @@ class Settings(core.Settings):
 
     @property
     def connection_config(self) -> lib.units.Options:
-        from karrio.providers.dhl_freight.units import ConnectionConfig
+        from karrio.providers.dhl_freight_sweden.units import ConnectionConfig
 
         return lib.to_connection_config(
             self.config or {},
@@ -238,13 +238,13 @@ class Settings(core.Settings):
 - [ ] **Step 2: Verify it imports**
 
 ```bash
-python -c "import karrio.providers.dhl_freight.utils as u; print(u.Settings)"
+python -c "import karrio.providers.dhl_freight_sweden.utils as u; print(u.Settings)"
 ```
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add modules/connectors/dhl_freight/karrio/providers/dhl_freight/utils.py
+git add modules/connectors/dhl_freight_sweden/karrio/providers/dhl_freight_sweden/utils.py
 git commit -m "feat(dhl_freight): settings with client-key, server_url override, tracking url"
 ```
 
@@ -253,7 +253,7 @@ git commit -m "feat(dhl_freight): settings with client-key, server_url override,
 ## Task 5: `units.py` — services, options, connection config
 
 **Files:**
-- Modify: `modules/connectors/dhl_freight/karrio/providers/dhl_freight/units.py`
+- Modify: `modules/connectors/dhl_freight_sweden/karrio/providers/dhl_freight_sweden/units.py`
 
 - [ ] **Step 1: Write the enums** (full product set from the PRD product table)
 
@@ -361,14 +361,14 @@ class ConnectionConfig(lib.Enum):
 - [ ] **Step 2: Verify import**
 
 ```bash
-python -c "import karrio.providers.dhl_freight.units as u; print(u.ShippingService.map('102').name, u.ConnectionConfig.server_url)"
+python -c "import karrio.providers.dhl_freight_sweden.units as u; print(u.ShippingService.map('102').name, u.ConnectionConfig.server_url)"
 ```
 Expected: `dhl_freight_paket <OptionEnum ...>`.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add modules/connectors/dhl_freight/karrio/providers/dhl_freight/units.py
+git add modules/connectors/dhl_freight_sweden/karrio/providers/dhl_freight_sweden/units.py
 git commit -m "feat(dhl_freight): full product set, options, connection config"
 ```
 
@@ -377,7 +377,7 @@ git commit -m "feat(dhl_freight): full product set, options, connection config"
 ## Task 6: `error.py` — validationErrors + errorMessage
 
 **Files:**
-- Modify: `modules/connectors/dhl_freight/karrio/providers/dhl_freight/error.py`
+- Modify: `modules/connectors/dhl_freight_sweden/karrio/providers/dhl_freight_sweden/error.py`
 
 - [ ] **Step 1: Write the parser** (handles `validationErrors[]` and top-level `errorMessage`)
 
@@ -385,7 +385,7 @@ git commit -m "feat(dhl_freight): full product set, options, connection config"
 import typing
 import karrio.lib as lib
 import karrio.core.models as models
-import karrio.providers.dhl_freight.utils as provider_utils
+import karrio.providers.dhl_freight_sweden.utils as provider_utils
 
 
 def parse_error_response(
@@ -428,13 +428,13 @@ def parse_error_response(
 - [ ] **Step 2: Verify import**
 
 ```bash
-python -c "import karrio.providers.dhl_freight.error as e; print(e.parse_error_response)"
+python -c "import karrio.providers.dhl_freight_sweden.error as e; print(e.parse_error_response)"
 ```
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add modules/connectors/dhl_freight/karrio/providers/dhl_freight/error.py
+git add modules/connectors/dhl_freight_sweden/karrio/providers/dhl_freight_sweden/error.py
 git commit -m "feat(dhl_freight): error parser for validationErrors and errorMessage"
 ```
 
@@ -443,7 +443,7 @@ git commit -m "feat(dhl_freight): error parser for validationErrors and errorMes
 ## Task 7: mapper `settings.py`
 
 **Files:**
-- Modify: `modules/connectors/dhl_freight/karrio/mappers/dhl_freight/settings.py`
+- Modify: `modules/connectors/dhl_freight_sweden/karrio/mappers/dhl_freight_sweden/settings.py`
 
 - [ ] **Step 1: Write the mapper Settings**
 
@@ -452,7 +452,7 @@ git commit -m "feat(dhl_freight): error parser for validationErrors and errorMes
 
 import attr
 import karrio.core.models as models
-import karrio.providers.dhl_freight.utils as provider_utils
+import karrio.providers.dhl_freight_sweden.utils as provider_utils
 
 
 @attr.s(auto_attribs=True)
@@ -466,7 +466,7 @@ class Settings(provider_utils.Settings):
     # generic properties
     id: str = None
     test_mode: bool = False
-    carrier_id: str = "dhl_freight"
+    carrier_id: str = "dhl_freight_sweden"
     account_country_code: str = None
     metadata: dict = {}
     config: dict = {}
@@ -475,13 +475,13 @@ class Settings(provider_utils.Settings):
 - [ ] **Step 2: Verify import**
 
 ```bash
-python -c "import karrio.mappers.dhl_freight.settings as s; print(s.Settings)"
+python -c "import karrio.mappers.dhl_freight_sweden.settings as s; print(s.Settings)"
 ```
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add modules/connectors/dhl_freight/karrio/mappers/dhl_freight/settings.py
+git add modules/connectors/dhl_freight_sweden/karrio/mappers/dhl_freight_sweden/settings.py
 git commit -m "feat(dhl_freight): mapper settings"
 ```
 
@@ -490,7 +490,7 @@ git commit -m "feat(dhl_freight): mapper settings"
 ## Task 8: `proxy.py` — client-key header + book→print chain
 
 **Files:**
-- Modify: `modules/connectors/dhl_freight/karrio/mappers/dhl_freight/proxy.py`
+- Modify: `modules/connectors/dhl_freight_sweden/karrio/mappers/dhl_freight_sweden/proxy.py`
 
 - [ ] **Step 1: Write the proxy**
 
@@ -499,7 +499,7 @@ git commit -m "feat(dhl_freight): mapper settings"
 
 import karrio.lib as lib
 import karrio.api.proxy as proxy
-import karrio.mappers.dhl_freight.settings as provider_settings
+import karrio.mappers.dhl_freight_sweden.settings as provider_settings
 
 
 class Proxy(proxy.Proxy):
@@ -552,13 +552,13 @@ No `get_rates`, `get_tracking`, or `cancel_shipment` is defined, keeping capabil
 - [ ] **Step 2: Verify import**
 
 ```bash
-python -c "import karrio.mappers.dhl_freight.proxy as p; print(p.Proxy.create_shipment)"
+python -c "import karrio.mappers.dhl_freight_sweden.proxy as p; print(p.Proxy.create_shipment)"
 ```
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add modules/connectors/dhl_freight/karrio/mappers/dhl_freight/proxy.py
+git add modules/connectors/dhl_freight_sweden/karrio/mappers/dhl_freight_sweden/proxy.py
 git commit -m "feat(dhl_freight): proxy client-key header, book+print chain"
 ```
 
@@ -567,7 +567,7 @@ git commit -m "feat(dhl_freight): proxy client-key header, book+print chain"
 ## Task 9: `shipment/create.py` — request build + response parse
 
 **Files:**
-- Modify: `modules/connectors/dhl_freight/karrio/providers/dhl_freight/shipment/create.py`
+- Modify: `modules/connectors/dhl_freight_sweden/karrio/providers/dhl_freight_sweden/shipment/create.py`
 
 > Use the exact generated class names printed in Task 3 Step 3. Below uses `dict` request bodies for robustness; swap to generated dataclasses if the team prefers typed construction.
 
@@ -579,9 +579,9 @@ git commit -m "feat(dhl_freight): proxy client-key header, book+print chain"
 import typing
 import karrio.lib as lib
 import karrio.core.models as models
-import karrio.providers.dhl_freight.error as error
-import karrio.providers.dhl_freight.utils as provider_utils
-import karrio.providers.dhl_freight.units as provider_units
+import karrio.providers.dhl_freight_sweden.error as error
+import karrio.providers.dhl_freight_sweden.utils as provider_utils
+import karrio.providers.dhl_freight_sweden.units as provider_units
 
 
 def parse_shipment_response(
@@ -698,13 +698,13 @@ def shipment_request(
 - [ ] **Step 2: Verify import**
 
 ```bash
-python -c "import karrio.providers.dhl_freight.shipment.create as c; print(c.shipment_request, c.parse_shipment_response)"
+python -c "import karrio.providers.dhl_freight_sweden.shipment.create as c; print(c.shipment_request, c.parse_shipment_response)"
 ```
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add modules/connectors/dhl_freight/karrio/providers/dhl_freight/shipment/create.py
+git add modules/connectors/dhl_freight_sweden/karrio/providers/dhl_freight_sweden/shipment/create.py
 git commit -m "feat(dhl_freight): shipment create request build and response parse"
 ```
 
@@ -713,8 +713,8 @@ git commit -m "feat(dhl_freight): shipment create request build and response par
 ## Task 10: Deferred stubs — `tracking.py` and `shipment/cancel.py`
 
 **Files:**
-- Modify: `modules/connectors/dhl_freight/karrio/providers/dhl_freight/tracking.py`
-- Modify: `modules/connectors/dhl_freight/karrio/providers/dhl_freight/shipment/cancel.py`
+- Modify: `modules/connectors/dhl_freight_sweden/karrio/providers/dhl_freight_sweden/tracking.py`
+- Modify: `modules/connectors/dhl_freight_sweden/karrio/providers/dhl_freight_sweden/shipment/cancel.py`
 
 - [ ] **Step 1: Leave both as documented deferred stubs**
 
@@ -723,7 +723,7 @@ Neither is wired in Phase 0. `tracking.py` carries a module docstring stating th
 - [ ] **Step 2: Commit**
 
 ```bash
-git add modules/connectors/dhl_freight/karrio/providers/dhl_freight/tracking.py modules/connectors/dhl_freight/karrio/providers/dhl_freight/shipment/cancel.py
+git add modules/connectors/dhl_freight_sweden/karrio/providers/dhl_freight_sweden/tracking.py modules/connectors/dhl_freight_sweden/karrio/providers/dhl_freight_sweden/shipment/cancel.py
 git commit -m "docs(dhl_freight): document deferred tracking and cancel stubs"
 ```
 
@@ -732,17 +732,17 @@ git commit -m "docs(dhl_freight): document deferred tracking and cancel stubs"
 ## Task 11: Public exports + plugin METADATA (shipping only)
 
 **Files:**
-- Modify: `modules/connectors/dhl_freight/karrio/providers/dhl_freight/__init__.py`
-- Modify: `modules/connectors/dhl_freight/karrio/providers/dhl_freight/shipment/__init__.py`
-- Modify: `modules/connectors/dhl_freight/karrio/plugins/dhl_freight/__init__.py`
+- Modify: `modules/connectors/dhl_freight_sweden/karrio/providers/dhl_freight_sweden/__init__.py`
+- Modify: `modules/connectors/dhl_freight_sweden/karrio/providers/dhl_freight_sweden/shipment/__init__.py`
+- Modify: `modules/connectors/dhl_freight_sweden/karrio/plugins/dhl_freight_sweden/__init__.py`
 
 - [ ] **Step 1: providers `__init__.py`** — export only shipment create
 
 ```python
 """Karrio DHL Freight provider."""
 
-from karrio.providers.dhl_freight.utils import Settings
-from karrio.providers.dhl_freight.shipment import (
+from karrio.providers.dhl_freight_sweden.utils import Settings
+from karrio.providers.dhl_freight_sweden.shipment import (
     parse_shipment_response,
     shipment_request,
 )
@@ -751,7 +751,7 @@ from karrio.providers.dhl_freight.shipment import (
 - [ ] **Step 2: shipment `__init__.py`** — export create only (no cancel)
 
 ```python
-from karrio.providers.dhl_freight.shipment.create import (
+from karrio.providers.dhl_freight_sweden.shipment.create import (
     parse_shipment_response,
     shipment_request,
 )
@@ -762,16 +762,16 @@ from karrio.providers.dhl_freight.shipment.create import (
 ```python
 from karrio.core.metadata import PluginMetadata
 
-from karrio.mappers.dhl_freight.mapper import Mapper
-from karrio.mappers.dhl_freight.proxy import Proxy
-from karrio.mappers.dhl_freight.settings import Settings
-import karrio.providers.dhl_freight.units as units
+from karrio.mappers.dhl_freight_sweden.mapper import Mapper
+from karrio.mappers.dhl_freight_sweden.proxy import Proxy
+from karrio.mappers.dhl_freight_sweden.settings import Settings
+import karrio.providers.dhl_freight_sweden.units as units
 
 
 METADATA = PluginMetadata(
     status="in-development",
-    id="dhl_freight",
-    label="DHL Freight",
+    id="dhl_freight_sweden",
+    label="DHL Freight Sweden",
     description="DHL Freight Sweden (API Farm) booking and label integration",
     # Integrations
     Mapper=Mapper,
@@ -791,21 +791,21 @@ METADATA = PluginMetadata(
 - [ ] **Step 4: Confirm mapper.py wires create only (do NOT edit — it is generated)**
 
 ```bash
-python -c "import karrio.mappers.dhl_freight.mapper as m; print([x for x in dir(m.Mapper) if not x.startswith('_')])"
+python -c "import karrio.mappers.dhl_freight_sweden.mapper as m; print([x for x in dir(m.Mapper) if not x.startswith('_')])"
 ```
 Expected: includes `create_shipment_request`, `parse_shipment_response`. If `mapper.py` still references rate/tracking/cancel from scaffolding, re-run `./bin/run-generate-on` so it matches the provider functions present.
 
 - [ ] **Step 5: Verify plugin loads with shipping-only capabilities**
 
 ```bash
-python -c "import karrio.sdk as karrio; print(karrio.gateway['dhl_freight'].capabilities)"
+python -c "import karrio.sdk as karrio; print(karrio.gateway['dhl_freight_sweden'].capabilities)"
 ```
 Expected: `['shipping']` (no `rating`/`tracking`).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add modules/connectors/dhl_freight/karrio
+git add modules/connectors/dhl_freight_sweden/karrio
 git commit -m "feat(dhl_freight): public exports and plugin metadata (shipping only)"
 ```
 
@@ -814,8 +814,8 @@ git commit -m "feat(dhl_freight): public exports and plugin metadata (shipping o
 ## Task 12: Shipment tests (4-method, mocks book + print)
 
 **Files:**
-- Modify: `modules/connectors/dhl_freight/tests/dhl_freight/fixture.py`
-- Create: `modules/connectors/dhl_freight/tests/dhl_freight/test_shipment.py`
+- Modify: `modules/connectors/dhl_freight_sweden/tests/dhl_freight_sweden/fixture.py`
+- Create: `modules/connectors/dhl_freight_sweden/tests/dhl_freight_sweden/test_shipment.py`
 
 - [ ] **Step 1: fixture.py**
 
@@ -825,11 +825,11 @@ git commit -m "feat(dhl_freight): public exports and plugin metadata (shipping o
 import karrio.sdk as karrio
 
 
-gateway = karrio.gateway["dhl_freight"].create(
+gateway = karrio.gateway["dhl_freight_sweden"].create(
     dict(
         id="123456789",
         test_mode=True,
-        carrier_id="dhl_freight",
+        carrier_id="dhl_freight_sweden",
         client_key="TEST_CLIENT_KEY",
         account_number="ACCT1",
     )
@@ -861,7 +861,7 @@ class TestDHLFreightShipment(unittest.TestCase):
         self.assertEqual(lib.to_dict(request.serialize()), ShipmentRequest)
 
     def test_create_shipment(self):
-        with patch("karrio.mappers.dhl_freight.proxy.lib.request") as mock:
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
             mock.side_effect = [BookingResponse, PrintResponse]
             karrio.Shipment.create(self.ShipmentRequest).from_(gateway)
             self.assertEqual(
@@ -878,13 +878,13 @@ class TestDHLFreightShipment(unittest.TestCase):
             )
 
     def test_parse_shipment_response(self):
-        with patch("karrio.mappers.dhl_freight.proxy.lib.request") as mock:
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
             mock.side_effect = [BookingResponse, PrintResponse]
             parsed = karrio.Shipment.create(self.ShipmentRequest).from_(gateway).parse()
             self.assertListEqual(lib.to_dict(parsed), ParsedShipmentResponse)
 
     def test_parse_error_response(self):
-        with patch("karrio.mappers.dhl_freight.proxy.lib.request") as mock:
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
             mock.side_effect = [ErrorResponse]
             parsed = karrio.Shipment.create(self.ShipmentRequest).from_(gateway).parse()
             self.assertListEqual(lib.to_dict(parsed), ParsedErrorResponse)
@@ -934,8 +934,8 @@ ErrorResponse = {"status": "ERROR", "errorMessage": "Bad Request", "validationEr
 
 ParsedShipmentResponse = [
     {
-        "carrier_id": "dhl_freight",
-        "carrier_name": "dhl_freight",
+        "carrier_id": "dhl_freight_sweden",
+        "carrier_name": "dhl_freight_sweden",
         "tracking_number": "1234567890123",
         "shipment_identifier": "1234567890123",
         "label_type": "PDF",
@@ -949,8 +949,8 @@ ParsedErrorResponse = [
     None,
     [
         {
-            "carrier_id": "dhl_freight",
-            "carrier_name": "dhl_freight",
+            "carrier_id": "dhl_freight_sweden",
+            "carrier_name": "dhl_freight_sweden",
             "code": "100",
             "message": "invalid product",
             "details": {"field": "productCode", "incompatibleFields": []},
@@ -962,7 +962,7 @@ ParsedErrorResponse = [
 - [ ] **Step 3: Run to verify it passes**
 
 ```bash
-python -m unittest -v modules.connectors.dhl_freight.tests.dhl_freight.test_shipment
+python -m unittest -v modules.connectors.dhl_freight_sweden.tests.dhl_freight_sweden.test_shipment
 ```
 Expected: PASS on all four. If a field differs, add `print(lib.to_dict(parsed))` above the assert, align the expected constant (recall `lib.to_dict` strips `None`/empty), then remove the print. Confirm the exact `tracking_url` template value matches `utils.Settings.tracking_url` (PRD Pending #2).
 
@@ -973,7 +973,7 @@ Add the other five fixture products (401, 103 domestic; 232, 202, 109 internatio
 - [ ] **Step 5: Commit**
 
 ```bash
-git add modules/connectors/dhl_freight/tests/dhl_freight/fixture.py modules/connectors/dhl_freight/tests/dhl_freight/test_shipment.py
+git add modules/connectors/dhl_freight_sweden/tests/dhl_freight_sweden/fixture.py modules/connectors/dhl_freight_sweden/tests/dhl_freight_sweden/test_shipment.py
 git commit -m "test(dhl_freight): shipment create request, call, parse, error"
 ```
 
@@ -984,12 +984,12 @@ git commit -m "test(dhl_freight): shipment create request, call, parse, error"
 - [ ] **Step 1: Full verification sweep**
 
 ```bash
-python -m unittest discover -v -f modules/connectors/dhl_freight/tests
+python -m unittest discover -v -f modules/connectors/dhl_freight_sweden/tests
 ./bin/run-sdk-tests
-./bin/cli plugins show dhl_freight
-python -c "import karrio.sdk as k; print(k.gateway['dhl_freight'].capabilities)"
+./bin/cli plugins show dhl_freight_sweden
+python -c "import karrio.sdk as k; print(k.gateway['dhl_freight_sweden'].capabilities)"
 ```
-Expected: carrier + SDK suites green; plugin shows `dhl_freight`; capabilities `['shipping']`.
+Expected: carrier + SDK suites green; plugin shows `dhl_freight_sweden`; capabilities `['shipping']`.
 
 - [ ] **Step 2: Mark PRD launch criteria + update statuses**
 
@@ -998,7 +998,7 @@ Tick the PRD's Launch Criteria that now hold; update Implementation Plan phase s
 - [ ] **Step 3: Final commit**
 
 ```bash
-git add -A modules/connectors/dhl_freight PRDs/PRD_DHL_FREIGHT_INTEGRATION.md
+git add -A modules/connectors/dhl_freight_sweden PRDs/PRD_DHL_FREIGHT_INTEGRATION.md
 git commit -m "chore(dhl_freight): finalize Phase 0 connector"
 ```
 
