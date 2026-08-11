@@ -35,9 +35,8 @@ class Settings(core.Settings):
 
     @property
     def tracking_url(self):
-        # The API Farm exposes no authoritative shipment-tracking URL template.
-        # This is the public DHL Freight Sweden tracking widget keyed by
-        # shipment id. NEEDS USER VERIFICATION.
+        # The API Farm exposes no native shipment-tracking URL, so this uses the
+        # public DHL Freight Sweden tracking widget keyed by shipment id.
         return "https://www.dhl.com/se-en/home/tracking/tracking-freight.html?submit=1&tracking-id={}"
 
     @property
