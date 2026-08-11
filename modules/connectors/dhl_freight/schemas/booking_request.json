@@ -1,0 +1,19 @@
+{
+  "id": "",
+  "productCode": "ECI",
+  "pickupDate": "2026-08-12",
+  "totalNumberOfPieces": 1,
+  "totalWeight": 380,
+  "goodsDescription": "Machinery Parts",
+  "references": [{ "qualifier": "CNR", "value": "REF123" }],
+  "payerCode": { "code": "DAP", "location": "" },
+  "parties": [
+    { "type": "Consignor", "id": "ACCT1", "name": "Sender AB", "contactName": "A", "phone": "0700000000", "email": "a@x.se",
+      "address": { "street": "Main 1", "cityName": "Stockholm", "postalCode": "11122", "countryCode": "SE" } },
+    { "type": "Consignee", "name": "Receiver AB", "contactName": "B", "phone": "0700000001", "email": "b@x.se",
+      "address": { "street": "Road 2", "cityName": "Gothenburg", "postalCode": "41111", "countryCode": "SE" } }
+  ],
+  "pieces": [
+    { "id": [], "goodsType": "Machinery Parts", "packageType": "PAL", "numberOfPieces": 1, "weight": 380, "volume": 0.864, "width": 80, "height": 90, "length": 120, "stackable": true }
+  ]
+}
