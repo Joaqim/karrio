@@ -109,7 +109,7 @@ rm -f modules/connectors/dhl_freight/karrio/providers/dhl_freight/shipment/cance
 rm -f modules/connectors/dhl_freight/karrio/providers/dhl_freight/shipment/return_shipment.py
 rm -f modules/connectors/dhl_freight/tests/dhl_freight/test_rate.py
 ```
-Then remove their imports from `karrio/providers/dhl_freight/__init__.py` and `karrio/providers/dhl_freight/shipment/__init__.py` (edit in Task 10/11).
+Then remove their imports from `karrio/providers/dhl_freight/__init__.py` and `karrio/providers/dhl_freight/shipment/__init__.py`. Note: the package will not fully import until schemas are generated (Task 3) and the providers are rewritten (Tasks 9-11) — this is the normal Karrio scaffold state. Do not attempt to make imports resolve here; just ensure no reference to the deleted files remains, then commit.
 
 - [ ] **Step 5: Commit the scaffold**
 
