@@ -1,9 +1,9 @@
-# PRD: DHL Freight Integration
+# PRD: DHL Freight integration
 
 | Field | Value |
 |-------|-------|
 | Project | DHL Freight carrier connector (`dhl_freight`) |
-| Version | 1.0 |
+| Version | 1.1 |
 | Date | 2026-08-11 |
 | Status | Planning |
 | Owner | Joaqim Planstedt |
@@ -28,85 +28,111 @@
 
 ## Executive Summary
 
-Add a `dhl_freight` connector for DHL Freight's palletized road-freight booking service (> 35 kg), covering shipment creation (with label) and a tracking link.
-The connector composes three DHL Freight APIs — Authentication, Shipment Booking, and Print — into Karrio's single `shipment/create` contract, and exposes a URL-only tracking capability.
-It is used for domestic freight in our deployment, but imposes no geographic gate: DHL's own API validation remains authoritative, so international shipments are implicitly allowed.
+Add a `dhl_freight` connector targeting the DHL Freight Sweden API Farm, covering shipment booking (with label) and a tracking link.
+The connector composes two API Farm services — the Transport Instruction API (booking) and the Print API (label) — into Karrio's single `shipment/create` contract, and surfaces a URL-only tracking link.
+It is used for domestic Swedish freight in our deployment and also supports international products to and from Sweden; DHL's own API validation remains authoritative, so no geographic gate is imposed.
 
-### Key Architecture Decisions
+The two DHL front doors are the same underlying DHL Freight API.
+The DHL Group Developer Portal (`api.dhl.com`, OAuth2 bearer tokens, a Unified Shipment Tracking API) is one path; the DHL Freight Sweden API Farm (`freight-logistics.dhl.com`, a single `client-key` header, no token exchange) is the other.
+Phase 0 targets the API Farm exclusively, as documented by the vendored OpenAPI 2.10.0 specs.
 
-1. **`shipment/create` chains book → print-by-id (approach A).** One proxy method books via `POST /sendtransportinstruction`, captures the assigned 13-char `shipment.id`, then calls `POST /print/printdocumentsbyid` with `{ shipmentIds: [id] }` and returns a merged `{ booking, print }` payload. This preserves Karrio's expectation that create returns a label in one step.
-2. **OAuth2 client-credentials over HTTP Basic yields a ~30-minute Bearer token.** `utils.py` exchanges `consumer_key`/`consumer_secret` (the portal's API Key / API Secret) at `POST /auth/v1/token?response_type=id_token&grant_type=client_credentials` (Basic auth: `username=consumer_key`, `password=consumer_secret`), extracts the token, and caches it via Karrio's thread-safe connection cache keyed on `expires_in` (~30 min per the User Guide). Booking and Print send `Authorization: Bearer <token>`. Auth is bundled into the Freight APIs on the same host; the standalone Authentication API is documentation only. Mirrors the `dhl_parcel_de` token-cache pattern; credential naming matches `dhl_universal` (`consumer_key`/`consumer_secret`).
-3. **Tracking is URL-only, no network call.** `get_tracking` builds `TrackingDetails` locally: `carrier_tracking_link = tracking_url.format(tracking_number)`, a neutral in-transit status, empty events. `shipment/create` also stamps `meta.tracking_url`. The DHL Unified Tracking API (UTAPI) is intentionally not called; it uses a different credential and is deferred to a future events phase.
-4. **No rating.** No spec quotes prices; omitting `get_rates` from the proxy makes the `rating` capability absent automatically (capabilities are derived from proxy method names).
-5. **No void/cancel.** The Booking API declares no cancellation endpoint, so `void_shipment` is not implemented (see [Resolved Decisions](#resolved-decisions)).
-6. **Label format (PDF/ZPL) is not selectable; page layout is.** The Print API exposes no raster-format field. The connector models a label-layout option mapping to `pageType` (`Label`, `Label2xPortraitA4`, `Label3xLandscapeA4`, `LabelCompact`); raster format is governed by DHL account configuration.
-7. **API host is per-connection overridable.** The default host is the DHL Group platform (test `https://api-sandbox.dhl.com`, production `https://api.dhl.com`) — the officially documented path per the User Guide — selected by `test_mode`, with a `connection_config.server_url` override (the `postat` precedent). The SE "API Farm" (`test-api` / `api.freight-logistics.dhl.com`, a recommended path for SE-based consumers) is a first-class override reached through the same field. Base paths from the specs (`/freight/shipping/orders/v1`, `/freight/shipping/labels/v1`, `/auth/v1/token`) are appended to the resolved host.
-8. **Live validation is a success criterion.** Beyond hermetic unit tests, an opt-in smoke test must obtain valid responses from test-api. This is net-new to the repo (all existing connector tests are hermetic) and is therefore isolated and gated (see [Testing Strategy](#testing-strategy)).
+### Key architecture decisions
+
+1. **`shipment/create` chains book then print (approach A).**
+One proxy method books via `POST /transportinstruction/sendtransportinstruction`, captures the assigned `transportInstruction.id`, then calls the Print API and returns a merged `{ booking, print }` payload.
+This preserves Karrio's expectation that create returns a label in one step.
+The exact print operation (`POST /print/printdocumentsbyid` with `{ shipmentIds: [id] }`, or full-payload `POST /print/printdocuments`) is TBD, resolved during schema analysis.
+2. **Authentication is a single `client-key` HTTP header.**
+Every request to every API Farm service sends `client-key: <api-key>`.
+There is no token exchange, no `authenticate` step, and no token cache; the vendored specs declare an `apiKey` security scheme named `client-key`, `in: header`, on each API.
+This removes the OAuth2 client-credentials flow, the Basic-to-Bearer exchange, and the ~30-minute JWT cache that the DHL Group Portal path would require.
+3. **Booking is shipment creation in one call.**
+`POST /transportinstruction/sendtransportinstruction` creates the shipment and returns its `transportInstruction.id`; no prior Product API call is required to book.
+4. **Tracking is URL-only, no network call.**
+The shipment-create response returns a tracking number (`transportInstruction.id`), and `shipment/create` stamps `meta.tracking_url` built from a DHL Freight Sweden portal template.
+The API Farm has no tracking endpoint, so no `TrackingRequest` to `TrackingDetails` round-trip is possible against it.
+A full Karrio tracking feature is deferred to a later phase (it would use the DHL Unified Shipment Tracking API on the DHL Group gateway, a different front door and credential); `tracking.py` is not wired in Phase 0.
+5. **No rating in Phase 0.**
+The API Farm exposes a Price Quote API, but rating is out of scope for Phase 0 and is deferred; omitting `get_rates` from the proxy leaves the `rating` capability absent automatically.
+6. **No cancel or returns in Phase 0.**
+Shipment cancellation and returns are out of scope; `cancel.py` remains a documented stub and no `cancel_shipment` is wired.
+7. **Label layout is selectable; raster format (PDF/ZPL) is not an API parameter.**
+The Print API models label page layout via `ReportOptions.pageOptions.pageType` (`Label`, `Label2xPortraitA4`, `Label3xLandscapeA4`, `LabelCompact`, `LabelCompact2x2PortraitA4`); default `Label`.
+The Print API 2.10.0 exposes no raster-format field, so PDF-versus-ZPL is governed by DHL account configuration, not by a request parameter.
+A per-connection `label_type` setting (default `PDF`) tags and interprets the returned label bytes so they align with the account's configured output; it is account-aligned metadata, not an API request parameter.
+This raster-format treatment is provisional pending user confirmation of any out-of-band DHL mechanism.
+8. **API host is per-connection overridable.**
+The default host is the API Farm — test `https://test-api.freight-logistics.dhl.com`, production `https://api.freight-logistics.dhl.com` — selected by `test_mode`, with a `connection_config.server_url` override.
+Each API's base path (`/transportinstructionapi/v1`, `/printapi/v1`, `/productapi/v1`, ...) is appended to the resolved host.
+9. **Phase 0 verification is Karrio's mocked four-method unittest pattern.**
+No live sandbox credentials are required; all Phase 0 tests are hermetic.
 
 ### Scope
 
-| In Scope | Out of Scope |
+| In scope | Out of scope |
 |----------|--------------|
-| Shipment booking (`POST /sendtransportinstruction`) | Rating / price quotes |
-| Label retrieval (`POST /print/printdocumentsbyid`) | Live tracking events (UTAPI calls) |
-| Auth token exchange + caching (`POST /auth/v1/token`) | Shipment cancellation / void |
-| Tracking link + tracking id (URL-only) | Pickup, manifest, address validation |
-| `productCode` services + `payerCode` / layout options | Dangerous goods, temperature-controlled, ADR (phase 2) |
-| Domestic and international (no geo gate) | PDF-vs-ZPL format selection (not in API) |
+| Shipment booking (`POST /transportinstruction/sendtransportinstruction`) | Rating / price quotes (Price Quote API deferred) |
+| Label retrieval (Print API, op TBD) | Live tracking events (`TrackingRequest` to `TrackingDetails`) |
+| `client-key` header authentication | Shipment cancellation / returns |
+| Tracking link + tracking id (URL-only, via shipment meta) | Pickup, manifest, service-point / home-delivery locator lookups |
+| `productCode` services + `payerCode` / label-layout options | Dangerous goods, temperature-controlled, ADR (later phase) |
+| Domestic and international products (no geo gate) | PDF-vs-ZPL request-time selection (account-governed) |
 
 ---
 
 ## Open Questions & Decisions
 
-### Pending Questions
+### Pending questions
 
 | # | Question | Context | Options | Status |
 |---|----------|---------|---------|--------|
-| 1 | Which token do Booking/Print accept as `Bearer`? | Auth API returns both an opaque `access_token` and a JWT `id_token`; Booking declares `bearerFormat: JWT`. | (a) `id_token` (literal spec match) — default; (b) `access_token` | Default `id_token`; verify against sandbox during Phase 3 |
-| 2 | Correct public tracking-URL template for DHL Freight | Tracking is URL-only; the template lives in `utils.py`. | (a) `https://www.dhl.com/global-en/home/tracking/tracking-freight.html?submit=1&tracking-id={}`; (b) `activetracing.dhl.com` variant | Default (a); confirm with DHL Freight docs |
-### Resolved Decisions
+| 1 | Which print operation to use | Booking returns an id; the Print API offers by-id and full-payload variants. | (a) `printdocumentsbyid` with `{ shipmentIds: [id] }` — default; (b) `printdocuments` full payload | Default (a); confirm exact op during schema analysis |
+| 2 | Correct public tracking-URL template for DHL Freight Sweden | Tracking is URL-only; the template lives in `utils.py`. | (a) a DHL Freight Sweden portal template; (b) an `activetracing.dhl.com` variant | Confirm with DHL Freight Sweden docs |
+| 3 | Locator reference for service-point / home-delivery products | 103 / 401 / 109 may require an `AccessPoint` / `Delivery` party with a `subType` (`Servicepoint`) and a locator id. | (a) caller supplies the reference; (b) drop 103/401/109 from the fixture set | If it cannot be caller-supplied, drop the three; 102/232/202 still cover the pipeline |
+
+### Resolved decisions
 
 | # | Decision | Choice | Rationale | Date |
 |---|----------|--------|-----------|------|
-| 1 | Create flow | Approach A: book → print-by-id chained in `create_shipment` | Preserves one-step "create returns label"; by-id is DHL's documented path | 2026-08-11 |
-| 2 | Auth model | OAuth2 client-credentials (Basic) → cached JWT | Matches Auth API spec + `dhl_parcel_de` precedent | 2026-08-11 |
-| 3 | Tracking scope | URL-only, no API call | User requirement: "tracking URL and id, not events for now" | 2026-08-11 |
-| 4 | Rating | Not implemented | No pricing endpoint in any spec | 2026-08-11 |
-| 5 | Void / cancel | Not implemented | No cancellation endpoint in the Booking API | 2026-08-11 |
-| 6 | Label options | Expose `pageType` layout; no PDF/ZPL selector | Print API has no raster-format field | 2026-08-11 |
-| 7 | Geographic gating | None | DHL API validation is authoritative; international implicitly allowed | 2026-08-11 |
-| 8 | API host resolution | DHL Group platform default (by `test_mode`, User Guide) + `connection_config.server_url` override; SE API Farm is a first-class override | User: DHL Group platform default, allow per-connection override to the API Farm | 2026-08-11 |
-| 9 | Live validation approach | Opt-in, credentials-via-env smoke test isolated from the hermetic suite | User chose "creds via env; gated smoke test"; repo has no existing gated-test convention, so keep it isolated + opt-in | 2026-08-11 |
-| 10 | Token TTL | ~30 minutes (User Guide); cache with safety margin | Supersedes the auth spec's misleading `expires_in: 119` example | 2026-08-11 |
-| 11 | Auth host | Same host as booking/print (auth bundled into the Freight APIs) | User Guide: no separate access to the Authentication API is required | 2026-08-11 |
-| 12 | Credentials | `consumer_key` / `consumer_secret` (portal API Key / Secret) as Basic username/password | Matches DHL portal terminology + `dhl_universal` naming | 2026-08-11 |
+| 1 | Target gateway | DHL Freight Sweden API Farm | Phase 0 target; vendored 2.10.0 specs | 2026-08-11 |
+| 2 | Auth model | Single `client-key` header, no token exchange | API Farm specs declare `apiKey` `client-key` in header on every service | 2026-08-11 |
+| 3 | Create flow | Approach A: book then print, chained in `create_shipment` | Preserves one-step "create returns label" | 2026-08-11 |
+| 4 | Tracking scope | URL-only via shipment meta; full tracking deferred | API Farm has no tracking endpoint; full feature uses a different gateway | 2026-08-11 |
+| 5 | Rating | Not implemented in Phase 0 | Price Quote API deferred beyond Phase 0 | 2026-08-11 |
+| 6 | Cancel / returns | Not implemented in Phase 0; `cancel.py` a documented stub | Out of scope for Phase 0 | 2026-08-11 |
+| 7 | Label layout | Expose `pageType` layout; default `Label` | Print API models page layout, not raster format | 2026-08-11 |
+| 8 | Raster format (PDF/ZPL) | Not a request parameter; account-governed; `label_type` setting tags returned bytes | Print API 2.10.0 has no raster-format field | 2026-08-11 |
+| 9 | Geographic gating | None | DHL API validation is authoritative; international implicitly allowed | 2026-08-11 |
+| 10 | API host resolution | API Farm default (by `test_mode`) + `connection_config.server_url` override | Per-connection override supported | 2026-08-11 |
+| 11 | Phase 0 verification | Mocked four-method unittest pattern; no live creds | Karrio hermetic-suite norm | 2026-08-11 |
 
-### Edge Cases Requiring Input
+### Edge cases requiring input
 
-| # | Edge Case | Needs |
+| # | Edge case | Needs |
 |---|-----------|-------|
-| 1 | Print `content` encoding | Confirm base64 vs raw against a live sandbox response before shipping (spec omits `format: byte`) |
+| 1 | Print report `content` encoding | Confirm base64 against a sample response before shipping |
 | 2 | Freight-payer party id source | Confirm whether `account_number` is a connection setting or per-request; default: connection setting used as the payer party's `id` |
+| 3 | Service-point / home-delivery locator reference | Confirm whether 103 / 401 / 109 need a locator id and whether it can be caller-supplied (see Pending question #3) |
 
 ---
 
 ## Problem Statement
 
-### Current State
+### Current state
 
 ```
 Karrio has DHL connectors (dhl_express, dhl_parcel_de, dhl_poland,
-dhl_universal, mydhl) but none for DHL Freight (palletized road freight > 35 kg).
-There is no way to book a DHL Freight transport order, retrieve its label,
-or surface a DHL Freight tracking link through the Karrio unified API.
+dhl_universal, mydhl) but none for DHL Freight (Swedish road freight).
+There is no way to book a DHL Freight transport instruction, retrieve its
+label, or surface a DHL Freight tracking link through the Karrio unified API.
 ```
 
-### Desired State
+### Desired state
 
 ```
-A dhl_freight connector books a transport order, returns a printable label
-in one shipment/create call, and exposes a tracking id + tracking URL —
-authenticating via DHL's OAuth2 token service with a cached JWT.
+A dhl_freight connector books a transport instruction, returns a printable
+label in one shipment/create call, and exposes a tracking id + tracking URL —
+authenticating with a single client-key header against the SE API Farm.
 ```
 
 ### Problems
@@ -121,30 +147,29 @@ authenticating via DHL's OAuth2 token service with a cached JWT.
 
 ### Goals
 
-1. Book a DHL Freight transport order from a unified `ShipmentRequest` and return the assigned tracking id.
+1. Book a DHL Freight transport instruction from a unified `ShipmentRequest` and return the assigned tracking id.
 2. Retrieve the label bytes for that booking and return them as `ShipmentDetails.docs.label`.
-3. Authenticate transparently with a cached, auto-refreshing JWT.
-4. Return a tracking id + constructed tracking URL via both shipment `meta` and `get_tracking`.
+3. Authenticate every call with a single `client-key` header.
+4. Return a tracking id + constructed tracking URL via the shipment `meta`.
 5. Map `productCode` services and `payerCode` / label-layout options through `units.py` enums (no hardcoded strings).
 
-### Success Criteria
+### Success criteria
 
 | Metric | Target | Priority |
 |--------|--------|----------|
 | Connector discovered as a plugin | `./bin/cli plugins show dhl_freight` succeeds | P0 |
 | Shipment create builds a valid booking + print request | `test_create_shipment_request` passes | P0 |
 | Shipment parse returns tracking id + label + tracking_url | `test_parse_shipment_response` passes | P0 |
-| Tracking returns id + constructed URL | `test_parse_tracking_response` passes | P0 |
-| Error responses parsed for booking/print/auth | `test_parse_error_response` passes | P0 |
-| Valid live responses from test-api | opt-in smoke test returns non-error auth + booking id + label report | P0 |
-| Capabilities = shipping, tracking only | no `rating` / `pickup` reported | P1 |
+| Proxy issues booking + print to the correct API Farm URLs | `test_create_shipment` passes | P0 |
+| Error responses parsed for booking/print | `test_parse_error_response` passes | P0 |
+| Capabilities = shipping only | no `rating` / `tracking` / `pickup` reported in Phase 0 | P1 |
 
-### Launch Criteria
+### Launch criteria
 
-- [ ] P0: all four test methods pass for shipment + tracking.
-- [ ] P0: `./bin/run-sdk-tests` green (hermetic suite; live smoke test skips offline).
-- [ ] P0: live smoke test against test-api returns valid auth + booking + print responses (run with env creds + `DHL_FREIGHT_LIVE_TEST=1`).
-- [ ] P1: token cache verified to refresh on expiry.
+- [ ] P0: all four shipment test methods pass (mocked, hermetic).
+- [ ] P0: `./bin/run-sdk-tests` green (hermetic suite; no live calls).
+- [ ] P0: the shipment parse asserts a tracking number, a label, and `meta.tracking_url`.
+- [ ] P1: capabilities report `shipping` only.
 
 ---
 
@@ -152,11 +177,11 @@ authenticating via DHL's OAuth2 token service with a cached JWT.
 
 | Approach | Pros | Cons | Decision |
 |----------|------|------|----------|
-| **A. Book → print-by-id chained in `create_shipment`** | One-step create returns label; by-id is DHL's documented path; minimal payload on print | Two sequential API calls; must merge two responses | **Chosen** |
-| B. Book only; print deferred to a separate document call | Simpler create | Breaks "order label" in one step; dashboard/API consumers get no label at create time | Rejected |
-| C. Print via full-payload `/print/printdocuments` | No second id round-trip dependency | Re-sends entire shipment; by-id is the recommended path; larger request | Rejected |
+| **A. Book then print, chained in `create_shipment`** | One-step create returns label; honors Karrio's contract | Two sequential API calls; must merge two responses | **Chosen** |
+| B. Book only; print deferred to a separate document call | Simpler create | Breaks "order label" in one step; consumers get no label at create time | Rejected |
+| C. Print via full-payload `/print/printdocuments` | No id round-trip dependency | Re-sends the shipment; by-id is the leaner path | Kept open as the op-TBD alternative |
 
-### Trade-off Analysis
+### Trade-off analysis
 
 Approach A accepts a two-call create in exchange for honoring Karrio's contract that shipment creation yields a label.
 If the print call fails after a successful booking, the booking still exists at DHL; the connector surfaces the print error while the booking id is recoverable via `meta` (see [Failure Modes](#failure-modes)).
@@ -167,19 +192,19 @@ If the print call fails after a successful booking, the booking still exists at 
 
 > Existing patterns were studied before proposing new code; reuse is favored over novel constructs.
 
-### Existing Code Analysis
+### Existing code analysis
 
-| Component | Location | Reuse Strategy |
+| Component | Location | Reuse strategy |
 |-----------|----------|----------------|
-| OAuth token cache | `modules/connectors/dhl_parcel_de/karrio/providers/dhl_parcel_de/utils.py` | Mirror the cached-token property + `lib.connection_cache` / thread-safe access for the JWT exchange |
+| Static-header proxy (no token exchange) | `modules/connectors/seko/karrio/mappers/seko/proxy.py` | Mirror a fixed auth header set on every `lib.request` call — here `client-key` |
 | Tracking-URL template property | `modules/connectors/dhl_express/karrio/providers/dhl_express/utils.py` | Same `tracking_url` `@property` returning a `.format()` template |
 | Empty-label fallback | `modules/connectors/gls/karrio/providers/gls/shipment/create.py` | `docs=Documents(label=label_data or "")` if the print report is absent |
 | Shipment `meta.tracking_url` | `modules/connectors/dpd_meta/karrio/providers/dpd_meta/shipment/create.py` | Stamp `meta=dict(tracking_url=...)` on `ShipmentDetails` |
-| Capability-by-method derivation | `modules/sdk/karrio/references.py` (`detect_capabilities`) | Implement only `create_shipment` + `get_tracking`; omit `get_rates`/cancel |
+| Capability-by-method derivation | `modules/sdk/karrio/references.py` (`detect_capabilities`) | Implement only `create_shipment`; omit `get_rates`, `get_tracking`, cancel |
 | Per-connection `server_url` override | `modules/connectors/postat/karrio/providers/postat/{utils.py,units.py}` | Mirror `ConnectionConfig.server_url = lib.OptionEnum(...)` + resolve `self.connection_config.server_url.state or <default-by-test_mode>` |
-| Scaffolding | `modules/cli/karrio_cli/commands/sdk.py` (`add_extension`) | `./bin/cli sdk add-extension` with `--features "shipping,tracking"` |
+| Scaffolding | `modules/cli/karrio_cli/commands/sdk.py` (`add_extension`) | `./bin/cli sdk add-extension` |
 
-### Architecture Overview
+### Architecture overview
 
 ```
                         ┌────────────────────────────────────────┐
@@ -187,41 +212,36 @@ If the print call fails after a successful booking, the booking still exists at 
                         │                                         │
   Karrio unified   ┌────┴─────┐   ┌──────────┐   ┌────────────┐   │
   ShipmentRequest ─▶│ mapper / │──▶│  proxy   │──▶│  utils.py  │   │
-                    │ provider │   │ (HTTP)   │   │ auth+token │   │
-  ShipmentDetails ◀─│  create  │◀──│          │   │  cache     │   │
+                    │ provider │   │ (HTTP)   │   │ client-key │   │
+  ShipmentDetails ◀─│  create  │◀──│ book+prnt│   │ + hosts    │   │
                     └────┬─────┘   └────┬─────┘   └─────┬──────┘   │
                         │              │               │          │
                         └──────────────┼───────────────┘          │
                                        │                          │
                         ┌──────────────┴──────────────────────────┘
-                        │
-          ┌─────────────▼──────────┐  ┌──────────────┐  ┌──────────────┐
-          │  Auth API              │  │  Booking API │  │  Print API   │
-          │  /auth/v1/token (Basic)│  │ /sendtransp… │  │ /print/print │
-          │  → JWT (Bearer)        │  │ → shipment.id│  │  documentsbyid│
-          └────────────────────────┘  └──────────────┘  │ → label bytes│
-                                                         └──────────────┘
-   Tracking (URL-only): get_tracking constructs tracking_url.format(id) locally.
+                        │  client-key: <api-key>  (every request)
+          ┌─────────────▼───────────────┐   ┌───────────────────────┐
+          │  Transport Instruction API  │   │  Print API            │
+          │  /transportinstruction/     │   │  /print/printdocuments│
+          │   sendtransportinstruction  │──▶│   byid (op TBD)       │
+          │  → transportInstruction.id  │   │  → reports[].content  │
+          └─────────────────────────────┘   └───────────────────────┘
+   Tracking (URL-only): create stamps meta.tracking_url.format(id); no API call.
 ```
 
-### Sequence Diagram
+### Sequence diagram
 
 ```
 create_shipment(ShipmentRequest)
+   │   headers on every call: { client-key: <api-key>, content-type: application/json }
    │
-   ├─▶ utils.access_token
-   │      │  cache miss / expired?
-   │      └─▶ POST /auth/v1/token?response_type=id_token&grant_type=client_credentials
-   │             Authorization: Basic base64(consumer_key:consumer_secret)
-   │          ◀─ { token, expires_in (~30 min) }   → cache with margin
-   │
-   ├─▶ POST /sendtransportinstruction        Authorization: Bearer <jwt>
+   ├─▶ POST /transportinstructionapi/v1/transportinstruction/sendtransportinstruction
    │      (mapped Shipment: parties, pieces, payerCode, productCode)
-   │   ◀─ { status, shipment: { id } }        # 13-char tracking id
+   │   ◀─ { status, transportInstruction: { id } }        # tracking id
    │
-   ├─▶ POST /print/printdocumentsbyid         Authorization: Bearer <jwt>
+   ├─▶ POST /printapi/v1/print/printdocumentsbyid          (op TBD)
    │      { shipmentIds: [id], options: { label, pageOptions.pageType } }
-   │   ◀─ { reports: [ { name, content, type, valid } ] }
+   │   ◀─ { reports: [ { name, content, contentType, type, valid } ] }
    │
    └─▶ parse → ShipmentDetails(
              tracking_number=id, shipment_identifier=id,
@@ -229,126 +249,156 @@ create_shipment(ShipmentRequest)
              meta={ tracking_url: tracking_url.format(id) })
 ```
 
-### Data Flow Diagram
+### Data flow diagram
 
 ```
 REQUEST FLOW
   ShipmentRequest
     → recipient/shipper      → Party(type=Consignee) / Party(type=Consignor)
     → parcels[]              → pieces[] (packageType, weight[kg], W/H/L[cm], numberOfPieces)
-    → service                    → productCode
+    → service                → productCode
     → options.dhl_freight_payer_code   → payerCode.code (default DAP) + payer party.id = account_number
-    → options.dhl_freight_label_layout → ReportOptions.pageOptions.pageType
-    → options.references          → references[] (CNR/CNZ/INV)
+    → options.dhl_freight_label_layout → ReportOptions.pageOptions.pageType (default Label)
+    → references             → references[] { qualifier, value }
 
 RESPONSE FLOW
-  Booking { shipment.id }           → tracking_number, shipment_identifier
-  Print   { reports[].content }     → docs.label (label report; base64 assumed)
-  (derived) tracking_url.format(id) → meta.tracking_url, carrier_tracking_link
-  errors  { validationErrors[] } /  → Messages[] (field, code, message)
-          { status,title,detail }
+  Booking { transportInstruction.id } → tracking_number, shipment_identifier
+  Print   { reports[].content }       → docs.label (label report; base64 assumed)
+  (derived) tracking_url.format(id)   → meta.tracking_url
+  errors  { validationErrors[], errorMessage } → Messages[] (field, code, message)
 ```
 
-### Data Models
+### Data models
 
-Generated schema types (from the four OpenAPI specs) drive all request/response handling. Key objects:
+Generated schema types (from the vendored OpenAPI 2.10.0 specs) drive all request/response handling. Key objects:
 
-- **Booking request** `Shipment`: `productCode`, `payerCode{code,location}`, `parties[]{type,id,name,address,contactName,phone,email}`, `pieces[]{numberOfPieces,packageType,weight,width,height,length,volume,goodsType}`, `references[]{qualifier,value}`, `pickupDate`, `additionalServices` (subset).
-- **Booking response** `TransportInstructionResponseSuccess`: `{ status, shipment{ id, ... } }`.
-- **Print request** `PrintOptionsById`: `{ shipmentIds[], options: ReportOptions{ label, waybill, returnLabel, pageOptions{ pageType, marginLeft, marginTop } } }`.
-- **Print response** `PrintResult`: `{ reports[]: { name, content, type, valid } }`.
-- **Auth response**: `{ access_token, id_token, token_type, expires_in }`.
-- **Error shapes**: booking `TransportInstructionResponseError{ status, validationErrors[]{ field, errorCode, message, incompatibleFields[] } }`; auth `{ status, title, detail }`.
+- **Booking request** `Shipment`: `productCode`, `payerCode{code,location}`, `parties[]{type,subType,id,name,contactName,address,phone,email}`, `pieces[]{numberOfPieces,packageType,weight,width,height,length,volume,goodsType,stackable}`, `references[]{qualifier,value}`, `pickupDate`, `additionalServices`, `customsInformation`.
+- **Booking response** `TransportInstructionResponse`: `{ status, transportInstruction: Shipment{ id, ... } }`.
+- **Booking error** `TransportInstructionErrorResponse`: `{ status, validationErrors[]: IValidationError{ field, errorCode, message, incompatibleFields }, errorMessage }`.
+- **Print request** `PrintOptionsById`: `{ shipmentIds[], options: ReportOptions{ label, waybill, returnLabel, pageOptions{ pageType, marginLeft, marginTop, padding } } }`.
+- **Print response** `PrintResult`: `{ reports[]: PrintReport{ name, content, contentType, type, valid } }`.
 
-### Field Reference (unified → carrier)
+### Field reference (unified to carrier)
 
 | Karrio field | Carrier field | Required | Notes |
 |--------------|---------------|----------|-------|
 | `shipper` | `parties[type=Consignor]` | Yes | name, address, contact, phone, email |
 | `recipient` | `parties[type=Consignee]` | Yes | as above |
-| `service` | `productCode` | Yes | e.g. `ECI` + Road Freight Standard/Priority codes |
-| `options.dhl_freight_payer_code` | `payerCode.code` | No | default `DAP`; DAP/DDP/EXW/CIP |
+| `service` | `productCode` | Yes | numeric code (e.g. `102`, `232`); see product table |
+| `options.dhl_freight_payer_code` | `payerCode.code` | No | default `DAP` |
 | `settings.account_number` | payer `parties[].id` | Conditional | mandatory for the freight-payer party |
 | `parcels[]` | `pieces[]` | Yes | weight→kg, dims→cm, `packageType` (default `PAL`), `numberOfPieces` |
-| `options.dhl_freight_label_layout` | `pageOptions.pageType` | No | `Label`/`Label2xPortraitA4`/`Label3xLandscapeA4`/`LabelCompact` |
-| `reference` / `options` | `references[]{qualifier,value}` | No | CNR/CNZ/INV |
-| booking `shipment.id` | `tracking_number` | — | 13-char id; also `shipment_identifier` |
+| `options.dhl_freight_label_layout` | `pageOptions.pageType` | No | default `Label`; `Label2xPortraitA4` / `Label3xLandscapeA4` / `LabelCompact` / `LabelCompact2x2PortraitA4` |
+| `reference` / `options` | `references[]{qualifier,value}` | No | e.g. CNR/CNZ/INV |
+| booking `transportInstruction.id` | `tracking_number` | — | also `shipment_identifier` |
 
-### API Changes
+### Product codes
 
-| Endpoint | Method | Auth | Purpose |
-|----------|--------|------|---------|
-| `/auth/v1/token` | POST | Basic | Exchange client credentials for JWT |
-| `/freight/shipping/orders/v1/sendtransportinstruction` | POST | Bearer JWT | Create booking → tracking id |
-| `/freight/shipping/labels/v1/print/printdocumentsbyid` | POST | Bearer JWT | Retrieve label bytes by id |
+The API Farm's `productCode` is a numeric code; `units.py` encodes the full domestic and international set below.
+Only the six marked (Fixture) products get hermetic test fixtures in Phase 0; the rest are encoded for completeness.
+`SPI Standard Pallet International` has no numeric code and is encoded by its label.
 
-Base host resolution (in `utils.py`): `self.connection_config.server_url.state` if set, else the DHL Group platform default (User Guide) — test `https://api-sandbox.dhl.com`, production `https://api.dhl.com` — selected by `test_mode`.
-The SE API Farm hosts (`test-api` / `api.freight-logistics.dhl.com`) are a first-class override reached via the same field (or `DHL_FREIGHT_SERVER_URL` in tests).
-The `/auth/v1/token`, `/freight/shipping/orders/v1/...`, and `/freight/shipping/labels/v1/...` base paths are appended to the resolved host.
+| Direction | Code | Product | Fixture |
+|-----------|------|---------|---------|
+| Domestic (SE↔SE) | 118 | Hemleverans Paket B2C | |
+| Domestic (SE↔SE) | 401 | Home Delivery B2C | Fixture |
+| Domestic (SE↔SE) | 402, 502 | Home Delivery C2B | |
+| Domestic (SE↔SE) | 210 | Pall | |
+| Domestic (SE↔SE) | 102 | Paket | Fixture |
+| Domestic (SE↔SE) | 212 | Parti | |
+| Domestic (SE↔SE) | 103 | Service Point B2C | Fixture |
+| Domestic (SE↔SE) | 104 | Service Point C2B | |
+| Domestic (SE↔SE) | 209 | Special | |
+| Domestic (SE↔SE) | 211 | Stycke | |
+| International (to/from SE) | 202 | Road Freight Standard | Fixture |
+| International (to/from SE) | 232 | Euroconnect Plus | Fixture |
+| International (to/from SE) | 205 | Road Freight Direct | |
+| International (to/from SE) | 233 | Road Freight Priority | |
+| International (to/from SE) | 601 | Home Delivery International B2C | |
+| International (to/from SE) | 109 | Parcel Connect B2C | Fixture |
+| International (to/from SE) | 107 | Parcel Return Connect C2B | |
+| International (to/from SE) | 112 | Parcel Connect Plus | |
+| International (to/from SE) | SPI | Standard Pallet International | |
+
+The three B2C / service-point fixture products (103, 401, 109) may require an `AccessPoint` or `Delivery` party carrying a `subType` (`Servicepoint`) and a locator id sourced from the Service Point or Home Delivery Locator APIs.
+If that reference cannot be caller-supplied in Phase 0, these three drop from the fixture set; 102, 232, and 202 still fully exercise the book-then-print pipeline (see Pending question #3).
+
+### API changes
+
+| Endpoint (base path + operation) | Method | Auth | Purpose |
+|----------------------------------|--------|------|---------|
+| `/transportinstructionapi/v1/transportinstruction/sendtransportinstruction` | POST | `client-key` header | Create booking → tracking id |
+| `/printapi/v1/print/printdocumentsbyid` (op TBD) | POST | `client-key` header | Retrieve label bytes by id |
+
+Base host resolution (in `utils.py`): `self.connection_config.server_url.state` if set, else the API Farm default — test `https://test-api.freight-logistics.dhl.com`, production `https://api.freight-logistics.dhl.com` — selected by `test_mode`.
+Each service's base path (`/transportinstructionapi/v1`, `/printapi/v1`, ...) is appended to the resolved host.
 
 ---
 
 ## Edge Cases & Failure Modes
 
-### Edge Cases
+### Edge cases
 
 | Case | Handling |
 |------|----------|
-| Booking succeeds, print fails | Surface print error as `Messages`; booking id still recoverable; return `ShipmentDetails` with empty label + `meta.tracking_url`, or fail per parser policy (confirm in Phase 3) |
-| Print report `content` not base64 | Assume base64 per DHL norm; verify against sandbox (Q#1 pending) before release |
+| Booking succeeds, print fails | Surface print error as `Messages`; booking id still recoverable via `meta`; return `ShipmentDetails` with empty label + `meta.tracking_url`, or fail per parser policy |
+| Print report `content` not base64 | Assume base64 per DHL norm; verify against a sample before release |
 | Missing `account_number` when payer party requires id | Validate early; return a clear `Message` rather than a DHL 400 |
 | International shipment | Allowed; no geo gate — DHL API validates |
-| Token expired mid-session | Cache refresh on expiry via `expires_in` margin |
-| Multiple print reports (label + waybill) | Select the label report for `docs.label`; others ignored in v1 |
+| Service-point / home-delivery product without a locator reference | Return a clear `Message` if the API rejects it; may drop these products from Phase 0 fixtures |
+| Multiple print reports (label + waybill) | Select the label report for `docs.label`; others ignored in Phase 0 |
 
-### Failure Modes
+### Failure modes
 
 | Failure | Detection | Response |
 |---------|-----------|----------|
-| Auth 400/401 | `{ status, title, detail }` | Parse into `Message`; abort create |
-| Booking validation error | `validationErrors[]` | Map each to `Message(field, code, message)` |
-| Print error (undocumented) | Defensive `IValidationError` parse | Map to `Message`; note booking id in `meta` |
+| Booking validation error | `validationErrors[]` / `errorMessage` | Map each to `Message(field, code, message)` |
+| Print error | Defensive `validationErrors` / `errorMessage` parse | Map to `Message`; note booking id in `meta` |
+| Invalid or missing `client-key` | DHL 401/403 | Parse into `Message`; abort create |
 | Network/timeout | `lib.request` raises | Standard Karrio error propagation |
 
 ---
 
 ## Implementation Plan
 
+### Phase 0 scope
+
+Phase 0 delivers the shipping capability against the SE API Farm with hermetic, mocked tests.
+Tracking (`tracking.py`) and cancel (`cancel.py`) remain documented deferred stubs; rating is deferred.
+
 ### Phase 1: Scaffold & schema generation
 
 | Task | Files | Status | Effort |
 |------|-------|--------|--------|
-| Scaffold connector | `./bin/cli sdk add-extension --path modules/connectors --carrier-slug dhl_freight --display-name "DHL Freight" --features "shipping,tracking" --no-is-xml-api --version 2026.4 --confirm` | Pending | S |
-| Vendor raw specs + User Guide (upstream filenames, git-tracked) | `modules/connectors/dhl_freight/vendor/` | Pending | S |
-| Derive JSON generation samples from the vendored YAMLs | `modules/connectors/dhl_freight/schemas/*.json` | Pending | M |
-| Configure + run generation | `generate`, `./bin/run-generate-on modules/connectors/dhl_freight` | Pending | S |
+| Scaffold connector | `./bin/cli sdk add-extension` | Done | S |
+| Vendor raw specs (upstream filenames, git-tracked) | `modules/connectors/dhl_freight/vendor/se-api-farm/*.json` | Done | S |
+| Derive JSON generation samples from the vendored specs | `modules/connectors/dhl_freight/schemas/*.json` | In progress | M |
+| Configure + run generation | `generate`, `./bin/run-generate-on modules/connectors/dhl_freight` | In progress | S |
 
-### Phase 2: Auth, settings, units, errors
+### Phase 2: Settings, units, errors, proxy
 
 | Task | Files | Status | Effort |
 |------|-------|--------|--------|
-| Settings + token cache + resolvable server URL (config override, default-by-test_mode) + tracking_url | `karrio/providers/dhl_freight/utils.py`, `karrio/mappers/dhl_freight/settings.py` | Pending | M |
-| `ConnectionConfig.server_url` override field | `karrio/providers/dhl_freight/units.py`, `karrio/plugins/dhl_freight/__init__.py` (`connection_configs=`) | Pending | S |
-| Services/options/tracking-status enums | `karrio/providers/dhl_freight/units.py` | Pending | M |
-| Error parser (booking/print/auth) | `karrio/providers/dhl_freight/error.py` | Pending | S |
-| Proxy: `create_shipment` (book→print), `get_tracking` | `karrio/mappers/dhl_freight/proxy.py` | Pending | M |
+| Settings + resolvable server URL (config override, default-by-test_mode) + tracking_url + label_type | `karrio/providers/dhl_freight/utils.py`, `karrio/mappers/dhl_freight/settings.py` | Pending | M |
+| `ConnectionConfig.server_url` override + `label_type` | `karrio/providers/dhl_freight/units.py`, `karrio/plugins/dhl_freight/__init__.py` | Pending | S |
+| Services (full product set) / options enums | `karrio/providers/dhl_freight/units.py` | Pending | M |
+| Error parser (booking/print) | `karrio/providers/dhl_freight/error.py` | Pending | S |
+| Proxy: `create_shipment` (book→print) with `client-key` header | `karrio/mappers/dhl_freight/proxy.py` | Pending | M |
 
 ### Phase 3: Providers
 
 | Task | Files | Status | Effort |
 |------|-------|--------|--------|
-| Shipment create request build + response parse | `karrio/providers/dhl_freight/shipment/create.py` | Pending | L |
-| Tracking (URL-only) build + parse | `karrio/providers/dhl_freight/tracking.py` | Pending | S |
-| Public exports | `karrio/providers/dhl_freight/__init__.py`, `karrio/plugins/dhl_freight/__init__.py` (METADATA) | Pending | S |
+| Shipment create request build + response parse (with `meta.tracking_url`) | `karrio/providers/dhl_freight/shipment/create.py` | Pending | L |
+| Public exports + plugin METADATA (shipping only) | `karrio/providers/dhl_freight/__init__.py`, `karrio/plugins/dhl_freight/__init__.py` | Pending | S |
+| Deferred stubs documented (`tracking.py`, `cancel.py`) | `karrio/providers/dhl_freight/{tracking.py,shipment/cancel.py}` | Pending | S |
 
-### Phase 4: Tests & validation
+### Phase 4: Tests
 
 | Task | Files | Status | Effort |
 |------|-------|--------|--------|
-| Fixtures + shipment tests (book+print mocks) | `tests/dhl_freight/fixture.py`, `test_shipment.py` | Pending | M |
-| Tracking tests (URL construction) | `tests/dhl_freight/test_tracking.py` | Pending | S |
-| Opt-in live smoke test vs test-api (env creds) | `tests/dhl_freight/test_live_smoke.py` | Pending | M |
-| Run suites, confirm plugin registration | — | Pending | S |
+| Fixtures + shipment tests (book+print mocks) for the six fixture products | `tests/dhl_freight/fixture.py`, `test_shipment.py` | Pending | M |
+| Run suites, confirm plugin registration + capabilities | — | Pending | S |
 
 ---
 
@@ -356,31 +406,31 @@ The `/auth/v1/token`, `/freight/shipping/orders/v1/...`, and `/freight/shipping/
 
 > unittest only (never pytest). Print requests/responses before asserting, then remove. Use `assertDictEqual`/`assertListEqual` with full payloads and `mock.ANY` for dynamic fields. Run from the repo root.
 
-### Test Categories
+Phase 0 is fully hermetic: mocked `lib.request`, `test_mode=True`, hardcoded fixture credentials, no network.
+No live sandbox credentials are required.
+
+### Test categories
 
 | Category | What it verifies |
 |----------|------------------|
 | Request build | Unified model → DHL booking + print request |
-| API call | Proxy issues auth + booking + print to the correct URLs |
+| API call | Proxy issues booking + print to the correct API Farm URLs with the `client-key` header |
 | Response parse | Booking+print → `ShipmentDetails` (id, label, meta.tracking_url) |
-| Tracking | `get_tracking` → id + constructed URL, no HTTP |
-| Errors | Booking/print/auth error payloads → `Messages` |
+| Errors | Booking/print error payloads → `Messages` |
 
-### Test Cases
+### Test cases
 
 ```
 test_shipment.py
   test_create_shipment_request       # ShipmentRequest → {booking, print} request
-  test_create_shipment               # mock lib.request: auth + booking + print URLs/order
+  test_create_shipment               # mock lib.request: booking + print URLs/order + client-key header
   test_parse_shipment_response       # merged response → ShipmentDetails(+label,+tracking_url)
-  test_parse_error_response          # booking validationErrors → Messages
-
-test_tracking.py
-  test_parse_tracking_response       # tracking_number → TrackingDetails(carrier_tracking_link), no HTTP
-  test_tracking_url_construction     # blank/invalid tracking number handled gracefully
+  test_parse_error_response          # booking validationErrors/errorMessage → Messages
 ```
 
-### Running Tests
+The six fixture products (domestic 102, 401, 103; international 232, 202, 109) provide the fixture matrix; 102, 232, and 202 must at minimum pass end-to-end.
+
+### Running tests
 
 ```bash
 source bin/activate-env
@@ -389,49 +439,18 @@ python -m unittest discover -v -f modules/connectors/dhl_freight/tests
 ./bin/cli plugins show dhl_freight
 ```
 
-### Live smoke test (net-new convention, opt-in gated)
-
-> Every existing connector test in this repo is hermetic — mocked, `test_mode=True`, hardcoded fixture credentials, no network. A live test is net-new here, so it is isolated in its own file and opt-in, keeping the default suite green and offline.
-
-`tests/dhl_freight/test_live_smoke.py` calls the real test-api and is skipped unless credentials *and* an explicit opt-in are present:
-
-```python
-import os, unittest
-
-LIVE = bool(os.getenv("DHL_FREIGHT_CONSUMER_KEY") and os.getenv("DHL_FREIGHT_LIVE_TEST"))
-
-@unittest.skipUnless(LIVE, "set DHL_FREIGHT_LIVE_TEST=1 + DHL_FREIGHT_CONSUMER_KEY/SECRET to run")
-class TestDHLFreightLiveSmoke(unittest.TestCase):
-    def test_auth_book_print(self):
-        # build gateway from env creds against the API Farm test host,
-        # create a shipment, assert non-error auth + a booking id + a label report
-        ...
-```
-
-Environment variables (following the repo's `<CARRIER_ID_UPPER>_*` convention):
-
-| Var | Purpose |
-|-----|---------|
-| `DHL_FREIGHT_CONSUMER_KEY` / `DHL_FREIGHT_CONSUMER_SECRET` | OAuth credentials (portal API Key / Secret) for the token exchange |
-| `DHL_FREIGHT_ACCOUNT_NUMBER` | Freight-payer party id |
-| `DHL_FREIGHT_SERVER_URL` | Optional host override (else DHL Group platform default by `test_mode`; set to the SE API Farm here to target it) |
-| `DHL_FREIGHT_LIVE_TEST` | Explicit opt-in (`1`) so the test never fires in the default/CI hermetic run unless intended |
-
-`./bin/run-sdk-tests` stays green offline: the class skips when the opt-in or credentials are absent. Real responses captured here become the fixtures for the hermetic tests.
-
 ---
 
 ## Risk Assessment
 
 | Risk | Impact | Probability | Mitigation |
 |------|--------|-------------|------------|
-| Bearer token ambiguity (`id_token` vs `access_token`) | Auth fails against Booking/Print | Medium | Default `id_token`; make the field a one-line switch; verify in sandbox (Q#1) |
-| Print `content` not base64 | Corrupt label | Medium | Verify against sandbox before release; isolate decode in one helper |
-| Token expiry mid-flow (~30 min TTL) | Occasional re-auth | Low | Cache with margin; refresh on expiry; reuse `dhl_parcel_de` pattern |
+| Print report `content` not base64 | Corrupt label | Medium | Verify against a sample before release; isolate decode in one helper |
+| Service-point / home-delivery products need a locator reference | 103/401/109 cannot be booked without it | Medium | Confirm whether it is caller-supplied (Pending #3); drop from fixtures if not — 102/232/202 still cover the pipeline |
 | Booking succeeds but print fails | Orphaned booking without label | Low | Surface error + keep booking id in `meta`; document recovery |
-| Wrong tracking-URL template | Broken tracking link | Low | Confirm template (Q#2); single source in `utils.py` |
-| Wrong host for a given consumer (DHL Group vs SE API Farm) | Live calls fail | Low | Default DHL Group platform + `connection_config.server_url` override to the API Farm; confirm via smoke test |
-| Net-new gated live test deviates from hermetic-suite norm | CI flakiness / accidental live calls | Low | Isolate in its own file; double-gate on creds + `DHL_FREIGHT_LIVE_TEST`; skips by default |
+| Wrong tracking-URL template | Broken tracking link | Low | Confirm template (Pending #2); single source in `utils.py` |
+| Print operation choice (`byid` vs full payload) | Rework in create flow | Low | Resolve during schema analysis (Pending #1); default `byid` |
+| Raster format (PDF/ZPL) assumption | Mismatched label type tag | Low | `label_type` tags returned bytes; provisional pending user confirmation |
 
 ---
 
@@ -439,36 +458,35 @@ Environment variables (following the repo's `<CARRIER_ID_UPPER>_*` convention):
 
 ### Appendix A: Reference specs
 
-Vendored to `modules/connectors/dhl_freight/vendor/` during Phase 1 (repo convention — upstream filenames, git-tracked; matches `gls` / `hermes` / `dpd_meta`). Currently working copies at repo root.
+Vendored to `modules/connectors/dhl_freight/vendor/se-api-farm/` (upstream filenames, git-tracked; matches `gls` / `hermes` / `dpd_meta`).
+The DHL Freight Sweden API Farm OpenAPI 2.10.0 set includes, among others:
 
-- `DHL Freight Authentication API YAML - 2026 R04.yaml`
-- `DHL Freight Shipment Booking API YAML - 2026 R04.yaml`
-- `DHL Freight Print API YAML - 2026 R04.yaml`
-- `DHL Freight Shipment Tracking API YAML - 2026 R04.yaml` (retained for future events phase; not called in v1)
-- `DHL Freight User Guide.md` — authoritative for hosts, ~30-min token, and API Key/Secret credentials
+- `transport-instruction-2.10.0.json` — booking (`/transportinstruction/sendtransportinstruction`)
+- `print-api-2.10.0.json` — label (`/print/printdocuments`, `/print/printdocumentsbyid`)
+- `product-api-2.10.0.json` — products (`/products`), for the `productCode` set
+- `pricequote-api-2.10.0.json` — price quotes (deferred beyond Phase 0)
+- `servicepoint-api-2.10.0.json`, `home-delivery-locator-api-2.10.0.json` — locators for service-point / home-delivery products (deferred)
 
-### Appendix B: Carrier-Specific Reference
+### Appendix B: Carrier-specific reference
 
-- DHL Authentication API: `POST /auth/v1/token`, Basic auth, `response_type` ∈ {`access_token`, `id_token`}, grant `client_credentials`.
-- Booking `productCode` and `payerCode` options: per DHL Product Manual / `GET /products` (not in provided specs; enumerate during Phase 2).
-- Tracking URL template (proposed): `https://www.dhl.com/global-en/home/tracking/tracking-freight.html?submit=1&tracking-id={}`.
+- Authentication: a single `client-key` HTTP header on every request (`apiKey`, `in: header`); no token exchange.
+- Booking `productCode` set: enumerated in the product table above; the runtime source of truth is the Product API `GET /products`.
+- Tracking URL template: a DHL Freight Sweden portal template (Pending #2), applied locally to `transportInstruction.id`.
 
 Hosts (resolved host + spec base path):
 
-| Environment | Default host (DHL Group platform) | Override (SE API Farm) |
-|-------------|-----------------------------------|------------------------|
-| Test | `https://api-sandbox.dhl.com` | `https://test-api.freight-logistics.dhl.com` |
-| Production | `https://api.dhl.com` | `https://api.freight-logistics.dhl.com` |
+| Environment | API Farm host | Base paths |
+|-------------|---------------|------------|
+| Test | `https://test-api.freight-logistics.dhl.com` | `/transportinstructionapi/v1`, `/printapi/v1`, ... |
+| Production | `https://api.freight-logistics.dhl.com` | as above |
 
-The DHL Group platform hosts are the documented general path (User Guide); the SE API Farm is a recommended path for SE-based consumers. Per-connection `connection_config.server_url` selects either.
-
-Live-test env vars: `DHL_FREIGHT_CONSUMER_KEY`, `DHL_FREIGHT_CONSUMER_SECRET`, `DHL_FREIGHT_ACCOUNT_NUMBER`, `DHL_FREIGHT_SERVER_URL` (optional), `DHL_FREIGHT_LIVE_TEST` (opt-in).
+Per-connection `connection_config.server_url` overrides the host.
 
 | Karrio field | DHL Freight field |
 |--------------|-------------------|
-| `tracking_number` | booking `shipment.id` |
+| `tracking_number` | booking `transportInstruction.id` |
 | `docs.label` | `PrintResult.reports[].content` (label report) |
-| `meta.tracking_url` | `tracking_url.format(shipment.id)` |
+| `meta.tracking_url` | `tracking_url.format(transportInstruction.id)` |
 | `service` | `productCode` |
 | `options.dhl_freight_payer_code` | `payerCode.code` |
 | `options.dhl_freight_label_layout` | `ReportOptions.pageOptions.pageType` |
