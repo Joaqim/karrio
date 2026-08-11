@@ -1,17 +1,11 @@
-
-import base64
-import datetime
 import karrio.lib as lib
 import karrio.core as core
-import karrio.core.errors as errors
-from karrio.core.utils.caching import ThreadSafeTokenManager
 
 
 class Settings(core.Settings):
-    """DHL Freight connection settings."""
+    """DHL Freight (Sweden API Farm) connection settings."""
 
-    # Add carrier specific api connection properties here
-    api_key: str
+    client_key: str
     account_number: str = None
 
     @property
@@ -20,16 +14,31 @@ class Settings(core.Settings):
 
     @property
     def server_url(self):
-        return (
-            "https://carrier.api"
+        """Base host for the SE API Farm.
+
+        A per-connection ``server_url`` config value overrides the
+        sandbox/production default, allowing a connection to pin a host.
+        """
+        return self.connection_config.server_url.state or (
+            "https://test-api.freight-logistics.dhl.com"
             if self.test_mode
-            else "https://sandbox.carrier.api"
+            else "https://api.freight-logistics.dhl.com"
         )
 
-    # """uncomment the following code block to expose a carrier tracking url."""
-    # @property
-    # def tracking_url(self):
-    #     return "https://www.carrier.com/tracking?tracking-id={}"
+    @property
+    def transport_instruction_url(self):
+        return f"{self.server_url}/transportinstructionapi/v1"
+
+    @property
+    def print_url(self):
+        return f"{self.server_url}/printapi/v1"
+
+    @property
+    def tracking_url(self):
+        # The API Farm exposes no authoritative shipment-tracking URL template.
+        # This is the public DHL Freight Sweden tracking widget keyed by
+        # shipment id. NEEDS USER VERIFICATION.
+        return "https://www.dhl.com/se-en/home/tracking/tracking-freight.html?submit=1&tracking-id={}"
 
     @property
     def connection_config(self) -> lib.units.Options:

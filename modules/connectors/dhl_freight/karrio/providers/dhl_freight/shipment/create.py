@@ -1,16 +1,9 @@
 """Karrio DHL Freight shipment API implementation."""
 
-# IMPLEMENTATION INSTRUCTIONS:
-# 1. Uncomment the imports when the schema types are generated
-# 2. Import the specific request and response types you need
-# 3. Create a request instance with the appropriate request type
-# 4. Extract shipment details from the response
-#
-# NOTE: JSON schema types are generated with "Type" suffix (e.g., ShipmentRequestType),
-# while XML schema types don't have this suffix (e.g., ShipmentRequest).
-
-import karrio.schemas.dhl_freight.shipment_request as dhl_freight_req
-import karrio.schemas.dhl_freight.shipment_response as dhl_freight_res
+import karrio.schemas.dhl_freight.transport_instruction_request as dhl_freight_req
+import karrio.schemas.dhl_freight.transport_instruction_response as dhl_freight_res
+import karrio.schemas.dhl_freight.print_request as dhl_freight_print
+import karrio.schemas.dhl_freight.print_response as dhl_freight_report
 
 import typing
 import karrio.lib as lib
@@ -22,84 +15,62 @@ import karrio.providers.dhl_freight.units as provider_units
 
 
 def parse_shipment_response(
-    _response: lib.Deserializable[dict],
+    _response: lib.Deserializable[typing.List[dict]],
     settings: provider_utils.Settings,
 ) -> typing.Tuple[models.ShipmentDetails, typing.List[models.Message]]:
-    response = _response.deserialize()
-    messages = error.parse_error_response(response, settings)
+    booking, printed = _response.deserialize()
+    messages = error.parse_error_response([booking, printed], settings)
 
-    # Check if we have valid shipment data
-    
-    has_shipment = "shipment" in response if hasattr(response, 'get') else False
-    
+    instruction = (booking or {}).get("transportInstruction") or {}
+    details = lib.identity(
+        _extract_details(booking, printed, settings) if instruction.get("id") else None
+    )
 
-    shipment = _extract_details(response, settings) if has_shipment else None
-
-    return shipment, messages
+    return details, messages
 
 
 def _extract_details(
-    data: dict,
+    booking: dict,
+    printed: dict,
     settings: provider_utils.Settings,
 ) -> models.ShipmentDetails:
-    """
-    Extract shipment details from carrier response data
-
-    data: The carrier-specific shipment data structure
-    settings: The carrier connection settings
-
-    Returns a ShipmentDetails object with extracted shipment information
-    """
-    # Convert the carrier data to a proper object for easy attribute access
-    
-    # For JSON APIs, convert dict to proper response object
-    response_obj = lib.to_object(dhl_freight_res.ShipmentResponseType, data)
-
-    # Access the shipment data
-    shipment = response_obj.shipment if hasattr(response_obj, 'shipment') else None
-
-    if shipment:
-        # Extract tracking info
-        tracking_number = shipment.trackingNumber if hasattr(shipment, 'trackingNumber') else ""
-        shipment_id = shipment.shipmentId if hasattr(shipment, 'shipmentId') else ""
-
-        # Extract label info
-        label_data = shipment.labelData if hasattr(shipment, 'labelData') else None
-        label_format = label_data.format if label_data and hasattr(label_data, 'format') else "PDF"
-        label_base64 = label_data.image if label_data and hasattr(label_data, 'image') else ""
-
-        # Extract optional invoice
-        invoice_base64 = shipment.invoiceImage if hasattr(shipment, 'invoiceImage') else ""
-
-        # Extract service code for metadata
-        service_code = shipment.serviceCode if hasattr(shipment, 'serviceCode') else ""
-    else:
-        tracking_number = ""
-        shipment_id = ""
-        label_format = "PDF"
-        label_base64 = ""
-        invoice_base64 = ""
-        service_code = ""
-    
-
-    documents = models.Documents(
-        label=label_base64,
+    instruction = lib.to_object(
+        dhl_freight_res.TransportInstructionType,
+        booking.get("transportInstruction") or {},
     )
+    result = lib.to_object(dhl_freight_report.PrintResponseType, printed)
+    report = next(iter(result.reports or []), None)
 
-    # Add invoice if present
-    if invoice_base64:
-        documents.invoice = invoice_base64
+    tracking_number = instruction.id
+    content_type = getattr(report, "contentType", None) or ""
+    label_type = lib.identity(
+        "PDF"
+        if "pdf" in content_type.lower()
+        else (
+            "ZPL"
+            if "zpl" in content_type.lower()
+            else (
+                "PNG"
+                if "png" in content_type.lower()
+                else settings.connection_config.label_type.state or "PDF"
+            )
+        )
+    )
 
     return models.ShipmentDetails(
         carrier_id=settings.carrier_id,
         carrier_name=settings.carrier_name,
         tracking_number=tracking_number,
-        shipment_identifier=shipment_id,
-        label_type=label_format,
-        docs=documents,
+        shipment_identifier=tracking_number,
+        label_type=label_type,
+        docs=models.Documents(label=getattr(report, "content", None) or ""),
         meta=dict(
-            service_code=service_code,
-            # Add any other relevant metadata from the carrier's response
+            carrier_tracking_link=settings.tracking_url.format(tracking_number),
+            product_code=(
+                str(instruction.productCode)
+                if instruction.productCode is not None
+                else None
+            ),
         ),
     )
 
@@ -108,15 +79,6 @@ def shipment_request(
     payload: models.ShipmentRequest,
     settings: provider_utils.Settings,
 ) -> lib.Serializable:
-    """
-    Create a shipment request for the carrier API
-
-    payload: The standardized ShipmentRequest from karrio
-    settings: The carrier connection settings
-
-    Returns a Serializable object that can be sent to the carrier API
-    """
-    # Convert karrio models to carrier-specific format
     shipper = lib.to_address(payload.shipper)
     recipient = lib.to_address(payload.recipient)
     packages = lib.to_packages(payload.parcels)
@@ -127,55 +89,131 @@ def shipment_request(
         initializer=provider_units.shipping_options_initializer,
     )
 
-    # Create the carrier-specific request object
-    
-    # For JSON API request
-    request = dhl_freight_req.ShipmentRequestType(
-        # Map shipper details
-        shipper={
-            "addressLine1": shipper.address_line1,
-            "city": shipper.city,
-            "postalCode": shipper.postal_code,
-            "countryCode": shipper.country_code,
-            "stateCode": shipper.state_code,
-            "personName": shipper.person_name,
-            "companyName": shipper.company_name,
-            "phoneNumber": shipper.phone_number,
-            "email": shipper.email,
-        },
-        # Map recipient details
-        recipient={
-            "addressLine1": recipient.address_line1,
-            "city": recipient.city,
-            "postalCode": recipient.postal_code,
-            "countryCode": recipient.country_code,
-            "stateCode": recipient.state_code,
-            "personName": recipient.person_name,
-            "companyName": recipient.company_name,
-            "phoneNumber": recipient.phone_number,
-            "email": recipient.email,
-        },
-        # Map package details
-        packages=[
-            {
-                "weight": package.weight.value,
-                "weightUnit": provider_units.WeightUnit[package.weight.unit].value,
-                "length": package.length.value if package.length else None,
-                "width": package.width.value if package.width else None,
-                "height": package.height.value if package.height else None,
-                "dimensionUnit": provider_units.DimensionUnit[package.dimension_unit].value if package.dimension_unit else None,
-                "packagingType": provider_units.PackagingType[package.packaging_type or 'your_packaging'].value,
-            }
+    payer_code = options.dhl_freight_payer_code.state or settings.account_number
+    service_point = options.dhl_freight_service_point.state
+    page_type = provider_units.PageType.map(
+        options.dhl_freight_label_page_type.state
+        or settings.connection_config.label_page_type.state
+        or provider_units.PageType.Label.value
+    ).value_or_key
+
+    parties = [
+        _party(provider_units.PartyType.Consignor, shipper),
+        _party(provider_units.PartyType.Consignee, recipient),
+        *lib.identity([_payer_party(payer_code)] if payer_code else []),
+        *lib.identity(
+            [
+                dhl_freight_req.PartyType(
+                    id=service_point,
+                    type=provider_units.PartyType.AccessPoint.value,
+                    subType=provider_units.PartySubType.map(
+                        options.dhl_freight_service_point_type.state
+                        or provider_units.PartySubType.ParcelShop.value
+                    ).value_or_key,
+                )
+            ]
+            if service_point
+            else []
+        ),
+    ]
+
+    request = dhl_freight_req.TransportInstructionRequestType(
+        # productCode is generated as Optional[int]; the SPI product and codes
+        # such as 402/502 must serialize as strings on the wire.
+        productCode=str(service),
+        shippingDate=lib.fdate(payload.options.get("shipment_date")),
+        totalNumberOfPieces=len(packages),
+        totalWeight=packages.weight.KG,
+        references=lib.identity(
+            [
+                dhl_freight_req.ReferenceType(
+                    qualifier="CustomerReference", value=payload.reference
+                )
+            ]
+            if payload.reference
+            else []
+        ),
+        payerCode=lib.identity(
+            dhl_freight_req.PayerCodeType(code=payer_code) if payer_code else None
+        ),
+        parties=parties,
+        pieces=[
+            dhl_freight_req.PieceType(
+                # packageType/goodsType are product-documentation dependent and
+                # not enumerated in the API Farm spec; omitted in Phase 0.
+                marksAndNumbers=package.reference_number,
+                numberOfPieces=1,
+                weight=package.weight.KG,
+                volume=lib.failsafe(lambda: package.volume.m3),
+                width=lib.identity(package.width.CM if package.width.value else None),
+                height=lib.identity(
+                    package.height.CM if package.height.value else None
+                ),
+                length=lib.identity(
+                    package.length.CM if package.length.value else None
+                ),
+            )
             for package in packages
         ],
-        # Add service code
-        serviceCode=service,
-        # Add account information
-        customerNumber=settings.customer_number,
-        # Add label details
-        labelFormat=payload.label_type or "PDF",
-        # Add any other required fields for this carrier's API
+        additionalServices=dhl_freight_req.AdditionalServicesType(
+            notification=options.dhl_freight_notification.state,
+            preAdvice=options.dhl_freight_pre_advice.state,
+            tailLiftUnloading=options.dhl_freight_tail_lift_unloading.state,
+            doorstepDelivery=lib.identity(
+                dhl_freight_req.DoorstepDeliveryType(
+                    accessCode=options.dhl_freight_doorstep_access_code.state
+                )
+                if options.dhl_freight_doorstep_access_code.state is not None
+                else None
+            ),
+            insurance=lib.identity(
+                dhl_freight_req.InsuranceType(
+                    value=options.dhl_freight_insurance.state,
+                    currency=options.currency.state,
+                )
+                if options.dhl_freight_insurance.state is not None
+                else None
+            ),
+        ),
     )
-    
 
-    return lib.Serializable(request, lib.to_dict)
+    print_options = dhl_freight_print.OptionsType(
+        label=True,
+        pageOptions=dhl_freight_print.PageOptionsType(pageType=page_type),
+    )
+
+    return lib.Serializable(
+        request,
+        lib.to_dict,
+        dict(
+            print_options=lib.to_dict(print_options),
+            label_type=settings.connection_config.label_type.state or "PDF",
+        ),
+    )
+
+
+def _party(role: str, address) -> dhl_freight_req.PartyType:
+    return dhl_freight_req.PartyType(
+        type=role,
+        name=address.company_name or address.person_name,
+        contactName=address.contact,
+        vatEoriSocialSecurityNumber=address.tax_id,
+        phone=address.phone_number,
+        email=address.email,
+        address=dhl_freight_req.AddressType(
+            street=address.address_line1,
+            additionalAddressInfo=address.address_line2,
+            cityName=address.city,
+            # postalCode is generated as Optional[int]; keep it a string so
+            # alphanumeric/space-bearing postal codes survive serialization.
+            postalCode=str(address.postal_code) if address.postal_code else None,
+            countryCode=address.country_code,
+        ),
+    )
+
+
+def _payer_party(payer_code: str) -> dhl_freight_req.PartyType:
+    return dhl_freight_req.PartyType(
+        type=provider_units.PartyType.FreightPayer.value,
+        id=payer_code,
+    )

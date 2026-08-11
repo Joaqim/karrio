@@ -6,10 +6,10 @@ import karrio.providers.dhl_freight.utils as provider_utils
 
 @attr.s(auto_attribs=True)
 class Settings(provider_utils.Settings):
-    """DHL Freight connection settings."""
+    """DHL Freight (Sweden API Farm) connection settings."""
 
-    # Add carrier specific API connection properties here
-    api_key: str
+    # API Farm authenticates with a single API key sent as the `client-key` header.
+    client_key: str
     account_number: str = None
 
     # generic properties
