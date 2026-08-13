@@ -56,6 +56,7 @@ karrio_australiapost @ file://${PWD}/modules/connectors/australiapost
 karrio_canadapost @ file://${PWD}/modules/connectors/canadapost
 karrio_chronopost @ file://${PWD}/modules/connectors/chronopost
 karrio_dhl_express @ file://${PWD}/modules/connectors/dhl_express
+karrio_dhl_freight_sweden @ file://${PWD}/modules/connectors/dhl_freight_sweden
 karrio_dhl_parcel_de @ file://${PWD}/modules/connectors/dhl_parcel_de
 karrio_dhl_poland @ file://${PWD}/modules/connectors/dhl_poland
 karrio_dhl_universal @ file://${PWD}/modules/connectors/dhl_universal
