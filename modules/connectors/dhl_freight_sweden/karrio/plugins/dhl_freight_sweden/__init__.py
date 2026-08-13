@@ -15,6 +15,7 @@ import karrio.providers.dhl_freight_sweden.utils as utils
 # capability is advertised. Capabilities are derived from the Proxy's public
 # methods (create_shipment only).
 METADATA = PluginMetadata(
+    status="in-development",
     id="dhl_freight_sweden",
     label="DHL Freight Sweden",
     description="DHL Freight (Sweden API Farm) shipping integration for Karrio",
