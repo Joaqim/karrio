@@ -1,0 +1,118 @@
+{
+  "id": "",
+  "productCode": "212",
+  "shippingDate": "2026-08-12",
+  "pickupDate": "2026-08-12",
+  "requestedDeliveryDate": "2026-08-14",
+  "plannedDeliveryDate": "2026-08-14",
+  "pickupInstruction": "Ring the bell on arrival",
+  "deliveryInstruction": "Leave at reception",
+  "totalNumberOfPieces": 1,
+  "totalWeight": 380.0,
+  "totalVolume": 0.864,
+  "totalLoadingMeters": 0.4,
+  "totalPalletPlaces": 1.0,
+  "routingCode": "",
+  "references": [
+    { "qualifier": "CNR", "value": "REF123" }
+  ],
+  "payerCode": { "code": "DAP", "location": "" },
+  "parties": [
+    {
+      "id": "ACCT1",
+      "type": "Consignor",
+      "vatEoriSocialSecurityNumber": "SE556000000001",
+      "name": "Sender AB",
+      "contactName": "Anna Sender",
+      "references": ["ORDER-1"],
+      "address": {
+        "street": "Main Street",
+        "streetNumber": "1",
+        "additionalAddressInfo": "Gate 3",
+        "cityName": "Stockholm",
+        "postalCode": "11122",
+        "countryCode": "SE",
+        "accessCode": "1234"
+      },
+      "phone": "0700000000",
+      "email": "anna@example.se",
+      "vat": { "countryCode": "SE", "number": "556000000001" }
+    },
+    {
+      "type": "Consignee",
+      "name": "Receiver AB",
+      "contactName": "Bengt Receiver",
+      "address": {
+        "street": "Second Road",
+        "streetNumber": "2",
+        "cityName": "Gothenburg",
+        "postalCode": "41111",
+        "countryCode": "SE"
+      },
+      "phone": "0700000001",
+      "email": "bengt@example.se"
+    },
+    {
+      "id": "SE-SP-000123",
+      "type": "AccessPoint",
+      "subType": "ParcelShop",
+      "name": "DHL ServicePoint Nordstan",
+      "address": {
+        "street": "Nordstadstorget",
+        "streetNumber": "6",
+        "cityName": "Gothenburg",
+        "postalCode": "41105",
+        "countryCode": "SE"
+      }
+    }
+  ],
+  "pieces": [
+    {
+      "id": ["003700000000000123"],
+      "goodsType": "Machinery Parts",
+      "packageType": "PAL",
+      "marksAndNumbers": "1/1",
+      "numberOfPieces": 1,
+      "weight": 380.0,
+      "volume": 0.864,
+      "loadingMeters": 0.4,
+      "palletPlaces": 1.0,
+      "width": 80.0,
+      "height": 90.0,
+      "length": 120.0,
+      "stackable": true
+    }
+  ],
+  "additionalServices": {
+    "notification": true,
+    "preAdvice": true,
+    "tailLiftUnloading": false,
+    "doorstepDelivery": { "accessCode": "9999" },
+    "insurance": { "value": 5000.0, "currency": "SEK" }
+  },
+  "customsInformation": {
+    "customsDocuments": [
+      {
+        "id": "DOC-1",
+        "type": "CommercialInvoice",
+        "transportMovement": "Export",
+        "invoiceDate": "2026-08-12",
+        "invoiceCurrency": "SEK",
+        "invoiceAmount": 5000.0,
+        "eori": "SE556000000001"
+      }
+    ],
+    "customsCommodities": [
+      {
+        "countryCodeOfOrigin": "SE",
+        "customsValueCurrency": "SEK",
+        "customsValue": 5000.0,
+        "hsItemId": "84314980",
+        "commodityDescription": "Machinery parts",
+        "netWeight": 380.0,
+        "numberOfUnits": 1,
+        "goodsDescription": "Machinery parts"
+      }
+    ]
+  }
+}

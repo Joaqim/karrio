@@ -1,0 +1,11 @@
+{
+  "reports": [
+    {
+      "name": "label",
+      "content": "base64bytes",
+      "contentType": "application/pdf",
+      "type": "Label",
+      "valid": true
+    }
+  ]
+}

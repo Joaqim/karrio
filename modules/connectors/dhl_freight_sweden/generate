@@ -1,0 +1,20 @@
+SCHEMAS=./schemas
+LIB_MODULES=./karrio/schemas/dhl_freight_sweden
+find "${LIB_MODULES}" -name "*.py" -exec rm -r {} \;
+touch "${LIB_MODULES}/__init__.py"
+
+generate_schema() {
+    echo "Generating $1..."
+    "${ROOT}/bin/cli" codegen generate "$1" "$2" --no-nice-property-names
+}
+
+# Error response (always required)
+generate_schema "${SCHEMAS}/error_response.json" "${LIB_MODULES}/error_response.py"
+
+# Transport instruction (booking) schemas
+generate_schema "${SCHEMAS}/transport_instruction_request.json" "${LIB_MODULES}/transport_instruction_request.py"
+generate_schema "${SCHEMAS}/transport_instruction_response.json" "${LIB_MODULES}/transport_instruction_response.py"
+
+# Print (label) schemas
+generate_schema "${SCHEMAS}/print_request.json" "${LIB_MODULES}/print_request.py"
+generate_schema "${SCHEMAS}/print_response.json" "${LIB_MODULES}/print_response.py"
