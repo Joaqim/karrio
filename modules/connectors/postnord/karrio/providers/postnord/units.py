@@ -44,6 +44,9 @@ class ConnectionConfig(lib.Enum):
     # PostNord physical label size, sent as the labelType query parameter.
     # Unset -> no labelType param -> PostNord defaults to standard.
     label_size = lib.OptionEnum("label_size", LabelSize)
+    # Booking/notification language (lowercase ISO 639-1); sent as the query
+    # `locale` and uppercased as the body `language` element.
+    language = lib.OptionEnum("language", str, "en")
 
     shipping_options = lib.OptionEnum("shipping_options", list)
     shipping_services = lib.OptionEnum("shipping_services", list)

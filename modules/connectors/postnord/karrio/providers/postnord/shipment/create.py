@@ -150,6 +150,15 @@ def shipment_request(
 
     additional_service_codes = [option.code for _, option in options.items()]
 
+    # Booking locale: request options.language > connection config language >
+    # "en". Sent lowercase as the query `locale` (SMS/Email language) and
+    # uppercased as the body `language` element (label/document text).
+    locale = (
+        (payload.options or {}).get("language")
+        or settings.connection_config.language.state
+        or "en"
+    )
+
     # Assign a client-controlled shipmentId from the merchant reference so the
     # booking carries a searchable Track & Trace id; without one PostNord
     # auto-allocates an opaque id. Prefer the caller reference; fall back to a
@@ -191,6 +200,9 @@ def shipment_request(
 
     request = postnord_req.ShipmentRequestType(
         messageDate=datetime.datetime.now().isoformat(timespec="seconds"),
+        # Uppercase ISO 639-1 language code for label/document text elements;
+        # the query `locale` (SMS/Email language) is the lowercase variant.
+        language=(locale.upper() if locale else None),
         updateIndicator="Original",
         testIndicator=settings.test_mode,
         application=postnord_req.ApplicationType(
@@ -257,5 +269,5 @@ def shipment_request(
     )
 
     return lib.Serializable(
-        request, lib.to_dict, dict(shipment_id=shipment_id, label_type=label_type)
+        request, lib.to_dict, dict(shipment_id=shipment_id, label_type=label_type, locale=locale)
     )

@@ -8,7 +8,7 @@ import karrio.sdk as karrio
 import karrio.lib as lib
 import karrio.core.models as models
 
-from .fixture import gateway, gateway_small_label, gateway_zpl_label
+from .fixture import gateway, gateway_small_label, gateway_zpl_label, gateway_with_language
 
 
 class TestPostNordShipment(unittest.TestCase):
@@ -60,7 +60,7 @@ class TestPostNordShipment(unittest.TestCase):
             karrio.Shipment.create(self.ShipmentRequest).from_(gateway)
             self.assertEqual(
                 mock.call_args[1]["url"],
-                f"{gateway.settings.server_url}/rest/shipment/v3/edi/labels/pdf?apikey=TEST_API_KEY",
+                f"{gateway.settings.server_url}/rest/shipment/v3/edi/labels/pdf?apikey=TEST_API_KEY&locale=en",
             )
 
     def test_parse_shipment_response(self):
@@ -132,6 +132,28 @@ class TestPostNordShipment(unittest.TestCase):
                 lib.to_dict(parsed_response), ParsedAuthErrorResponse
             )
 
+    def test_create_shipment_locale_from_request(self):
+        # options.language on the request wins over connection config.
+        payload = {**ShipmentPayload, "options": {"language": "sv"}}
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = "{}"
+            karrio.Shipment.create(models.ShipmentRequest(**payload)).from_(gateway)
+            self.assertEqual(
+                mock.call_args[1]["url"],
+                f"{gateway.settings.server_url}/rest/shipment/v3/edi/labels/pdf?apikey=TEST_API_KEY&locale=sv",
+            )
+
+    def test_create_shipment_locale_from_config(self):
+        # Connection-config language applies when the request omits it.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = "{}"
+            karrio.Shipment.create(self.ShipmentRequest).from_(gateway_with_language)
+            self.assertEqual(
+                mock.call_args[1]["url"],
+                f"{gateway.settings.server_url}/rest/shipment/v3/edi/labels/pdf?apikey=TEST_API_KEY&locale=da",
+            )
+
+
     def test_parse_shipment_response_zpl(self):
         # encoding "none" + raw ZPL text -> base64-of-ZPL in docs.label and
         # label_type from the response's labelFormat.
@@ -199,7 +221,7 @@ class TestPostNordLabel(unittest.TestCase):
             karrio.Shipment.create(models.ShipmentRequest(**payload)).from_(gateway)
             self.assertEqual(
                 mock.call_args[1]["url"],
-                f"{gateway.settings.server_url}/rest/shipment/v3/edi/labels/zpl?apikey=TEST_API_KEY",
+                f"{gateway.settings.server_url}/rest/shipment/v3/edi/labels/zpl?apikey=TEST_API_KEY&locale=en",
             )
 
     def test_create_shipment_config_label_type_routes_zpl_endpoint(self):
@@ -213,7 +235,7 @@ class TestPostNordLabel(unittest.TestCase):
             ).from_(gateway_zpl_label)
             self.assertEqual(
                 mock.call_args[1]["url"],
-                f"{gateway.settings.server_url}/rest/shipment/v3/edi/labels/zpl?apikey=TEST_API_KEY",
+                f"{gateway.settings.server_url}/rest/shipment/v3/edi/labels/zpl?apikey=TEST_API_KEY&locale=en",
             )
 
     def test_create_shipment_defaults_pdf_endpoint(self):
@@ -225,7 +247,7 @@ class TestPostNordLabel(unittest.TestCase):
             ).from_(gateway)
             self.assertEqual(
                 mock.call_args[1]["url"],
-                f"{gateway.settings.server_url}/rest/shipment/v3/edi/labels/pdf?apikey=TEST_API_KEY",
+                f"{gateway.settings.server_url}/rest/shipment/v3/edi/labels/pdf?apikey=TEST_API_KEY&locale=en",
             )
 
     def test_create_shipment_label_size_query(self):
@@ -297,6 +319,7 @@ ShipmentCancelPayload = {
 ShipmentRequest = {
     "application": {"name": "Karrio", "applicationId": 2458},
     "messageDate": ANY,
+    "language": "EN",
     "testIndicator": True,
     "updateIndicator": "Original",
     "shipment": [

@@ -116,6 +116,7 @@ class Proxy(proxy.Proxy):
             url=self._url(
                 label_path,
                 labelType=self.settings.connection_config.label_size.state,
+                locale=request.ctx.get("locale"),
             ),
             data=lib.to_json(request.serialize()),
             trace=self.trace_as("json"),
