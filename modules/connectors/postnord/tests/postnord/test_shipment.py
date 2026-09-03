@@ -1,12 +1,14 @@
 """PostNord carrier shipment tests."""
 
+import base64
 import unittest
 from unittest.mock import patch, ANY
-from .fixture import gateway, gateway_small_label, gateway_zpl_label
 
 import karrio.sdk as karrio
 import karrio.lib as lib
 import karrio.core.models as models
+
+from .fixture import gateway, gateway_small_label, gateway_zpl_label
 
 
 class TestPostNordShipment(unittest.TestCase):
@@ -130,41 +132,100 @@ class TestPostNordShipment(unittest.TestCase):
                 lib.to_dict(parsed_response), ParsedAuthErrorResponse
             )
 
+    def test_parse_shipment_response_zpl(self):
+        # encoding "none" + raw ZPL text -> base64-of-ZPL in docs.label and
+        # label_type from the response's labelFormat.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = ShipmentZPLResponse
+            parsed_response = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(**{**ShipmentPayload, "label_type": "ZPL"})
+                )
+                .from_(gateway)
+                .parse()
+            )
+            details, _ = parsed_response
+            self.assertEqual(details.label_type, "ZPL")
+            self.assertEqual(
+                details.docs.label, base64.b64encode(RawZPL.encode("utf-8")).decode("utf-8")
+            )
+
+    def test_parse_shipment_response_zpl_without_label_format(self):
+        # A ZPL printout without labelFormat falls back to the requested type
+        # threaded on the ctx rather than assuming PDF.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = ShipmentZPLNoFormatResponse
+            parsed_response = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(**{**ShipmentPayload, "label_type": "ZPL"})
+                )
+                .from_(gateway)
+                .parse()
+            )
+            details, _ = parsed_response
+            self.assertEqual(details.label_type, "ZPL")
+            self.assertEqual(
+                details.docs.label, base64.b64encode(RawZPL.encode("utf-8")).decode("utf-8")
+            )
+
+    def test_parse_shipment_response_zpl_bundle(self):
+        # Multiple raw-ZPL printouts bundle into base64 of the newline-joined
+        # ZPL texts (bundle_zpls semantics); verified by decode round-trip.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = ShipmentZPLMultiResponse
+            parsed_response = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(**{**ShipmentPayload, "label_type": "ZPL"})
+                )
+                .from_(gateway)
+                .parse()
+            )
+            details, _ = parsed_response
+            self.assertEqual(details.label_type, "ZPL")
+            decoded = base64.b64decode(details.docs.label).decode("utf-8")
+            # bundle_zpls appends NEW_LINE after every label, incl. the last.
+            self.assertEqual(decoded, f"{RawZPL}\n{RawZPL2}\n")
+
 
 class TestPostNordLabel(unittest.TestCase):
     def setUp(self):
         self.maxDiff = None
 
     def test_create_shipment_zpl_routes_zpl_endpoint(self):
+        # Request-level label_type selects the ZPL endpoint (exact URL).
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
             mock.return_value = "{}"
             payload = {**ShipmentPayload, "label_type": "ZPL"}
             karrio.Shipment.create(models.ShipmentRequest(**payload)).from_(gateway)
-            self.assertIn(
-                "/rest/shipment/v3/edi/labels/zpl", mock.call_args[1]["url"]
+            self.assertEqual(
+                mock.call_args[1]["url"],
+                f"{gateway.settings.server_url}/rest/shipment/v3/edi/labels/zpl?apikey=TEST_API_KEY",
             )
 
     def test_create_shipment_config_label_type_routes_zpl_endpoint(self):
         # Connection-config label_type=ZPL with payload label_type unset resolves
         # the format from the connection default and routes to the ZPL endpoint
-        # via the threaded ctx.
+        # via the threaded ctx (exact URL).
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
             mock.return_value = "{}"
             karrio.Shipment.create(
                 models.ShipmentRequest(**ShipmentPayload)
             ).from_(gateway_zpl_label)
-            self.assertIn(
-                "/rest/shipment/v3/edi/labels/zpl", mock.call_args[1]["url"]
+            self.assertEqual(
+                mock.call_args[1]["url"],
+                f"{gateway.settings.server_url}/rest/shipment/v3/edi/labels/zpl?apikey=TEST_API_KEY",
             )
 
     def test_create_shipment_defaults_pdf_endpoint(self):
+        # No label_type anywhere: PDF endpoint, as before (exact URL).
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
             mock.return_value = "{}"
             karrio.Shipment.create(
                 models.ShipmentRequest(**ShipmentPayload)
             ).from_(gateway)
-            self.assertIn(
-                "/rest/shipment/v3/edi/labels/pdf", mock.call_args[1]["url"]
+            self.assertEqual(
+                mock.call_args[1]["url"],
+                f"{gateway.settings.server_url}/rest/shipment/v3/edi/labels/pdf?apikey=TEST_API_KEY",
             )
 
     def test_create_shipment_label_size_query(self):
@@ -520,3 +581,77 @@ ParsedPartialFailureResponse = [
         }
     ],
 ]
+
+# Raw ZPL fragments modeled on the live /labels/zpl observation: persistent
+# host commands (^LL/^CI28/^PO) then the format body (^XA...^XZ) with ^CW font
+# aliasing to printer-memory fonts. Truncated for fixture use.
+RawZPL = (
+    "^LL1520\n"
+    "^FX utf-8^FS    ^CI28\n"
+    "^PON\n"
+    "^XA\n"
+    "^CWW,E:ARI000.TTF\n"
+    "^CWW,E:ARIAL.TTF\n"
+    "^CWW,E:T0003M_\n"
+    "^A@N,50,50,E:ARI000.TTF\n"
+    "^FO50,50\n"
+    "^FD00373500454541020957\n"
+    "^FS\n"
+    "^XZ"
+)
+
+RawZPL2 = (
+    "^XA\n"
+    "^A@N,40,40,E:ARI000.TTF\n"
+    "^FO60,80\n"
+    "^FDORDER-7788\n"
+    "^FS\n"
+    "^XZ"
+)
+
+
+def _zpl_json(zpl: str) -> str:
+    return zpl.replace("\\", "\\\\").replace("\n", "\\n").replace('"', '\\"')
+
+
+ShipmentZPLResponse = """{
+  "bookingResponse": {
+    "bookingId": "BOOK-789",
+    "idInformation": [{
+      "status": "OK",
+      "ids": [
+        {"idType": "itemId", "value": "00373500454541020957", "printId": "P1"},
+        {"idType": "shipmentId", "value": "ORDER-7788", "printId": "P2"}
+      ],
+      "urls": [
+        {"type": "TRACKING", "url": "https://tracking.postnord.com/se/?id=00373500454541020957"}
+      ],
+      "errorResponse": null
+    }]
+  },
+  "labelPrintout": [{
+    "printout": {"type": "LABEL", "labelFormat": "ZPL", "encoding": "none", "data": "%s"}
+  }]
+}""" % _zpl_json(RawZPL)
+
+ShipmentZPLNoFormatResponse = ShipmentZPLResponse.replace(
+    '"labelFormat": "ZPL", ', ""
+)
+
+ShipmentZPLMultiResponse = """{
+  "bookingResponse": {
+    "bookingId": "BOOK-789",
+    "idInformation": [{
+      "status": "OK",
+      "ids": [
+        {"idType": "itemId", "value": "00373500454541020957", "printId": "P1"}
+      ],
+      "urls": [],
+      "errorResponse": null
+    }]
+  },
+  "labelPrintout": [
+    {"printout": {"type": "LABEL", "labelFormat": "ZPL", "encoding": "none", "data": "%s"}},
+    {"printout": {"type": "LABEL", "labelFormat": "ZPL", "encoding": "none", "data": "%s"}}
+  ]
+}""" % (_zpl_json(RawZPL), _zpl_json(RawZPL2))
