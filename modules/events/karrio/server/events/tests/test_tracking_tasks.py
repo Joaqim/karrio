@@ -105,6 +105,66 @@ class TestTrackersBackgroundUpdate(APITestCase):
             for call_args in mock_task.call_args_list:
                 self.assertEqual(call_args.kwargs["schema"], "test_schema")
 
+    def test_process_carrier_trackers_partitions_by_locale(self):
+        """A batch with mixed options.language issues one request per locale."""
+        sv_tracker = models.Tracking.objects.create(
+            tracking_number="1Z12345E66SWEDISH01",
+            test_mode=True,
+            delivered=False,
+            events=[],
+            status="in_transit",
+            created_by=self.user,
+            carrier=create_carrier_snapshot(self.ups_carrier),
+            options={"language": "sv"},
+        )
+        da_tracker = models.Tracking.objects.create(
+            tracking_number="1Z12345E66DANISH001",
+            test_mode=True,
+            delivered=False,
+            events=[],
+            status="in_transit",
+            created_by=self.user,
+            carrier=create_carrier_snapshot(self.ups_carrier),
+            options={"language": "da"},
+        )
+
+        with patch(
+            "karrio.server.events.task_definitions.base.tracking.karrio"
+        ) as mock_karrio:
+            mock_karrio.Tracking.fetch.return_value.from_.return_value.parse.return_value = (
+                [],
+                [],
+            )
+
+            tracking.process_carrier_trackers(
+                tracker_ids=[sv_tracker.id, da_tracker.id]
+            )
+
+        # Two locales → two TrackingRequest builds, each with one language
+        self.assertEqual(mock_karrio.Tracking.fetch.call_count, 2)
+        requested_languages = {
+            call_args.args[0].options.get("language")
+            for call_args in mock_karrio.Tracking.fetch.call_args_list
+        }
+        self.assertEqual(requested_languages, {"sv", "da"})
+
+    def test_process_carrier_trackers_uniform_locale_single_request(self):
+        """Uniform or unset locale keeps the single-request behavior."""
+        with patch(
+            "karrio.server.events.task_definitions.base.tracking.karrio"
+        ) as mock_karrio:
+            mock_karrio.Tracking.fetch.return_value.from_.return_value.parse.return_value = (
+                [],
+                [],
+            )
+
+            dhl_tracker = models.Tracking.objects.get(
+                tracking_number="00340434292135100124"
+            )
+            tracking.process_carrier_trackers(tracker_ids=[dhl_tracker.id])
+
+        self.assertEqual(mock_karrio.Tracking.fetch.call_count, 1)
+
     def test_process_carrier_trackers_incremental_save(self):
         """process_carrier_trackers fetches and saves each batch immediately."""
         dhl_tracker = models.Tracking.objects.get(
