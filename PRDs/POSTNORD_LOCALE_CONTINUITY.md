@@ -55,7 +55,7 @@ Out of scope: karrio-native notification/email/SMS pipeline (lives in `ee/platfo
 | D1 | Persist locale in tracker `options.language` (flat key) | Already the unified-model key the mapper reads; no migration; consistent with the ad-hoc fetch path. |
 | D1b | Shipment-created trackers inherit `shipment.options.language` | Label purchase is the moment the merchant's locale assignment happens (external solution); inheritance preserves it into continuous tracking. |
 | D2 | Locale-partitioned batches, not per-tracker requests | Preserves batch efficiency; PostNord applies one locale per request; mixed-locale batches otherwise degrade to last-wins. |
-| D3 | Booking locale precedence: request `options.language` > connection `config.language` > PostNord default `sv` | Mirrors `label_type` precedence (request > config > default) established by the ZPL work. |
+| D3 | Booking locale precedence: request `options.language` > connection `config.language` > `"en"` (per Q3; supersedes the original `sv` proposal) | Mirrors `label_type` precedence (request > config > default) established by the ZPL work; `en` matches the track-and-trace default for cross-layer consistency. |
 | D3b | Booking locale applies to all six booking endpoints | Spec defines `locale` on all six: `/v3/edi`, `/v3/edi/labels/zpl`, `/v3/edi/labels/pdf`, `/v3/returns/edi`, `/v3/returns/edi/labels/zpl`, `/v3/returns/edi/labels/pdf`. |
 | D4 | `notifyParty` is out of scope | It is pickup paperwork semantics ("party to whom a notice of arrival must also be sent", `booking.swagger.json:6872`), not a notification trigger. |
 | D5 | Locale enumeration shared by tracking and booking: `[en, sv, no, da, fi]` | Track-and-trace spec enumerates them explicitly; booking spec allows the same five values. |
@@ -132,7 +132,7 @@ for locale, group in group_by(batch, key=lambda t: (t.options or {}).get("langua
 locale = (
     (payload.options or {}).get("language")
     or settings.connection_config.language.state
-    or "sv"
+    or "en"
 )
 ```
 
@@ -341,10 +341,10 @@ The mapper's `(t.options or {}).get("language")` reads the flat key; the keyed e
 | Karrio input | Resolved via | Carrier field | Endpoint | Spec wording |
 |---|---|---|---|---|
 | tracking `options.language` | direct | `locale` query | `GET /rest/shipment/v7/trackandtrace/id/{id}/public` | "Default is en. Allowed values are en, sv, no, da and fi" |
-| shipment `options.language` | request > `config.language` > `sv` | `locale` query | `POST /rest/shipment/v3/edi/labels/pdf` | "The SMS and Email is written in the defined language [sv \| da \| no \| fi \| en]" |
+| shipment `options.language` | request > `config.language` > `en` | `locale` query | `POST /rest/shipment/v3/edi/labels/pdf` | "The SMS and Email is written in the defined language [sv \| da \| no \| fi \| en]" |
 | shipment `options.language` | same precedence | `locale` query | `POST /rest/shipment/v3/edi/labels/zpl` | same |
 | shipment `options.language` | same precedence | `locale` query | `POST /rest/shipment/v3/edi` | same |
-| `config.language` (new `ConnectionConfig` field) | — | — | — | connection-level default locale |
+| `config.language` (new `ConnectionConfig` field) | — | — | — | connection-level default locale (`en`) |
 
 ### API Changes
 
@@ -453,7 +453,7 @@ karrio test --failfast karrio.server.events.tests.test_tracking_tasks
 
 - No schema migration, no API surface change.
 - Trackers without `language` behave exactly as today (`en` polls).
-- Booking without any locale config sends `locale=sv` — a behavior change vs. today's omission, but matches PostNord's documented default; assess whether omitting when unset is preferable (ties to Q3).
+- Booking without any locale config sends `locale=en` — a behavior change vs. today's omission. PostNord's documented booking default is `sv`; `en` is sent instead per the Q3 decision (cross-layer consistency with tracking), so Swedish-market connections that rely on carrier-side SMS/Email language should set `config.language = "sv"`.
 
 ### Data Migration
 
@@ -481,3 +481,6 @@ Each phase is one isolated commit range. Revert in reverse order (3 → 2 → 1)
 | 2026-09-03 | Booking spec enumeration of endpoints with `locale` | Six (incl. returns variants) |
 | 2026-09-03 | Developer-portal check (portal is a JS shell; no static content fetchable) | In-repo swagger used as authority; found body `language` element answering Q1. Q1c (notification additionalServiceCodes) still needs the serviceguide. |
 | 2026-09-03 | Test runs | postnord connector 44/44; manager trackers+shipments 48/48; events tracking tasks 8/8 |
+| 2026-09-03 | Review gate (inline; subagent dispatch unavailable) | NEEDS CHANGES — poller keyed-options regression, two missing manager tests, PRD default-language drift; findings in `docs/notes/reviews/postnord-locale-continuity-review.md` |
+| 2026-09-03 | Remediation | keyed-options passthrough restored with per-partition fetch/save (3e22731); manager persistence + inheritance tests added (a093da9); PRD default-language text reconciled to `en` |
+| 2026-09-03 | Post-remediation test runs | events tracking tasks 9/9; manager trackers 6/6; manager shipments 44/44 |
