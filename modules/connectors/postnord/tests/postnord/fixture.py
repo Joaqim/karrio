@@ -45,3 +45,8 @@ gateway = karrio.gateway["postnord"].create(dict(_settings))
 gateway_with_transit = karrio.gateway["postnord"].create(
     dict(_settings, config=dict(enable_transit_times=True))
 )
+
+# ZPL-label gateway: connection-config label_type selects /labels/zpl.
+gateway_with_zpl = karrio.gateway["postnord"].create(
+    dict(_settings, config=dict(label_type="ZPL"))
+)
