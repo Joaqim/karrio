@@ -64,7 +64,7 @@ Connection config options (under the connection's config):
 | Operation | Notes |
 |-----------|-------|
 | Rating | Static rates from the connection's service levels / server-side RateSheet (no carrier call by default). Optionally enriched with live transit times when `enable_transit_times` is on. |
-| Shipment | Booking + PDF label retrieval in one call (`/rest/shipment/v3/edi/labels/pdf`). |
+| Shipment | Booking + label retrieval in one call (`/rest/shipment/v3/edi/labels/pdf`, or `/labels/zpl` when the resolved label type is ZPL). |
 | Pickup | Courier collection booking (`Pickup.schedule`). |
 | Tracking | Event-based via Track & Trace v7 (`findByIdentifier`); degrades to link-only (tracking URL + generic status) when the key isn't authorized for the T&T product. |
 | Returns | Booked via the shipment create flow with a return service code. |
