@@ -1,13 +1,17 @@
 """Karrio PostNord shipment (Booking EDI) API implementation.
 
 Booking and label retrieval happen in one call against
-``/rest/shipment/v3/edi/labels/pdf``. The request body is an
-``ediInstruction`` (``ShipmentRequestType``) with ``updateIndicator``
-``"Original"``; the response is an ``ediLabelResponse`` carrying a
-``bookingResponse`` (ids, tracking urls, per-item errors) and one or more
-``labelPrintout`` entries with base64 label data.
+``/rest/shipment/v3/edi/labels/pdf`` or ``/labels/zpl`` (selected by the
+resolved label type). The request body is an ``ediInstruction``
+(``ShipmentRequestType``) with ``updateIndicator`` ``"Original"``; the
+response is an ``ediLabelResponse`` carrying a ``bookingResponse`` (ids,
+tracking urls, per-item errors) and one or more ``labelPrintout`` entries.
+PDF printouts carry base64 data; ZPL printouts carry raw UTF-8 ZPL text
+with ``printout.encoding`` set to ``"none"`` (observed on the live
+endpoint; the swagger documents base64 only).
 """
 
+import base64
 import uuid
 import datetime
 import karrio.schemas.postnord.shipment_request as postnord_req
@@ -72,10 +76,19 @@ def _extract_details(
 
     printouts = response.labelPrintout or []
     label_format = next(
-        (p.printout.labelFormat for p in printouts if p.printout), "PDF"
+        (
+            p.printout.labelFormat
+            for p in printouts
+            if p.printout and p.printout.labelFormat
+        ),
+        # ZPL responses have been observed without labelFormat; fall back to
+        # the requested type rather than assuming PDF.
+        ctx.get("label_type", "PDF"),
     )
     label_data = [
-        p.printout.data for p in printouts if p.printout and p.printout.data
+        _printout_base64(p.printout)
+        for p in printouts
+        if p.printout and p.printout.data
     ]
     label = lib.identity(
         label_data[0]
@@ -96,6 +109,20 @@ def _extract_details(
             carrier_tracking_link=tracking_url,
         ),
     )
+
+
+def _printout_base64(printout: postnord_res.PrintoutType) -> str:
+    """Return the printout data as base64 regardless of transport encoding.
+
+    PDF printouts are base64 already. ZPL printouts carry raw UTF-8 ZPL
+    text with ``encoding`` ``"none"`` (undocumented in the swagger), so
+    any non-base64 encoding is treated as raw text and encoded here; the
+    downstream bundling helpers expect base64 inputs.
+    """
+    if (printout.encoding or "").lower() == "base64":
+        return printout.data
+
+    return base64.b64encode(printout.data.encode("utf-8")).decode("utf-8")
 
 
 def shipment_request(
