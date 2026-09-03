@@ -695,6 +695,18 @@ def buy_shipment_label(
     )
     pre_purchase_generation = invoice_template is not None and is_paperless_trade
 
+    # Recipient-country locale defaulting (postnord `locale_by_recipient`):
+    # materialize the derived language onto the shipment's effective options
+    # before the request is built and the tracker is created, so booking,
+    # label text, and scheduled polls all agree on one locale. Explicit
+    # options.language and config.language keep precedence; the derivation
+    # only fills the otherwise-"en" default.
+    if not shipment.options.get("language") and (
+        locale := _recipient_country_locale(carrier, shipment.recipient)
+    ):
+        shipment.options = {**shipment.options, "language": locale}
+        shipment.save(update_fields=["options"])
+
     # Generate invoice in advance if is_paperless_trade
     if pre_purchase_generation:
         # Set carrier snapshot on shipment (consistent with other models)
@@ -903,6 +915,31 @@ def compute_estimated_delivery(
 def remove_shipment_tracker(shipment: models.Shipment):
     if hasattr(shipment, "shipment_tracker"):
         shipment.shipment_tracker.delete()
+
+
+def _recipient_country_locale(carrier, recipient: typing.Optional[dict]):
+    """Resolve a postnord country-derived locale, or None when not applicable.
+
+    Reads the carrier connection's `locale_by_recipient` flag and maps the
+    recipient's country code to PostNord's Nordic locales. Returns None when
+    the carrier is not postnord, the flag is off, or the country has no
+    mapping (caller falls back to the existing "en" default).
+    """
+    if getattr(carrier, "carrier_name", None) != "postnord":
+        return None
+
+    config = getattr(carrier.gateway.settings, "connection_config", None)
+    if not config or not config.locale_by_recipient.state:
+        return None
+
+    # config.language outranks the country tier; deriving would materialize
+    # options.language above it, so leave the tier to the connector.
+    if config.language.state:
+        return None
+
+    from karrio.providers.postnord.units import CountryLocale
+
+    return CountryLocale.lookup((recipient or {}).get("country_code"))
 
 
 def create_shipment_tracker(shipment: typing.Optional[models.Shipment], context):
