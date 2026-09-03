@@ -55,7 +55,7 @@ Connection config options (under the connection's config):
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `label_type` | `PDF` | Label document type |
+| `label_type` | `PDF` | Label document type: `PDF` or `ZPL`. `ZPL` books against `/rest/shipment/v3/edi/labels/zpl`; a request-level `label_type` overrides this setting. |
 | `label_format` | `A4` | Label page format |
 | `enable_transit_times` | `false` | Opt-in: call the Transit Time API to enrich `transit_days`/estimated delivery and filter by serviceability. Requires the key to be subscribed to the Transit Time product. |
 
@@ -64,7 +64,7 @@ Connection config options (under the connection's config):
 | Operation | Notes |
 |-----------|-------|
 | Rating | Static rates from the connection's service levels / server-side RateSheet (no carrier call by default). Optionally enriched with live transit times when `enable_transit_times` is on. |
-| Shipment | Booking + PDF label retrieval in one call (`/rest/shipment/v3/edi/labels/pdf`). |
+| Shipment | Booking + label retrieval in one call (`/rest/shipment/v3/edi/labels/pdf`, or `/labels/zpl` when the resolved label type is ZPL). |
 | Pickup | Courier collection booking (`Pickup.schedule`). |
 | Tracking | Event-based via Track & Trace v7 (`findByIdentifier`); degrades to link-only (tracking URL + generic status) when the key isn't authorized for the T&T product. |
 | Returns | Booked via the shipment create flow with a return service code. |
