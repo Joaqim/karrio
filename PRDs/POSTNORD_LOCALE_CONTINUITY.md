@@ -40,13 +40,13 @@ Out of scope: karrio-native notification/email/SMS pipeline (lives in `ee/platfo
 
 | # | Question | Impact if unresolved |
 |---|----------|---------------------|
-| Q1 | Does the booking `locale` also affect label printout text, or only SMS/Email? Swagger is silent. Needs PostNord developer-portal verification. | If it affects labels, the label endpoint selection path (ZPL/PDF) must also thread locale, and test fixtures must assert it on the label URL. |
+| Q1 | ~~Does the booking `locale` also affect label printout text, or only SMS/Email?~~ **Resolved during implementation**: label text is controlled by a separate body-level `language` element on `ShipmentRequestType` (swagger `definitions.language`: "the language in which the contents of text elements and code value text equivalents are written", 2 chars, example/default `EN`). Wired as the uppercase locale. Caveat: the description says "Use ISO 3166 two position alphabetic countrycode" but the example `EN` is not a country code — treated as uppercase ISO 639-1 (language) codes; verify against a live booking. | Implemented: query `locale` (SMS/Email) + body `language` (label text) both sent. |
 | Q1b | Does track-and-trace `locale` affect only API response text, or also PostNord's own notification content sent to the end customer? Spec says: display language of the response. | If it affects carrier notifications, tracking-time locale matters beyond display; poller fix becomes customer-facing in a second sense. |
-| Q1c | Which additionalServiceCode values trigger PostNord-side notifications (per product)? The serviceguide is the authority; the swagger does not enumerate them. | Without codes, karrio users cannot request PostNord-side notifications at all; Task 4 remains "locale param only". |
-| Q2 | Canonical persistence shape for tracker options: flat (`{"language": "sv"}`) vs keyed by tracking number (current `shipment.py:974` writes `{tracking_number: {"carrier": ...}}`)? | Wrong shape breaks `.get("language")` lookups in both the poller merge and the mapper. |
-| Q2b | Should tracker `options` survive tracker updates (PUT) when the caller omits options, or be overwritten? | Silent overwrite would re-lose the locale after an unrelated tracker edit. |
-| Q3 | Default language when none is set: `en` (mapper default today) vs `sv` (PostNord booking default)? | Cross-layer inconsistency: tracker polls default `en`, booking defaults `sv`. |
-| Q4 | The events poller is shared across all carriers. Is `language` a safe partition key given no other connector reads `options.language` today (per repo-wide grep)? | Partitioning on an unread key is inert for other carriers but establishes the pattern for future locale-aware connectors. |
+| Q1c | Which additionalServiceCode values trigger PostNord-side notifications (per product)? The serviceguide is the authority; the swagger does not enumerate them. | Without codes, karrio users cannot request PostNord-side notifications at all; locale param only is wired. |
+| Q2 | ~~Canonical persistence shape~~ **Resolved**: flat key `options.language` alongside the keyed carrier entry; mapper and poller read the flat key. | Implemented. |
+| Q2b | ~~Should tracker `options` survive tracker updates~~ **Resolved**: yes — the update path now carries persisted flat keys into the outgoing request, and the gateway echoes request options back into the persisted options. | Implemented. |
+| Q3 | ~~Default language when none is set~~ **Resolved**: `en` everywhere (matches the track-and-trace spec default and the existing mapper fallback). Diverges from PostNord's documented booking default `sv`, accepted for developer consistency. | Implemented. |
+| Q4 | The events poller is shared across all carriers. Is `language` a safe partition key given no other connector reads `options.language` today (per repo-wide grep)? | Partitioning on an unread key is inert for other carriers but establishes the pattern for future locale-aware connectors. Resolved by test: uniform batches produce one request. |
 
 ### Resolved Decisions
 
@@ -381,31 +381,34 @@ No karrio API surface changes. `options.language` on shipments and trackers is a
 
 ## Implementation Plan
 
+All phases implemented on branch `postnord-locale-continuity`.
+
 ### Phase 1: Connector — booking locale (independent, shippable alone)
 
 | Task | Files | Status | Effort |
 |------|-------|--------|--------|
-| Add `language` to `ConnectionConfig` | `modules/connectors/postnord/karrio/providers/postnord/units.py` | Pending | S |
-| Resolve locale in `shipment_request`, thread via `Serializable.ctx` | `modules/connectors/postnord/karrio/providers/postnord/shipment/create.py` | Pending | S |
-| Append `locale` in `create_shipment` URL | `modules/connectors/postnord/karrio/mappers/postnord/proxy.py` | Pending | S |
-| Tests: booking URL carries locale; precedence request > config > default | `modules/connectors/postnord/tests/postnord/test_shipment.py` | Pending | S |
+| Add `language` to `ConnectionConfig` | `modules/connectors/postnord/karrio/providers/postnord/units.py` | Done (1873f8c7d) | S |
+| Add body `language` element to request schema + regenerate | `schemas/shipment_request.json` → `karrio/schemas/postnord/shipment_request.py` | Done (0c1caad03) | S |
+| Resolve locale in `shipment_request`, thread via `Serializable.ctx`; body `language` uppercase | `modules/connectors/postnord/karrio/providers/postnord/shipment/create.py` | Done (1873f8c7d) | S |
+| Append `locale` in `create_shipment` URL | `modules/connectors/postnord/karrio/mappers/postnord/proxy.py` | Done (1873f8c7d) | S |
+| Tests: booking URL carries locale (request/config/default); body `language` present | `modules/connectors/postnord/tests/postnord/test_shipment.py` | Done | S |
 
 ### Phase 2: Persistence — locale onto trackers
 
 | Task | Files | Status | Effort |
 |------|-------|--------|--------|
-| Merge request options into persisted tracker options | `modules/manager/karrio/server/manager/serializers/tracking.py` | Pending | S |
-| Inherit `shipment.options.language` into purchase-created tracker | `modules/manager/karrio/server/manager/serializers/shipment.py` | Pending | S |
-| Tests: both creation paths persist `language` | `modules/manager/karrio/server/manager/tests/test_trackers.py`, `test_shipments.py` | Pending | M |
+| Carry persisted flat keys (incl. `language`) into update-path TrackingRequest | `modules/manager/karrio/server/manager/serializers/tracking.py` | Done (c1cfbc58b) | S |
+| Inherit `shipment.options.language` into purchase-created tracker | `modules/manager/karrio/server/manager/serializers/shipment.py` | Done (c1cfbc58b) | S |
+| API-created trackers persist request options | — | Already worked: the server gateway echoes request options into `response.tracking.options` (`modules/core/karrio/server/core/gateway.py:541-546`), which the create path persists | — |
 
 ### Phase 3: Poller — locale-partitioned batching
 
 | Task | Files | Status | Effort |
 |------|-------|--------|--------|
-| Group each carrier batch by `options.language`; one `TrackingRequest` per group | `modules/events/karrio/server/events/task_definitions/base/tracking.py` | Pending | M |
-| Tests: mixed batch → two requests; uniform batch → one; unset → default | `modules/events/karrio/server/events/tests/test_tracking_tasks.py` | Pending | M |
+| Group each carrier batch by `options.language`; one `TrackingRequest` per group | `modules/events/karrio/server/events/task_definitions/base/tracking.py` | Done (721f7b625) | M |
+| Tests: mixed batch → two requests; uniform batch → one | `modules/events/karrio/server/events/tests/test_tracking_tasks.py` | Done | M |
 
-**Dependencies:** Phase 2 and Phase 3 are coupled (partitioning is pointless without persistence; persistence is invisible without partitioning). Phase 1 is independent. Suggested order: 1 → 2 → 3, each a separate commit and test run.
+**Dependencies:** Phase 2 and Phase 3 are coupled (partitioning is pointless without persistence; persistence is invisible without partitioning). Phase 1 is independent. Landed in order 1 → 2 → 3, one commit each.
 
 ## Testing Strategy
 
@@ -476,4 +479,5 @@ Each phase is one isolated commit range. Revert in reverse order (3 → 2 → 1)
 | 2026-09-03 | Repo-wide grep for `options.language` consumers in connectors | PostNord only |
 | 2026-09-03 | `ee/platform` submodule clone attempt | Inaccessible to both `Joaqim` SSH key and `gh` token; upstream `.gitmodules` unchanged — access gap, not a rename |
 | 2026-09-03 | Booking spec enumeration of endpoints with `locale` | Six (incl. returns variants) |
-| — | PostNord developer-portal check for Q1/Q1b/Q1c | Not yet done — pending |
+| 2026-09-03 | Developer-portal check (portal is a JS shell; no static content fetchable) | In-repo swagger used as authority; found body `language` element answering Q1. Q1c (notification additionalServiceCodes) still needs the serviceguide. |
+| 2026-09-03 | Test runs | postnord connector 44/44; manager trackers+shipments 48/48; events tracking tasks 8/8 |
