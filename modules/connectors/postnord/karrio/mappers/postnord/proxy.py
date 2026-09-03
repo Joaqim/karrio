@@ -105,12 +105,13 @@ class Proxy(proxy.Proxy):
         # return the identical ediLabelResponse. The physical size travels as the
         # labelType query param; an unset label_size is dropped by _url so
         # PostNord defaults to standard.
-        ctx = request.ctx or {}
-        label_path = lib.identity(
+        label_type = (request.ctx.get("label_type") or "PDF").upper()
+        label_path = (
             "/rest/shipment/v3/edi/labels/zpl"
-            if ctx.get("label_type") == "ZPL"
+            if label_type == "ZPL"
             else "/rest/shipment/v3/edi/labels/pdf"
         )
+
         response = lib.request(
             url=self._url(
                 label_path,
