@@ -100,8 +100,14 @@ class Proxy(proxy.Proxy):
         return f"{self.settings.server_url}{path}?{query}"
 
     def create_shipment(self, request: lib.Serializable) -> lib.Deserializable[str]:
+        # Label endpoint follows the resolved label type (request override,
+        # else connection config, else PDF) threaded on the request ctx.
+        label_type = (request.ctx.get("label_type") or "PDF").upper()
+        path = "/rest/shipment/v3/edi/labels/zpl" if label_type == "ZPL" else \
+            "/rest/shipment/v3/edi/labels/pdf"
+
         response = lib.request(
-            url=self._url("/rest/shipment/v3/edi/labels/pdf"),
+            url=self._url(path),
             data=lib.to_json(request.serialize()),
             trace=self.trace_as("json"),
             method="POST",
