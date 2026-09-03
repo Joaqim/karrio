@@ -165,6 +165,46 @@ class TestTrackersBackgroundUpdate(APITestCase):
 
         self.assertEqual(mock_karrio.Tracking.fetch.call_count, 1)
 
+    def test_process_carrier_trackers_keeps_keyed_options(self):
+        """Per-number keyed options stay in the request for carriers that read them."""
+        keyed_tracker = models.Tracking.objects.create(
+            tracking_number="XIA00291643",
+            test_mode=True,
+            delivered=False,
+            events=[],
+            status="in_transit",
+            created_by=self.user,
+            carrier=create_carrier_snapshot(self.ups_carrier),
+            options={
+                "language": "sv",
+                "XIA00291643": {
+                    "smartkargo_prefix": "XIA",
+                    "smartkargo_air_waybill": "00291643",
+                },
+            },
+        )
+
+        with patch(
+            "karrio.server.events.task_definitions.base.tracking.karrio"
+        ) as mock_karrio:
+            mock_karrio.Tracking.fetch.return_value.from_.return_value.parse.return_value = (
+                [],
+                [],
+            )
+
+            tracking.process_carrier_trackers(tracker_ids=[keyed_tracker.id])
+
+        request = mock_karrio.Tracking.fetch.call_args.args[0]
+        self.assertEqual(
+            request.options.get("XIA00291643"),
+            {
+                "smartkargo_prefix": "XIA",
+                "smartkargo_air_waybill": "00291643",
+            },
+        )
+        # The flat locale key rides alongside the keyed entry.
+        self.assertEqual(request.options.get("language"), "sv")
+
     def test_process_carrier_trackers_incremental_save(self):
         """process_carrier_trackers fetches and saves each batch immediately."""
         dhl_tracker = models.Tracking.objects.get(

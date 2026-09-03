@@ -16,6 +16,7 @@ in batches of 10 with a flat inter-batch delay — O(n) total wall-clock.
 
 import time
 import typing
+import functools
 import datetime
 from itertools import groupby
 
@@ -206,19 +207,16 @@ def _carrier_id(carrier_snapshot: typing.Optional[dict]) -> str:
 
 
 def _merged_options(trackers: typing.List[models.Tracking]) -> dict:
-    """Merge tracker option dicts, dropping the per-number keyed entries.
+    """Merge tracker option dicts with last-wins semantics.
 
-    Keyed entries (`{tracking_number: {...}}`) are per-tracker data, not
-    request-level options, so only flat keys survive the merge — this also
-    avoids last-wins clobbering when several trackers share flat keys.
+    Keyed entries (`{tracking_number: {...}}`) are kept: carrier mappers
+    such as smartkargo read per-number options (prefix/air waybill) from
+    the request, and each locale group only carries its own members'
+    entries because the merge is scoped to the group.
     """
-    flat_keys = {
-        key: value
-        for tracker in trackers
-        for key, value in (tracker.options or {}).items()
-        if key not in {t.tracking_number for t in trackers}
-    }
-    return flat_keys
+    return functools.reduce(
+        lambda acc, t: {**acc, **(t.options or {})}, trackers, {}
+    )
 
 
 def _process_batch(
@@ -233,27 +231,32 @@ def _process_batch(
         # the whole TrackingRequest, so trackers are partitioned by their
         # persisted `options.language` and one request is issued per locale.
         # Uniform batches (the common case) produce a single request, exactly
-        # as before.
-        _key = lambda t: (t.options or {}).get("language") or ""
+        # as before. Each partition is fetched and saved before the next one
+        # starts, so a failure discards only the partitions after it.
+        def _locale_key(tracker: models.Tracking) -> str:
+            return (tracker.options or {}).get("language") or ""
+
         _locale_groups = [
             (locale, list(group))
             for locale, group in groupby(
-                sorted(batch, key=_key), key=_key
+                sorted(batch, key=_locale_key), key=_locale_key
             )
         ]
 
-        responses = [
-            karrio.Tracking.fetch(
-                datatypes.TrackingRequest(
-                    tracking_numbers=[t.tracking_number for t in group],
-                    options=({**_merged_options(group), "language": locale}
-                             if locale else _merged_options(group)),
+        for locale, group in _locale_groups:
+            options = _merged_options(group)
+            response = (
+                karrio.Tracking.fetch(
+                    datatypes.TrackingRequest(
+                        tracking_numbers=[t.tracking_number for t in group],
+                        options=({**options, "language": locale}
+                                 if locale else options),
+                    )
                 )
-            ).from_(gateway).parse()
-            for locale, group in _locale_groups
-        ]
+                .from_(gateway)
+                .parse()
+            )
 
-        for (locale, group), response in zip(_locale_groups, responses):
             _save_tracing(gateway, group)
             _save_results(response, group)
 
