@@ -129,14 +129,28 @@ No schema migration.
 
 ## Implementation Plan
 
-| # | Task | Files | Effort |
-|---|------|-------|--------|
-| 1 | `CountryLocale` mapping + `locale_by_recipient` `OptionEnum` | `modules/connectors/postnord/karrio/providers/postnord/units.py` | S |
-| 2 | Derive `options.language` at purchase when flag on and unset | `modules/manager/karrio/server/manager/serializers/shipment.py` (purchase path) | M |
-| 3 | Connector tests: flag on/off × mapped/unmapped country, explicit-wins | `modules/connectors/postnord/tests/postnord/` | S |
-| 4 | Manager test: purchase with Nordic recipient persists derived locale into tracker | `modules/manager/karrio/server/manager/tests/test_shipments.py` | S |
+Implemented on branch `postnord-country-locale` (stacked on `postnord-locale-continuity`).
 
-Dependencies: requires the `postnord-locale-continuity` branch (tracker inheritance and booking locale threading) to land first.
+| # | Task | Files | Status |
+|---|------|-------|--------|
+| 1 | `CountryLocale` mapping + `locale_by_recipient` `OptionEnum`; connector country tier | `modules/connectors/postnord/karrio/providers/postnord/units.py`, `shipment/create.py` | Done (557749c) |
+| 2 | Derive `options.language` at purchase when flag on and unset | `modules/manager/karrio/server/manager/serializers/shipment.py` (`_recipient_country_locale` + `buy_shipment_label`) | Done (fedc482) |
+| 3 | Connector tests: flag on/off × mapped/unmapped country, explicit/config wins | `modules/connectors/postnord/tests/postnord/` | Done (e04f1c1) |
+| 4 | Manager test: purchase with Nordic recipient persists derived locale into tracker | `modules/manager/karrio/server/manager/tests/test_shipments.py` | Done (e04f1c1) |
+
+Dependencies: requires the `postnord-locale-continuity` branch (tracker inheritance and booking locale threading) to land first — satisfied by the stack.
+
+Implementation note (task 2): the purchase-path derivation also skips when `config.language` is set.
+Materializing `options.language` would otherwise promote the country tier above `config.language` in the connector chain, violating precedence rule C1.
+The manager test suite exercises derivation through the real server gateway (`CarrierConnection` with `config=dict(locale_by_recipient=True)`), covering the flag's transport from connection credentials JSON to `settings.connection_config`.
+
+## Verification
+
+| Date | Suite | Result |
+|---|---|---|
+| 2026-09-03 | postnord connector (`python -m unittest discover -f modules/connectors/postnord/tests`) | 49/49 OK |
+| 2026-09-03 | manager shipments (`karrio test karrio.server.manager.tests.test_shipments`) | 45/45 OK |
+| 2026-09-03 | manager trackers (`karrio test karrio.server.manager.tests.test_trackers`) | 6/6 OK |
 
 ## Testing Strategy
 
