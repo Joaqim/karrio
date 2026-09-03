@@ -178,6 +178,7 @@ class ShipmentType:
 @attr.s(auto_attribs=True)
 class ShipmentRequestType:
     messageDate: typing.Optional[str] = None
+    language: typing.Optional[str] = None
     updateIndicator: typing.Optional[str] = None
     testIndicator: typing.Optional[bool] = None
     application: typing.Optional[ApplicationType] = jstruct.JStruct[ApplicationType]
