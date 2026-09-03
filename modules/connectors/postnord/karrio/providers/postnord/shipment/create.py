@@ -151,11 +151,17 @@ def shipment_request(
     additional_service_codes = [option.code for _, option in options.items()]
 
     # Booking locale: request options.language > connection config language >
-    # "en". Sent lowercase as the query `locale` (SMS/Email language) and
-    # uppercased as the body `language` element (label/document text).
+    # recipient country (when config locale_by_recipient is enabled) > "en".
+    # Sent lowercase as the query `locale` (SMS/Email language) and uppercased
+    # as the body `language` element (label/document text).
     locale = (
         (payload.options or {}).get("language")
         or settings.connection_config.language.state
+        or (
+            provider_units.CountryLocale.lookup(recipient.country_code)
+            if settings.connection_config.locale_by_recipient.state
+            else None
+        )
         or "en"
     )
 
