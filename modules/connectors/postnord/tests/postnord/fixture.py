@@ -131,3 +131,8 @@ gateway_zpl_label = karrio.gateway["postnord"].create(
 gateway_with_language = karrio.gateway["postnord"].create(
     dict(_settings, config=dict(language="da"))
 )
+
+# Country-locale gateway: recipient-country derivation enabled.
+gateway_with_country_locale = karrio.gateway["postnord"].create(
+    dict(_settings, config=dict(locale_by_recipient=True))
+)

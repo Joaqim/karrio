@@ -209,6 +209,55 @@ class TestShipmentPurchase(TestShipmentFixture):
             {"123456789012": {"carrier": "canadapost"}, "language": "sv"},
         )
 
+    def test_purchase_shipment_locale_from_recipient_country(self):
+        """locale_by_recipient derives the tracker locale from the recipient's country."""
+        postnord_carrier = providers.CarrierConnection.objects.create(
+            carrier_code="postnord",
+            carrier_id="postnord_test",
+            test_mode=True,
+            active=True,
+            created_by=self.user,
+            credentials=dict(apikey="TEST_API_KEY", customer_number="00000000"),
+            config=dict(locale_by_recipient=True),
+        )
+        self.shipment.recipient = {
+            **self.shipment.recipient,
+            "country_code": "DK",
+        }
+        self.shipment.rates = [
+            {
+                **self.shipment.rates[0],
+                "carrier_id": "postnord_test",
+                "carrier_name": "postnord",
+                "meta": {
+                    **self.shipment.rates[0]["meta"],
+                    "rate_provider": "postnord",
+                    "carrier_connection_id": postnord_carrier.pk,
+                },
+            }
+        ]
+        self.shipment.save()
+        url = reverse(
+            "karrio.server.manager:shipment-purchase",
+            kwargs=dict(pk=self.shipment.pk),
+        )
+
+        with patch("karrio.server.core.gateway.utils.identity") as mock:
+            mock.return_value = CREATED_SHIPMENT_RESPONSE
+            response = self.client.post(url, SHIPMENT_PURCHASE_DATA)
+
+        self.assertResponseNoErrors(response)
+
+        self.shipment.refresh_from_db()
+        self.assertEqual(self.shipment.options.get("language"), "da")
+        tracker = models.Tracking.objects.get(
+            tracking_number=CREATED_SHIPMENT_RESPONSE[0].tracking_number
+        )
+        self.assertEqual(
+            tracker.options,
+            {"123456789012": {"carrier": "postnord"}, "language": "da"},
+        )
+
     def test_cancel_shipment(self):
         url = reverse(
             "karrio.server.manager:shipment-cancel",

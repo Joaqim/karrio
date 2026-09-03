@@ -8,7 +8,14 @@ import karrio.sdk as karrio
 import karrio.lib as lib
 import karrio.core.models as models
 
-from .fixture import gateway, gateway_small_label, gateway_zpl_label, gateway_with_language
+from .fixture import (
+    _settings,
+    gateway,
+    gateway_small_label,
+    gateway_zpl_label,
+    gateway_with_country_locale,
+    gateway_with_language,
+)
 
 
 class TestPostNordShipment(unittest.TestCase):
@@ -153,6 +160,84 @@ class TestPostNordShipment(unittest.TestCase):
                 f"{gateway.settings.server_url}/rest/shipment/v3/edi/labels/pdf?apikey=TEST_API_KEY&locale=da",
             )
 
+
+    def test_create_shipment_locale_from_recipient_country(self):
+        # locale_by_recipient maps the recipient's country to a Nordic locale.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = "{}"
+            karrio.Shipment.create(self.ShipmentRequest).from_(
+                gateway_with_country_locale
+            )
+            self.assertEqual(
+                mock.call_args[1]["url"],
+                f"{gateway.settings.server_url}/rest/shipment/v3/edi/labels/pdf?apikey=TEST_API_KEY&locale=sv",
+            )
+
+    def test_create_shipment_locale_recipient_country_unmapped(self):
+        # Countries outside the mapping fall back to en even with the flag on.
+        payload = {
+            **ShipmentPayload,
+            "recipient": {**ShipmentPayload["recipient"], "country_code": "DE"},
+        }
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = "{}"
+            karrio.Shipment.create(models.ShipmentRequest(**payload)).from_(
+                gateway_with_country_locale
+            )
+            self.assertEqual(
+                mock.call_args[1]["url"],
+                f"{gateway.settings.server_url}/rest/shipment/v3/edi/labels/pdf?apikey=TEST_API_KEY&locale=en",
+            )
+
+    def test_create_shipment_locale_explicit_wins_over_country(self):
+        # An explicit options.language beats the recipient-country tier.
+        payload = {**ShipmentPayload, "options": {"language": "da"}}
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = "{}"
+            karrio.Shipment.create(models.ShipmentRequest(**payload)).from_(
+                gateway_with_country_locale
+            )
+            self.assertEqual(
+                mock.call_args[1]["url"],
+                f"{gateway.settings.server_url}/rest/shipment/v3/edi/labels/pdf?apikey=TEST_API_KEY&locale=da",
+            )
+
+    def test_create_shipment_locale_config_wins_over_country(self):
+        # config.language outranks the country tier: a Norwegian recipient on
+        # a connection configured sv still books sv.
+        payload = {
+            **ShipmentPayload,
+            "recipient": {**ShipmentPayload["recipient"], "country_code": "NO"},
+        }
+        gateway_sv_country = karrio.gateway["postnord"].create(
+            dict(
+                _settings,
+                config=dict(language="sv", locale_by_recipient=True),
+            )
+        )
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = "{}"
+            karrio.Shipment.create(models.ShipmentRequest(**payload)).from_(
+                gateway_sv_country
+            )
+            self.assertEqual(
+                mock.call_args[1]["url"],
+                f"{gateway.settings.server_url}/rest/shipment/v3/edi/labels/pdf?apikey=TEST_API_KEY&locale=sv",
+            )
+
+    def test_create_shipment_locale_country_flag_off(self):
+        # Without locale_by_recipient the recipient country is ignored.
+        payload = {
+            **ShipmentPayload,
+            "recipient": {**ShipmentPayload["recipient"], "country_code": "DK"},
+        }
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = "{}"
+            karrio.Shipment.create(models.ShipmentRequest(**payload)).from_(gateway)
+            self.assertEqual(
+                mock.call_args[1]["url"],
+                f"{gateway.settings.server_url}/rest/shipment/v3/edi/labels/pdf?apikey=TEST_API_KEY&locale=en",
+            )
 
     def test_parse_shipment_response_zpl(self):
         # encoding "none" + raw ZPL text -> base64-of-ZPL in docs.label and
