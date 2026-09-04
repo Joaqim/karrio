@@ -460,6 +460,18 @@ class Tracer:
             pending = dict(self.inner_recordings)
         return [rec.result() for rec in futures.as_completed(pending)]
 
+    def drain_records(self) -> typing.List[Record]:
+        """Return recorded records and clear the internal buffer.
+
+        Callers that persist the records (e.g. the tracking poller saving per
+        partition) use this instead of `records` so already-saved records are
+        not re-persisted on the next save.
+        """
+        with self._recordings_lock:
+            pending = dict(self.inner_recordings)
+            self.inner_recordings.clear()
+        return [rec.result() for rec in futures.as_completed(pending)]
+
     @property
     def context(self) -> typing.Dict[str, typing.Any]:
         """Get the tracer context dictionary."""

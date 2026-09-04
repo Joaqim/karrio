@@ -153,8 +153,10 @@ def shipment_request(
     # Booking locale: request options.language > connection config language >
     # recipient country (when config locale_by_recipient is enabled) > "en".
     # Sent lowercase as the query `locale` (SMS/Email language) and uppercased
-    # as the body `language` element (label/document text).
-    locale = (
+    # as the body `language` element (label/document text). A non-string
+    # request value is coerced: PlainDictField does not enforce inner types,
+    # and `.upper()` on it would raise inside failsafe and drop the booking.
+    locale = str(
         (payload.options or {}).get("language")
         or settings.connection_config.language.state
         or (

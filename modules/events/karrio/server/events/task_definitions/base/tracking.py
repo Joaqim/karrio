@@ -233,8 +233,12 @@ def _process_batch(
         # Uniform batches (the common case) produce a single request, exactly
         # as before. Each partition is fetched and saved before the next one
         # starts, so a failure discards only the partitions after it.
+        # PlainDictField does not enforce inner types, so a hand-crafted
+        # non-string `language` is coerced rather than raising TypeError in
+        # the sort and stalling the whole batch.
         def _locale_key(tracker: models.Tracking) -> str:
-            return (tracker.options or {}).get("language") or ""
+            language = (tracker.options or {}).get("language")
+            return str(language) if language else ""
 
         _locale_groups = [
             (locale, list(group))
