@@ -272,7 +272,7 @@ Merchant        Karrio API            PostNord
    │ opts.language=sv                    │
    ├──────────────▶│                      │
    │               │ resolve locale:      │
-   │               │  req > config > sv   │
+   │               │  req > config > en   │
    │               ├─────────────────────▶│ POST /v3/edi/labels/pdf
    │               │                      │   ?locale=sv
    │               │◀─────────────────────┤ label + tracking_number
@@ -418,7 +418,7 @@ All phases implemented on branch `postnord-locale-continuity`.
 |---|---|---|
 | `test_create_shipment_request_locale` | `test_shipment.py` | URL contains `locale=sv` when `options.language=sv` |
 | `test_create_shipment_request_locale_config_fallback` | `test_shipment.py` | `config.language=da` → `locale=da` when request omits it |
-| `test_create_shipment_request_locale_default` | `test_shipment.py` | No language anywhere → `locale=sv` (PostNord default) |
+| `test_create_shipment_request_locale_default` | `test_shipment.py` | No language anywhere → `locale=en` (karrio default) |
 | `test_create_shipment_request_locale_zpl` | `test_shipment.py` | ZPL endpoint URL also carries `locale` |
 | `test_create_tracker_persists_request_language` | `test_trackers.py` | `tracker.options["language"] == "sv"` after create with options |
 | `test_purchase_shipment_tracker_inherits_language` | `test_shipments.py` | Purchase with `options.language` → tracker has flat `language` key |

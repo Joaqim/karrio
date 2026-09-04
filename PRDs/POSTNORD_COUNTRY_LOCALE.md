@@ -124,7 +124,7 @@ No schema migration.
 | `recipient.country_code` missing or empty | `en` — no source of truth to read |
 | Both `config.language` and the flag set | `config.language` wins (tier 2 before tier 3) |
 | Explicit `options.language` that PostNord rejects (e.g. `de`) | Passed through, as today; unchanged behavior |
-| Flag on, shipment later re-booked to a different destination | Locale re-derives at each purchase from that purchase's recipient |
+| Flag on, shipment later re-booked to a different destination | Locale re-derives at each purchase from that purchase's recipient; caveat: a failed purchase that already materialized `options.language` pins the stale value on retries until the option is cleared |
 | Lowercase country code (`se`) | Normalized via `.upper()` before lookup |
 
 ## Implementation Plan
@@ -149,8 +149,10 @@ The manager test suite exercises derivation through the real server gateway (`Ca
 | Date | Suite | Result |
 |---|---|---|
 | 2026-09-03 | postnord connector (`python -m unittest discover -f modules/connectors/postnord/tests`) | 49/49 OK |
+| 2026-09-04 | postnord connector (re-verified after rebase onto develop + country-locale) | 56/56 OK |
 | 2026-09-03 | manager shipments (`karrio test karrio.server.manager.tests.test_shipments`) | 45/45 OK |
 | 2026-09-03 | manager trackers (`karrio test karrio.server.manager.tests.test_trackers`) | 6/6 OK |
+| 2026-09-04 | events tracking tasks (`karrio test karrio.server.events.tests.test_tracking_tasks`) | 9/9 OK (fresh-context review gate) |
 
 ## Testing Strategy
 

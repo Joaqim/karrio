@@ -160,7 +160,6 @@ class TestPostNordShipment(unittest.TestCase):
                 f"{gateway.settings.server_url}/rest/shipment/v3/edi/labels/pdf?apikey=TEST_API_KEY&locale=da",
             )
 
-
     def test_create_shipment_locale_from_recipient_country(self):
         # locale_by_recipient maps the recipient's country to a Nordic locale.
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
