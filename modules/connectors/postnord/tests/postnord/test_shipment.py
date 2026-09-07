@@ -130,6 +130,98 @@ class TestPostNordShipment(unittest.TestCase):
         self.assertEqual(messages[0].code, "ENTRY_CODE_LENGTH")
         self.assertIn("exceeds 50 characters", messages[0].message)
 
+    def test_create_shipment_notification_sms_option(self):
+        # Unified sms_notification books exactly A3 and no other channel.
+        payload = {**ShipmentPayload, "options": {"sms_notification": True}}
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        codes = lib.to_dict(request.serialize())["shipment"][0]["service"][
+            "additionalServiceCode"
+        ]
+        self.assertEqual(codes, ["A3"])
+
+    def test_create_shipment_notification_email_option(self):
+        # Unified email_notification books exactly A4.
+        payload = {**ShipmentPayload, "options": {"email_notification": True}}
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        codes = lib.to_dict(request.serialize())["shipment"][0]["service"][
+            "additionalServiceCode"
+        ]
+        self.assertEqual(codes, ["A4"])
+
+    def test_create_shipment_notification_multiple_channels(self):
+        # Channels combine additively.
+        payload = {
+            **ShipmentPayload,
+            "options": {"sms_notification": True, "email_notification": True},
+        }
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        codes = lib.to_dict(request.serialize())["shipment"][0]["service"][
+            "additionalServiceCode"
+        ]
+        self.assertEqual(sorted(codes), ["A3", "A4"])
+
+    def test_create_shipment_notification_carrier_scoped_names(self):
+        # Channels without unified equivalents use carrier-scoped names.
+        payload = {
+            **ShipmentPayload,
+            "options": {
+                "postnord_notify_by_letter": True,
+                "postnord_notify_by_phone": True,
+                "postnord_driver_notification": True,
+            },
+        }
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        codes = lib.to_dict(request.serialize())["shipment"][0]["service"][
+            "additionalServiceCode"
+        ]
+        self.assertEqual(sorted(codes), ["A2", "A9", "B8"])
+
+    def test_create_shipment_notification_explicit_false_opts_out(self):
+        # An explicit False must not book the channel.
+        payload = {**ShipmentPayload, "options": {"sms_notification": False}}
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        service = lib.to_dict(request.serialize())["shipment"][0]["service"]
+        self.assertNotIn("A3", service.get("additionalServiceCode") or [])
+
+    def test_create_shipment_notification_aliases_dedupe(self):
+        # Unified and scoped names for the same code collapse to one member.
+        payload = {
+            **ShipmentPayload,
+            "options": {
+                "sms_notification": True,
+                "postnord_notify_by_sms": True,
+            },
+        }
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        codes = lib.to_dict(request.serialize())["shipment"][0]["service"][
+            "additionalServiceCode"
+        ]
+        self.assertEqual(codes, ["A3"])
+
+    def test_create_shipment_option_false_not_emitted(self):
+        # Regression: a False-valued bool option previously emitted its code.
+        payload = {
+            **ShipmentPayload,
+            "options": {"postnord_optional_service_point": False},
+        }
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        service = lib.to_dict(request.serialize())["shipment"][0]["service"]
+        self.assertNotIn("A7", service.get("additionalServiceCode") or [])
+
     def test_parse_shipment_response(self):
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
             mock.return_value = ShipmentResponse
