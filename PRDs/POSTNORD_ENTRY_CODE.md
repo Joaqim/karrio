@@ -5,7 +5,7 @@
 | Project | Karrio |
 | Version | 1.0 |
 | Date | 2026-09-07 |
-| Status | Planning |
+| Status | Implemented (review gate pending) |
 | Owner | Joaqim Planstedt |
 | Type | Integration |
 | Reference | [AGENTS.md](../AGENTS.md) |
@@ -338,11 +338,13 @@ No karrio API surface changes; the unified `options` object already accepts arbi
 
 | Task | Files | Status | Effort |
 |------|-------|--------|--------|
-| Add `ENTRY_CODE_USAGE_CODE = "ZDC"` and `ENTRY_CODE_MAX_LENGTH = 50` constants | `modules/connectors/postnord/karrio/providers/postnord/units.py` | Pending | S |
-| Read, coerce, check, and wire `entry_code` → `freeText`; flag over-limit via ctx | `modules/connectors/postnord/karrio/providers/postnord/shipment/create.py` | Pending | S |
-| Short-circuit `_create_shipment` on the ctx flag; return synthesized `compositeFault` body without HTTP | `modules/connectors/postnord/karrio/mappers/postnord/proxy.py` | Pending | S |
-| Four create-request tests (present, absent, coerced, over-limit rejection) | `modules/connectors/postnord/tests/postnord/test_shipment.py` | Pending | S |
-| Document `options.entry_code` usage and caveats | `modules/connectors/postnord/README.md` | Pending | S |
+| Add `ENTRY_CODE_USAGE_CODE = "ZDC"` and `ENTRY_CODE_MAX_LENGTH = 50` constants | `modules/connectors/postnord/karrio/providers/postnord/units.py` | Done | S |
+| Read, coerce, check, and wire `entry_code` → `freeText`; flag over-limit via ctx | `modules/connectors/postnord/karrio/providers/postnord/shipment/create.py` | Done | S |
+| Short-circuit `_create_shipment` on the ctx flag; return synthesized `compositeFault` body without HTTP | `modules/connectors/postnord/karrio/mappers/postnord/proxy.py` | Done | S |
+| Six create-request tests (present, absent, coerced, at-limit, over-limit rejection, plus URL routing) | `modules/connectors/postnord/tests/postnord/test_shipment.py` | Done | S |
+| Document `options.entry_code` usage and caveats | `modules/connectors/postnord/README.md` | Done | S |
+
+Implementation note: an absent entry code passes `freeText=[]` rather than `None` — the `JList` converter wraps an explicit `None` into `[None]`, which survives `to_dict` as a bogus entry (plain `Optional[List[str]]` fields like `additionalServiceCode` do not have this behavior).
 
 **Dependencies:** none — Q1 is resolved (D6/D6a).
 
