@@ -5,7 +5,7 @@
 | Project | Karrio |
 | Version | 1.0 |
 | Date | 2026-09-07 |
-| Status | Planning |
+| Status | Implemented (review gate pending) |
 | Owner | Joaqim Planstedt |
 | Type | Integration |
 | Reference | [AGENTS.md](../AGENTS.md) |
@@ -272,10 +272,10 @@ No other API changes: `options` is schema-free per shipment, so the Create Shipm
 
 | Task | Files | Status | Effort |
 |------|-------|--------|--------|
-| Add five `ShippingOption` entries + unified aliases | `modules/connectors/postnord/karrio/providers/postnord/units.py` | Pending | S |
-| Truthy-state emission (`if option.state`) | `modules/connectors/postnord/karrio/providers/postnord/shipment/create.py` | Pending | S |
-| Six notification tests + falsy regression test | `modules/connectors/postnord/tests/postnord/test_shipment.py` | Pending | S |
-| Document notification options and service rules | `modules/connectors/postnord/README.md` | Pending | S |
+| Add five `ShippingOption` entries + unified aliases | `modules/connectors/postnord/karrio/providers/postnord/units.py` | Done | S |
+| Truthy-state emission (`if option.state`) | `modules/connectors/postnord/karrio/providers/postnord/shipment/create.py` | Done | S |
+| Seven notification tests incl. falsy regression | `modules/connectors/postnord/tests/postnord/test_shipment.py` | Done | S |
+| Document notification options and service rules | `modules/connectors/postnord/README.md` | Done | S |
 
 **Dependencies:** none.
 

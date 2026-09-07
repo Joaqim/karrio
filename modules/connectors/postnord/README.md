@@ -65,6 +65,13 @@ Connection config options (under the connection's config):
 |--------|------|---------|-------------|
 | `entry_code` | string | — | PostNord entry code (door code) for the recipient's building, e.g. an apartment entrance code. Sent as a shipment `freeText` with usage code `ZDC`; PostNord prints it as "Ref 2" on the label and maps it to the consignee reference. Max 50 characters: a longer value rejects the booking with an `ENTRY_CODE_LENGTH` message before any call to PostNord. PostNord does not document which services accept it — the value is passed through unverified and is ignored by services without door-code support. |
 | `language` | string | `en` | Booking/notification locale (lowercase ISO 639-1), sent as the query `locale` (SMS/Email language) and uppercased as the body `language` element (label/document text). Resolved per request, then from connection config, then (with `locale_by_recipient` enabled) from the recipient's country code. |
+| `sms_notification` | bool | — | Opt in to PostNord notifying the consignee by SMS (`additionalServiceCode` `A3`, consignee `smsNo`). Least intrusive channel; notification language follows the booking locale. |
+| `email_notification` | bool | — | Opt in to e-mail notification (`A4`, consignee `emailAddress`). |
+| `postnord_notify_by_letter` | bool | — | Opt in to letter notification (`A2`, consignee address). |
+| `postnord_notify_by_phone` | bool | — | Opt in to voice-call notification (`A9`, consignee `phoneNo`). |
+| `postnord_driver_notification` | bool | — | Opt in to driver notification (`B8`, consignee `phoneNo`). |
+
+PostNord has no notification-suppress flag: the consignee is notified only when a notification additional service is booked, and channels combine freely — setting only `sms_notification` books SMS and nothing else. `false` or omitted books nothing. Per-service rules apply (documented, not enforced here): PostNord documents Parcel (18) as requiring one of A2/A3/A4 and MyPack Home (17) as requiring consignee SMS-or-email contact data; PostNord validates these at booking.
 
 ## Supported operations
 
