@@ -148,7 +148,11 @@ def shipment_request(
         initializer=provider_units.shipping_options_initializer,
     )
 
-    additional_service_codes = [option.code for _, option in options.items()]
+    # Truthy-state emission: an explicit False (or zero-valued float) must not
+    # book its additional service — Options.items() filters by key, not state.
+    additional_service_codes = [
+        option.code for _, option in options.items() if option.state
+    ]
 
     # Booking locale: request options.language > connection config language >
     # recipient country (when config locale_by_recipient is enabled) > "en".

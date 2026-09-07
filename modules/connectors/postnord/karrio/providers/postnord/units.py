@@ -174,9 +174,22 @@ class ShippingOption(lib.Enum):
     # additional service code carried by pallet (52) and groupage (83) options.
     postnord_pallet_groupage = lib.OptionEnum("65", bool, meta=dict(category="HANDLING"))
 
+    # Consignee notification channels (general-descriptions.pdf; codes current
+    # per Read This First v22.7). Each code uses the matching contact slot on
+    # the consignee party; notification language follows the booking `locale`
+    # query parameter. Notifications are opt-in: booking no code means no
+    # notification, and channels combine freely (additive model).
+    postnord_notify_by_letter = lib.OptionEnum("A2", bool)
+    postnord_notify_by_sms = lib.OptionEnum("A3", bool)
+    postnord_notify_by_email = lib.OptionEnum("A4", bool)
+    postnord_notify_by_phone = lib.OptionEnum("A9", bool)
+    postnord_driver_notification = lib.OptionEnum("B8", bool)
+
     """ Unified Option type mapping """
     cash_on_delivery = postnord_cod
     insurance = postnord_insurance
+    sms_notification = postnord_notify_by_sms
+    email_notification = postnord_notify_by_email
 
 
 # Booking freeText usage code carrying the recipient's door/access code;
