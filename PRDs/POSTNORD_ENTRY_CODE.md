@@ -52,9 +52,7 @@ PostNord publishes no per-service documentation for ZDC, so the option is an opt
 
 ### Pending Questions
 
-| # | Question | Context | Options | Status |
-|---|----------|---------|---------|--------|
-| Q1 | Behavior when `entry_code` exceeds 50 characters | A truncated door code is a wrong door code; the limit needs defined enforcement semantics | A) Reject the request with a message (proposed), B) Truncate to 50 with a warning message, C) Pass through unmodified (limit is advisory only) | Pending |
+None — all questions resolved.
 
 ### Resolved Decisions
 
@@ -65,12 +63,12 @@ PostNord publishes no per-service documentation for ZDC, so the option is an opt
 | D3 | Maximum length | 50 characters | User decision; generous vs typical codes, within address/name limits; swagger allows 1000 | 2026-09-07 |
 | D4 | Service/endpoint verification | None — optional pass-through, documented | No PostNord documentation enumerates ZDC-capable services; PostNord governs acceptance | 2026-09-07 |
 | D5 | Type coercion | `str()` + `strip()` before send | `PlainDictField` does not enforce inner types; numeric codes (e.g. `1442`) must not raise (locale precedent, `create.py:156-158`) | 2026-09-07 |
+| D6 | Over-limit behavior (Q1) | Reject: booking not sent, caller receives a message | User decision; a truncated door code is a wrong door code. Implemented via ctx flag + proxy short-circuit (see D6a), because raising from the request builder cannot produce a message — see Appendix A, SDK error-channel analysis | 2026-09-07 |
+| D6a | Rejection mechanism | `create.py` sets a ctx flag; `proxy._create_shipment` skips the HTTP call and returns a synthesized PostNord fault body; the existing error parser turns it into a `Message`; the server's `shipment is None` path returns 424 with messages | Request building runs outside `@fail_safe` (`modules/sdk/karrio/api/interface.py:498-505`), so an exception would surface as an HTTP 500, not a carrier message. ctx-driven proxy branching is house pattern (canadapost `ctx["retrieve_shipments"]`, mydhl `is_paperless`); `error.py:35-41,60-91` already parses `compositeFault` bodies | 2026-09-07 |
 
 ### Edge Cases Requiring Input
 
-| Edge Case | Impact | Proposed Handling | Needs Input? |
-|-----------|--------|-------------------|--------------|
-| Value longer than 50 characters | Deterministic behavior required before implementation | See Q1 | Yes (Q1) |
+None remaining.
 
 ## Problem Statement
 
@@ -114,7 +112,14 @@ No entry-code handling exists anywhere in the connector, PRDs, or notes (swept `
 entry_code = lib.identity(
     str((payload.options or {}).get("entry_code") or "").strip() or None
 )
-# Q1 enforcement point: len(entry_code) > provider_units.ENTRY_CODE_MAX_LENGTH
+
+# Over limit: reject without sending (D6) — flag via ctx, omit freeText,
+# and let the proxy short-circuit into a synthesized fault response.
+entry_code_error = lib.identity(
+    f"options.entry_code exceeds {provider_units.ENTRY_CODE_MAX_LENGTH} characters"
+    if entry_code and len(entry_code) > provider_units.ENTRY_CODE_MAX_LENGTH
+    else None
+)
 
 free_texts = lib.identity(
     [
@@ -123,14 +128,37 @@ free_texts = lib.identity(
             text=entry_code,
         ),
     ]
-    if entry_code
+    if entry_code and not entry_code_error
     else None
 )
 
-postnord_req.ShipmentType(
-    ...,
-    freeText=free_texts,
+return lib.Serializable(
+    request,
+    lib.to_dict,
+    dict(
+        shipment_id=shipment_id,
+        label_type=label_type,
+        locale=locale,
+        entry_code_error=entry_code_error,
+    ),
 )
+```
+
+```python
+# mappers/postnord/proxy.py — _create_shipment, before the HTTP call
+if request.ctx.get("entry_code_error"):
+    return lib.Deserializable(
+        dict(
+            compositeFault=dict(
+                faults=[
+                    dict(
+                        faultCode="ENTRY_CODE_LENGTH",
+                        explanationText=request.ctx["entry_code_error"],
+                    )
+                ]
+            )
+        )
+    )
 ```
 
 ### Problems
@@ -145,7 +173,7 @@ postnord_req.ShipmentType(
 
 1. A merchant can pass `options.entry_code` on shipment creation and the value reaches PostNord as `freeText` ZDC, printed as Ref 2.
 2. Requests without `options.entry_code` remain byte-identical to today's output.
-3. Over-limit and non-string inputs behave deterministically per D3/D5/Q1.
+3. Over-limit and non-string inputs behave deterministically per D3/D5/D6.
 4. The option and its ZDC/Ref 2 semantics, including the no-verification caveat, are documented in the connector README.
 
 ### Success Criteria
@@ -161,7 +189,7 @@ postnord_req.ShipmentType(
 
 **Must-have (P0):**
 - [ ] `options.entry_code` → `shipment[0].freeText[0] == {usageCode: "ZDC", text: <value>}`
-- [ ] Q1 resolved and implemented
+- [ ] Over-limit rejection implemented per D6/D6a
 - [ ] Full postnord connector suite green
 
 **Nice-to-have (P1):**
@@ -218,7 +246,8 @@ postnord_req.ShipmentType(
                ▼
 ┌─────────────────────────────────────────────┐
 │ providers/postnord/shipment/create.py       │
-│ str() coercion, strip(), 50-char check (Q1) │
+│ str() coercion, strip(), 50-char check      │
+│ violation → ctx["entry_code_error"] flag    │
 └──────────────┬──────────────────────────────┘
                ▼
 ┌─────────────────────────────────────────────┐
@@ -228,7 +257,8 @@ postnord_req.ShipmentType(
                ▼
 ┌─────────────────────────────────────────────┐
 │ mappers/postnord/proxy.py                   │
-│ POST /rest/shipment/v3/edi/labels/{pdf,zpl} │
+│ ctx flag → synthesized fault, no HTTP call  │
+│ else POST /rest/shipment/v3/edi/labels/…    │
 │ (body-only; no query-param or path change)  │
 └──────────────┬──────────────────────────────┘
                ▼
@@ -289,7 +319,7 @@ No karrio API surface changes; the unified `options` object already accepts arbi
 | Empty or whitespace-only value | Treated as absent | `str(...).strip() or None` |
 | Numeric value (e.g. `1442` as int) | Coerced to `"1442"`, sent | `str()` (D5) |
 | Exactly 50 characters | Sent | Boundary inclusive |
-| More than 50 characters | Per Q1 | Enforcement at build time |
+| More than 50 characters | Booking not sent; `Message` (code `ENTRY_CODE_LENGTH`) returned; server responds 424 with messages | ctx flag + proxy short-circuit (D6/D6a) |
 | Combined with `options.language` | Both applied; independent channels | Channel separation above |
 | Service without ZDC support | Sent anyway; PostNord ignores or errors | D4 pass-through, documented |
 | Non-ASCII characters | Sent as-is (swagger allows free text) | No karrio-side charset filter |
@@ -300,7 +330,7 @@ No karrio API surface changes; the unified `options` object already accepts arbi
 |-------------------|--------|------------|
 | PostNord silently drops ZDC on an unsupported service | Label lacks Ref 2; driver without code | Accepted per D4; README documents caveat; P1 live check optional |
 | PostNord rejects the booking due to freeText | Booking fails with carrier message | Existing `error.parse_error_response` surfaces it; no code path changes |
-| Over-limit value silently truncated by us | Wrong code delivered | Avoided by design; Q1 selects reject or explicit behavior |
+| Over-limit value silently truncated by us | Wrong code delivered | Avoided by design; D6 rejects before send |
 
 ## Implementation Plan
 
@@ -309,11 +339,12 @@ No karrio API surface changes; the unified `options` object already accepts arbi
 | Task | Files | Status | Effort |
 |------|-------|--------|--------|
 | Add `ENTRY_CODE_USAGE_CODE = "ZDC"` and `ENTRY_CODE_MAX_LENGTH = 50` constants | `modules/connectors/postnord/karrio/providers/postnord/units.py` | Pending | S |
-| Read, coerce, check, and wire `entry_code` → `freeText` | `modules/connectors/postnord/karrio/providers/postnord/shipment/create.py` | Pending | S |
-| Four create-request tests (present, absent, coerced, over-limit) | `modules/connectors/postnord/tests/postnord/test_shipment.py` | Pending | S |
+| Read, coerce, check, and wire `entry_code` → `freeText`; flag over-limit via ctx | `modules/connectors/postnord/karrio/providers/postnord/shipment/create.py` | Pending | S |
+| Short-circuit `_create_shipment` on the ctx flag; return synthesized `compositeFault` body without HTTP | `modules/connectors/postnord/karrio/mappers/postnord/proxy.py` | Pending | S |
+| Four create-request tests (present, absent, coerced, over-limit rejection) | `modules/connectors/postnord/tests/postnord/test_shipment.py` | Pending | S |
 | Document `options.entry_code` usage and caveats | `modules/connectors/postnord/README.md` | Pending | S |
 
-**Dependencies:** Q1 must be resolved before the over-limit test is finalized.
+**Dependencies:** none — Q1 is resolved (D6/D6a).
 
 ## Testing Strategy
 
@@ -339,7 +370,8 @@ def test_create_shipment_entry_code_coerced(self):
     """Numeric option value is stringified and sent."""
 
 def test_create_shipment_entry_code_over_limit(self):
-    """51-char value: behavior per Q1 (proposed: request rejected with message)."""
+    """51-char value: proxy returns a synthesized fault without an HTTP call;
+    parse yields Message(code="ENTRY_CODE_LENGTH") and no shipment details."""
 ```
 
 ### Running Tests
@@ -357,7 +389,7 @@ python -m unittest discover -v -f modules/connectors/postnord/tests
 | ZDC not honored on services merchants use | Medium | Medium | D4 pass-through plus README documentation; P1 live check |
 | Swagger usage-code list omits ZDC (undocumented behavior) | Low | Certain (already true) | Appendix A evidence trail; PRD records provenance |
 | Regression in existing create path | Medium | Low | Absent-option assertDictEqual against existing fixture; full suite |
-| Q1 semantics chosen wrong | Low | Low | Single build-time branch; trivially changeable |
+| D6 semantics chosen wrong | Low | Low | Single build-time branch; trivially changeable |
 
 ## Migration & Rollback
 
@@ -384,6 +416,9 @@ python -m unittest discover -v -f modules/connectors/postnord/tests
 | PostNord Customer API Guides | guide.developer.postnord.com | `freeText` with ZDC-consignee: "the Doorcode is printed as Ref 2" |
 | Spec currency | developer.postnord.com | Published Booking APIs version is 3.5.29.1 — identical to the vendored spec |
 | Service applicability | all of the above | No source enumerates which services accept ZDC; hence D4 |
+| SDK error-channel analysis | `modules/sdk/karrio/api/interface.py:498-505` | `create_shipment_request` runs outside `@fail_safe` (only parse is guarded), so a raised exception cannot become a carrier `Message` — hence the ctx/proxy short-circuit in D6a |
+| ctx-branching precedent | `canadapost` proxy (`ctx["retrieve_shipments"]`), `mydhl` proxy (`is_paperless`) | Reading `request.ctx` to alter proxy behavior is established house pattern |
+| Server 424 path | `modules/core/karrio/server/core/gateway.py:309-317` | `shipment is None` + messages → `APIException` 424 with message detail — the rejection UX for D6 |
 
 ### Appendix B: README Documentation Text
 
