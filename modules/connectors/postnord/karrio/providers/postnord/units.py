@@ -179,6 +179,18 @@ class ShippingOption(lib.Enum):
     insurance = postnord_insurance
 
 
+# Booking freeText usage code carrying the recipient's door/access code;
+# PostNord prints it as "Ref 2" on the label (general-descriptions.pdf:
+# "ZDC ... Door code", "Used in RFF for Consignee"). No PostNord source
+# enumerates which services accept it, so the value is passed through
+# unverified.
+ENTRY_CODE_USAGE_CODE = "ZDC"
+
+# 50 chars is generous for door codes and stays within address-line and
+# full-name limits; longer values reject the booking before it is sent.
+ENTRY_CODE_MAX_LENGTH = 50
+
+
 def shipping_options_initializer(
     options: dict,
     package_options: units.ShippingOptions = None,

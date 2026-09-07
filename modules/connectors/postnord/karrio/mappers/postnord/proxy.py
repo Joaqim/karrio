@@ -112,6 +112,27 @@ class Proxy(proxy.Proxy):
             else "/rest/shipment/v3/edi/labels/pdf"
         )
 
+        # A build-time rejection (entry_code over length) must not reach
+        # PostNord: request building runs outside the SDK's fail_safe, so the
+        # provider flags the violation in ctx and this synthesized fault flows
+        # through the regular error parser into a Message instead of an
+        # unstructured exception.
+        if request.ctx.get("entry_code_error"):
+            return lib.Deserializable(
+                dict(
+                    compositeFault=dict(
+                        faults=[
+                            dict(
+                                faultCode="ENTRY_CODE_LENGTH",
+                                explanationText=request.ctx["entry_code_error"],
+                            )
+                        ]
+                    )
+                ),
+                lib.to_dict,
+                request.ctx,
+            )
+
         response = lib.request(
             url=self._url(
                 label_path,

@@ -167,6 +167,20 @@ def shipment_request(
         or "en"
     )
 
+    # Recipient entry (door) code, sent as a freeText with the ZDC usage code
+    # and printed as "Ref 2" on the label. PostNord does not document which
+    # services accept it, so the value is passed through unverified; only the
+    # length is enforced, rejecting the booking via a ctx flag the proxy turns
+    # into a fault response (see proxy.create_shipment).
+    entry_code = lib.identity(
+        str((payload.options or {}).get("entry_code") or "").strip() or None
+    )
+    entry_code_error = lib.identity(
+        f"options.entry_code exceeds {provider_units.ENTRY_CODE_MAX_LENGTH} characters"
+        if entry_code and len(entry_code) > provider_units.ENTRY_CODE_MAX_LENGTH
+        else None
+    )
+
     # Assign a client-controlled shipmentId from the merchant reference so the
     # booking carries a searchable Track & Trace id; without one PostNord
     # auto-allocates an opaque id. Prefer the caller reference; fall back to a
@@ -226,6 +240,18 @@ def shipment_request(
                     basicServiceCode=service,
                     additionalServiceCode=additional_service_codes or None,
                 ),
+                # [] (not None): the JList converter wraps an explicit None
+                # into [None], which survives to_dict as a bogus freeText entry.
+                freeText=lib.identity(
+                    [
+                        postnord_req.FreeTextType(
+                            usageCode=provider_units.ENTRY_CODE_USAGE_CODE,
+                            text=entry_code,
+                        )
+                    ]
+                    if entry_code and entry_code_error is None
+                    else []
+                ),
                 parties=postnord_req.PartiesType(
                     consignor=_party(shipper, with_consignor_id=True),
                     consignee=_party(recipient, with_consignor_id=False),
@@ -277,5 +303,12 @@ def shipment_request(
     )
 
     return lib.Serializable(
-        request, lib.to_dict, dict(shipment_id=shipment_id, label_type=label_type, locale=locale)
+        request,
+        lib.to_dict,
+        dict(
+            shipment_id=shipment_id,
+            label_type=label_type,
+            locale=locale,
+            entry_code_error=entry_code_error,
+        ),
     )
