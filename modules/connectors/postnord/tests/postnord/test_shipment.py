@@ -70,6 +70,66 @@ class TestPostNordShipment(unittest.TestCase):
                 f"{gateway.settings.server_url}/rest/shipment/v3/edi/labels/pdf?apikey=TEST_API_KEY&locale=en",
             )
 
+    def test_create_shipment_entry_code_request(self):
+        # options.entry_code maps to a ZDC freeText on the booking body.
+        payload = {**ShipmentPayload, "options": {"entry_code": "1442"}}
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        serialized = lib.to_dict(request.serialize())
+        self.assertEqual(
+            serialized["shipment"][0]["freeText"],
+            [{"usageCode": "ZDC", "text": "1442"}],
+        )
+
+    def test_create_shipment_entry_code_absent(self):
+        # No option: freeText omitted, no rejection flag; payload unchanged.
+        request = gateway.mapper.create_shipment_request(self.ShipmentRequest)
+        serialized = lib.to_dict(request.serialize())
+        self.assertNotIn("freeText", serialized["shipment"][0])
+        self.assertIsNone(request.ctx.get("entry_code_error"))
+
+    def test_create_shipment_entry_code_coerced(self):
+        # PlainDictField does not enforce inner types; numeric codes are sent
+        # as strings (same coercion rationale as options.language).
+        payload = {**ShipmentPayload, "options": {"entry_code": 1442}}
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        serialized = lib.to_dict(request.serialize())
+        self.assertEqual(
+            serialized["shipment"][0]["freeText"],
+            [{"usageCode": "ZDC", "text": "1442"}],
+        )
+
+    def test_create_shipment_entry_code_at_limit(self):
+        # Exactly 50 characters is the inclusive boundary and is sent.
+        payload = {**ShipmentPayload, "options": {"entry_code": "1" * 50}}
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        serialized = lib.to_dict(request.serialize())
+        self.assertEqual(
+            serialized["shipment"][0]["freeText"],
+            [{"usageCode": "ZDC", "text": "1" * 50}],
+        )
+
+    def test_create_shipment_entry_code_over_limit(self):
+        # 51 characters rejects the booking: no HTTP call, a synthesized
+        # compositeFault surfaces as an ENTRY_CODE_LENGTH message.
+        payload = {**ShipmentPayload, "options": {"entry_code": "1" * 51}}
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            shipment, messages = (
+                karrio.Shipment.create(models.ShipmentRequest(**payload))
+                .from_(gateway)
+                .parse()
+            )
+            mock.assert_not_called()
+        self.assertIsNone(shipment)
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0].code, "ENTRY_CODE_LENGTH")
+        self.assertIn("exceeds 50 characters", messages[0].message)
+
     def test_parse_shipment_response(self):
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
             mock.return_value = ShipmentResponse
