@@ -84,6 +84,36 @@ class TestDHLFreightShipment(unittest.TestCase):
         self.assertIsInstance(serialized["productCode"], str)
         self.assertEqual(_access_point(serialized), AccessPointStation)
 
+    def test_create_shipment_request_202_customs(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload202Customs)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        self.assertEqual(serialized["customsInformation"], CustomsInformation)
+        # hsItemId serializes as the raw HS string, not a coerced int.
+        hs_item = serialized["customsInformation"]["customsCommodities"][0]["hsItemId"]
+        self.assertEqual(hs_item, "7615101090")
+        self.assertIsInstance(hs_item, str)
+
+    def test_create_shipment_request_customs_domestic_omits_export_movement(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload102Customs)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        document = serialized["customsInformation"]["customsDocuments"][0]
+        self.assertEqual(document["type"], "CommercialInvoice")
+        self.assertNotIn("transportMovement", document)
+
+    def test_create_shipment_request_without_customs_omits_section(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload202)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        self.assertNotIn("customsInformation", serialized)
+
     # -- proxy: two sequential calls (book -> print) with client-key header
 
     def test_create_shipment(self):
@@ -311,6 +341,60 @@ ShipmentPayload109 = _payload(
         "dhl_freight_sweden_service_point_type": "ParcelStation",
     },
 )
+
+Customs = {
+    "commodities": [
+        {
+            "description": "Aluminium brackets",
+            "hs_code": "7615101090",
+            "quantity": 4,
+            "weight": 2.5,
+            "value_amount": 1200.0,
+            "value_currency": "EUR",
+            "origin_country": "SE",
+        }
+    ],
+    "content_type": "merchandise",
+    "incoterm": "DAP",
+    "invoice": "INV-2026-001",
+    "invoice_date": "2026-09-08",
+    "commercial_invoice": True,
+    "duty": {"paid_by": "sender", "currency": "EUR", "declared_value": 1200.0},
+}
+
+ShipmentPayload202Customs = {
+    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_de),
+    "customs": Customs,
+}
+
+ShipmentPayload102Customs = {
+    **_payload("dhl_freight_sweden_paket", _recipient_se),
+    "customs": Customs,
+}
+
+CustomsInformation = {
+    "customsDocuments": [
+        {
+            "id": "INV-2026-001",
+            "type": "CommercialInvoice",
+            "transportMovement": "Export",
+            "invoiceDate": "2026-09-08",
+            "invoiceCurrency": "EUR",
+            "invoiceAmount": 1200.0,
+        }
+    ],
+    "customsCommodities": [
+        {
+            "countryCodeOfOrigin": "SE",
+            "customsValueCurrency": "EUR",
+            "customsValue": 1200.0,
+            "hsItemId": "7615101090",
+            "commodityDescription": "Aluminium brackets",
+            "netWeight": 2.5,
+            "numberOfUnits": 4,
+        }
+    ],
+}
 
 PrintOptions = {
     "label": True,

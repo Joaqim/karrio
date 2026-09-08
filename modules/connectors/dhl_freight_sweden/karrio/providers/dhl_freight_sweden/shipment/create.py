@@ -95,6 +95,18 @@ def shipment_request(
         or settings.connection_config.label_page_type.state
         or provider_units.PageType.Label.value
     ).value_or_key
+    customs = lib.identity(
+        _customs_information(payload.customs, settings, recipient.country_code)
+        if payload.customs
+        and any(
+            [
+                payload.customs.commodities,
+                payload.customs.invoice,
+                payload.customs.invoice_date,
+            ]
+        )
+        else None
+    )
 
     parties = [
         _party(provider_units.PartyType.Consignor, shipper),
@@ -174,6 +186,7 @@ def shipment_request(
                 else None
             ),
         ),
+        customsInformation=customs,
     )
 
     print_options = dhl_freight_sweden_print.OptionsType(
@@ -188,6 +201,51 @@ def shipment_request(
             print_options=lib.to_dict(print_options),
             label_type=settings.connection_config.label_type.state or "PDF",
         ),
+    )
+
+
+def _customs_information(
+    customs: models.Customs,
+    settings: provider_utils.Settings,
+    destination_country: str,
+) -> dhl_freight_sweden_req.CustomsInformationType:
+    duty = customs.duty
+    document = lib.identity(
+        dhl_freight_sweden_req.CustomsDocumentType(
+            id=customs.invoice,
+            type="CommercialInvoice",
+            # The account ships from Sweden, so a foreign destination is an
+            # export declaration; a domestic destination carries no movement.
+            transportMovement=lib.identity(
+                "Export"
+                if destination_country and destination_country
+                != settings.account_country_code
+                else None
+            ),
+            invoiceDate=lib.fdate(customs.invoice_date),
+            invoiceCurrency=duty.currency if duty else None,
+            invoiceAmount=duty.declared_value if duty else None,
+        )
+        if any([customs.commercial_invoice, customs.invoice, customs.invoice_date])
+        else None
+    )
+
+    return dhl_freight_sweden_req.CustomsInformationType(
+        customsDocuments=[document] if document else [],
+        customsCommodities=[
+            dhl_freight_sweden_req.CustomsCommodityType(
+                countryCodeOfOrigin=commodity.origin_country,
+                customsValueCurrency=commodity.value_currency,
+                customsValue=commodity.value_amount,
+                # hsItemId is a string (maxLength 38) on the wire even though
+                # the generated type annotates it as int.
+                hsItemId=commodity.hs_code,
+                commodityDescription=commodity.description or commodity.title,
+                netWeight=commodity.weight,
+                numberOfUnits=commodity.quantity,
+            )
+            for commodity in (customs.commodities or [])
+        ],
     )
 
 
