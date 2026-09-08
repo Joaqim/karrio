@@ -52,8 +52,9 @@ This removes the OAuth2 client-credentials flow, the Basic-to-Bearer exchange, a
 The shipment-create response returns a tracking number (`transportInstruction.id`), and `shipment/create` stamps `meta.tracking_url` built from a DHL Freight Sweden portal template.
 The API Farm has no tracking endpoint, so no `TrackingRequest` to `TrackingDetails` round-trip is possible against it.
 A full Karrio tracking feature is deferred to a later phase (it would use the DHL Unified Shipment Tracking API on the DHL Group gateway, a different front door and credential); `tracking.py` is not wired in Phase 0.
-5. **No rating in Phase 0.**
-The API Farm exposes a Price Quote API, but rating is out of scope for Phase 0 and is deferred; omitting `get_rates` from the proxy leaves the `rating` capability absent automatically.
+5. **Rating is static-rate-sheet only (supersedes the earlier "no rating" decision).**
+The API Farm Price Quote API remains out of scope, but the one-click shipment flow requires the `rating` capability to resolve a connection (the server's rate-fetch step filters connections and gateways on `capability=rating`).
+`Proxy.get_rates` therefore delegates to the universal `RatingMixinProxy` against the service levels seeded in `units.DEFAULT_SERVICES` (rate=0.0 placeholders overridden by merchant prices at runtime); no carrier call is made.
 6. **No cancel or returns in Phase 0.**
 Shipment cancellation and returns are out of scope; `cancel.py` remains a documented stub and no `cancel_shipment` is wired.
 7. **Label layout is selectable; raster format (PDF/ZPL) is not an API parameter.**
@@ -162,7 +163,7 @@ authenticating with a single client-key header against the SE API Farm.
 | Shipment parse returns tracking id + label + tracking_url | `test_parse_shipment_response` passes | P0 |
 | Proxy issues booking + print to the correct API Farm URLs | `test_create_shipment` passes | P0 |
 | Error responses parsed for booking/print | `test_parse_error_response` passes | P0 |
-| Capabilities = shipping only | no `rating` / `tracking` / `pickup` reported in Phase 0 | P1 |
+| Capabilities = shipping + rating (static rate sheet) | no `tracking` / `pickup` reported in Phase 0 | P1 |
 
 ### Launch criteria
 
@@ -290,6 +291,8 @@ Generated schema types (from the vendored OpenAPI 2.10.0 specs) drive all reques
 | `parcels[]` | `pieces[]` | Yes | weight→kg, dims→cm, `packageType` (default `PAL`), `numberOfPieces` |
 | `options.dhl_freight_sweden_label_page_type` | `pageOptions.pageType` | No | default `Label`; `Label2xPortraitA4` / `Label3xLandscapeA4` / `LabelCompact` / `LabelCompact2x2PortraitA4` |
 | `reference` / `options` | `references[]{qualifier,value}` | No | e.g. CNR/CNZ/INV |
+| `customs.commodities[]` | `customsInformation.customsCommodities[]` | No | description→`commodityDescription`, hs_code→`hsItemId` (wire string, max 38), value_amount/currency→`customsValue`/`customsValueCurrency`, weight→`netWeight`, quantity→`numberOfUnits`, origin_country→`countryCodeOfOrigin` |
+| `customs` invoice data | `customsInformation.customsDocuments[]` | No | invoice→`id`, type=`CommercialInvoice`, transportMovement=`Export` when destination differs from the account country, invoice_date→`invoiceDate`, duty.declared_value/currency→`invoiceAmount`/`invoiceCurrency` |
 | booking `transportInstruction.id` | `tracking_number` | — | also `shipment_identifier` |
 
 ### Product codes
@@ -364,7 +367,7 @@ Each service's base path (`/transportinstructionapi/v1`, `/printapi/v1`, ...) is
 ### Phase 0 scope
 
 Phase 0 delivers the shipping capability against the SE API Farm with hermetic, mocked tests.
-Tracking (`tracking.py`) and cancel (`cancel.py`) remain documented deferred stubs; rating is deferred.
+Tracking (`tracking.py`) and cancel (`cancel.py`) remain documented deferred stubs; rating is served statically from the seeded rate sheet (no carrier call).
 
 ### Phase 1: Scaffold & schema generation
 
