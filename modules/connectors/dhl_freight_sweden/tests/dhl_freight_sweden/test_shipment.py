@@ -82,6 +82,103 @@ class TestDHLFreightShipment(unittest.TestCase):
         self.assertIsInstance(serialized["productCode"], str)
         self.assertEqual(_access_point(serialized), AccessPointStation)
 
+    def test_create_shipment_request_202_customs(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload202Customs)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        self.assertEqual(serialized["customsInformation"], CustomsInformation)
+        # hsItemId serializes as the raw HS string, not a coerced int.
+        hs_item = serialized["customsInformation"]["customsCommodities"][0]["hsItemId"]
+        self.assertEqual(hs_item, "7615101090")
+        self.assertIsInstance(hs_item, str)
+
+    def test_create_shipment_request_customs_domestic_omits_export_movement(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload102Customs)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        document = serialized["customsInformation"]["customsDocuments"][0]
+        self.assertEqual(document["type"], "CommercialInvoice")
+        self.assertNotIn("transportMovement", document)
+
+    def test_create_shipment_request_without_customs_omits_section(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload202)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        self.assertNotIn("customsInformation", serialized)
+
+    def test_create_shipment_request_customs_without_invoice_is_proforma(self):
+        # The API requires at least one customs document whenever the customs
+        # section is present, so commodities alone still emit a document.
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload202Proforma)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        document = serialized["customsInformation"]["customsDocuments"][0]
+        self.assertEqual(document["type"], "ProformaInvoice")
+        self.assertNotIn("id", document)
+        self.assertEqual(
+            serialized["customsInformation"]["customsCommodities"][0]["procedureCode"],
+            "1042",
+        )
+
+    def test_create_shipment_request_payer_from_customs_incoterm(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload202Customs)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        self.assertEqual(serialized["payerCode"], {"code": "DAP"})
+
+    def test_create_shipment_request_reference_uses_cu_qualifier(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayloadWithReference)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        self.assertEqual(
+            serialized["references"],
+            [{"qualifier": "CU", "value": "ORDER-2026-042"}],
+        )
+
+    def test_create_shipment_request_customs_currency_gap_fill(self):
+        # Commodity lines without value_currency inherit the declaration
+        # currency (duty currency first, else the commodities' common one).
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload202GapCurrency)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        commodities = serialized["customsInformation"]["customsCommodities"]
+        self.assertEqual(
+            [c["customsValueCurrency"] for c in commodities], ["EUR", "EUR"]
+        )
+        document = serialized["customsInformation"]["customsDocuments"][0]
+        self.assertEqual(document["invoiceCurrency"], "EUR")
+
+    def test_shipment_customs_mixed_currency_surfaces_field_error(self):
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request"):
+            details, messages = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(**ShipmentPayload202MixedCurrency)
+                )
+                .from_(gateway)
+                .parse()
+            )
+
+        self.assertIsNone(details)
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0].code, "SHIPPING_SDK_FIELD_ERROR")
+        self.assertIn("customs.commodities.value_currency", messages[0].details)
+        self.assertIn("EUR", messages[0].message)
+        self.assertIn("SEK", messages[0].message)
+
     def test_create_shipment(self):
         with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
             mock.side_effect = [BookingResponse102, PrintResponse]
@@ -200,7 +297,7 @@ def _booking(shipment_id: str, product: int) -> str:
                 "productCode": product,
                 "totalNumberOfPieces": 1,
                 "totalWeight": 5.0,
-                "payerCode": {"code": "1234567"},
+                "payerCode": {"code": "1"},
                 "pieces": [
                     {"id": [f"{shipment_id}-P1"], "numberOfPieces": 1, "weight": 5.0}
                 ],
@@ -304,6 +401,113 @@ ShipmentPayload109 = _payload(
     },
 )
 
+Customs = {
+    "commodities": [
+        {
+            "description": "Aluminium brackets",
+            "hs_code": "7615101090",
+            "quantity": 4,
+            "weight": 2.5,
+            "value_amount": 1200.0,
+            "value_currency": "EUR",
+            "origin_country": "SE",
+        }
+    ],
+    "content_type": "merchandise",
+    "incoterm": "DAP",
+    "invoice": "INV-2026-001",
+    "invoice_date": "2026-09-08",
+    "commercial_invoice": True,
+    "duty": {"paid_by": "sender", "currency": "EUR", "declared_value": 1200.0},
+}
+
+ShipmentPayload202Customs = {
+    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_de),
+    "customs": Customs,
+}
+
+ShipmentPayload102Customs = {
+    **_payload("dhl_freight_sweden_paket", _recipient_se),
+    "customs": Customs,
+}
+
+ShipmentPayload202Proforma = {
+    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_de),
+    "customs": {
+        "commodities": Customs["commodities"],
+        "incoterm": "DAP",
+    },
+}
+
+ShipmentPayloadWithReference = {
+    **_payload("dhl_freight_sweden_paket", _recipient_se),
+    "reference": "ORDER-2026-042",
+}
+
+# The second commodity omits value_currency and inherits the duty currency.
+_gap_currency_commodity = {
+    key: value
+    for key, value in Customs["commodities"][0].items()
+    if key != "value_currency"
+}
+
+ShipmentPayload202GapCurrency = {
+    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_de),
+    "customs": {
+        "commodities": [
+            _gap_currency_commodity,
+            {
+                **Customs["commodities"][0],
+                "description": "Steel fasteners",
+                "hs_code": "7318159800",
+            },
+        ],
+        "incoterm": "DAP",
+        "duty": {"paid_by": "sender", "currency": "EUR", "declared_value": 1250.0},
+    },
+}
+
+ShipmentPayload202MixedCurrency = {
+    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_de),
+    "customs": {
+        "commodities": [
+            Customs["commodities"][0],
+            {
+                **Customs["commodities"][0],
+                "description": "Steel fasteners",
+                "hs_code": "7318159800",
+                "value_currency": "SEK",
+            },
+        ],
+        "incoterm": "DAP",
+    },
+}
+
+CustomsInformation = {
+    "customsDocuments": [
+        {
+            "id": "INV-2026-001",
+            "type": "CommercialInvoice",
+            "transportMovement": "Export",
+            "invoiceDate": "2026-09-08",
+            "invoiceCurrency": "EUR",
+            "invoiceAmount": 1200.0,
+        }
+    ],
+    "customsCommodities": [
+        {
+            "countryCodeOfOrigin": "SE",
+            "customsValueCurrency": "EUR",
+            "customsValue": 1200.0,
+            "hsItemId": "7615101090",
+            "commodityDescription": "Aluminium brackets",
+            "procedureCode": "1042",
+            "netWeight": 2.5,
+            "numberOfUnits": 4,
+        }
+    ],
+}
+
 PrintOptions = {
     "label": True,
     "pageOptions": {"pageType": "Label"},
@@ -328,6 +532,7 @@ ShipmentRequest102 = {
             },
             "contactName": "Sven Svensson",
             "email": "shipper@example.se",
+            "id": "1234567",
             "name": "Test Shipper AB",
             "phone": "+46 8 123 456",
             "type": "Consignor",
@@ -345,9 +550,8 @@ ShipmentRequest102 = {
             "phone": "+46 31 987 654",
             "type": "Consignee",
         },
-        {"id": "1234567", "type": "FreightPayer"},
     ],
-    "payerCode": {"code": "1234567"},
+    "payerCode": {"code": "1"},
     "pieces": [
         {
             "height": 15.0,
@@ -376,6 +580,7 @@ ShipmentRequest232 = {
             },
             "contactName": "Sven Svensson",
             "email": "shipper@example.se",
+            "id": "1234567",
             "name": "Test Shipper AB",
             "phone": "+46 8 123 456",
             "type": "Consignor",
@@ -393,9 +598,8 @@ ShipmentRequest232 = {
             "phone": "+46 31 987 654",
             "type": "Consignee",
         },
-        {"id": "1234567", "type": "FreightPayer"},
     ],
-    "payerCode": {"code": "1234567"},
+    "payerCode": {"code": "1"},
     "pieces": [
         {
             "height": 15.0,

@@ -8,9 +8,16 @@ import karrio.schemas.dhl_freight_sweden.print_response as dhl_freight_sweden_re
 import typing
 import karrio.lib as lib
 import karrio.core.models as models
+import karrio.core.errors as errors
 import karrio.providers.dhl_freight_sweden.error as error
 import karrio.providers.dhl_freight_sweden.utils as provider_utils
 import karrio.providers.dhl_freight_sweden.units as provider_units
+
+
+class DeclarationCurrencyError(errors.ShippingSDKDetailedError):
+    """Raised when commodity value currencies conflict with the declaration."""
+
+    code = "SHIPPING_SDK_FIELD_ERROR"
 
 
 def parse_shipment_response(
@@ -88,18 +95,45 @@ def shipment_request(
         initializer=provider_units.shipping_options_initializer,
     )
 
-    payer_code = options.dhl_freight_sweden_payer_code.state or settings.account_number
+    # PayerCode carries the product's terms-of-delivery code (see the product
+    # documentation): domestic products use the freight-payer codes 1/3/4,
+    # international products use Incoterms or Combiterm codes.
+    payer_code = lib.identity(
+        options.dhl_freight_sweden_payer_code.state
+        or (payload.customs.incoterm if payload.customs else None)
+        or "1"
+    )
+    procedure_code = (
+        options.dhl_freight_sweden_customs_procedure_code.state or "1042"
+    )
     service_point = options.dhl_freight_sweden_service_point.state
     page_type = provider_units.PageType.map(
         options.dhl_freight_sweden_label_page_type.state
         or settings.connection_config.label_page_type.state
         or provider_units.PageType.Label.value
     ).value_or_key
+    customs = lib.identity(
+        _customs_information(
+            payload.customs, settings, recipient.country_code, procedure_code
+        )
+        if payload.customs
+        and any(
+            [
+                payload.customs.commodities,
+                payload.customs.invoice,
+                payload.customs.invoice_date,
+            ]
+        )
+        else None
+    )
 
     parties = [
-        _party(provider_units.PartyType.Consignor, shipper),
+        # The consignor id is the customer/agreement number and is mandatory
+        # according to the payer code; the consignor-pays default always needs it.
+        _party(
+            provider_units.PartyType.Consignor, shipper, id=settings.account_number
+        ),
         _party(provider_units.PartyType.Consignee, recipient),
-        *lib.identity([_payer_party(payer_code)] if payer_code else []),
         *lib.identity(
             [
                 dhl_freight_sweden_req.PartyType(
@@ -126,7 +160,11 @@ def shipment_request(
         references=lib.identity(
             [
                 dhl_freight_sweden_req.ReferenceType(
-                    qualifier="CustomerReference", value=payload.reference
+                    # DHL Freight (Sweden) shipment-level reference qualifiers
+                    # (product manual appendix E); the qualifier is limited to
+                    # 3 characters and karrio's reference is the consignor's.
+                    qualifier="CU",
+                    value=payload.reference,
                 )
             ]
             if payload.reference
@@ -174,6 +212,7 @@ def shipment_request(
                 else None
             ),
         ),
+        customsInformation=customs,
     )
 
     print_options = dhl_freight_sweden_print.OptionsType(
@@ -191,9 +230,94 @@ def shipment_request(
     )
 
 
-def _party(role: str, address) -> dhl_freight_sweden_req.PartyType:
+def _customs_information(
+    customs: models.Customs,
+    settings: provider_utils.Settings,
+    destination_country: str,
+    procedure_code: str,
+) -> dhl_freight_sweden_req.CustomsInformationType:
+    duty = customs.duty
+    commodities = customs.commodities or []
+    # A customs declaration carries a single currency: the duty currency when
+    # present, otherwise the commodities' common currency. Commodity lines
+    # without a currency are gap-filled from it, and a line carrying a
+    # different currency would corrupt the declaration, so it is rejected.
+    declaration_currency = lib.identity(
+        (duty.currency if duty else None)
+        or next(
+            (c.value_currency for c in commodities if c.value_currency), None
+        )
+    )
+    conflicting = {
+        commodity.value_currency
+        for commodity in commodities
+        if commodity.value_currency
+        and declaration_currency
+        and commodity.value_currency != declaration_currency
+    }
+    if any(conflicting):
+        raise DeclarationCurrencyError(
+            "Commodity value currencies must match the customs declaration "
+            f"currency {declaration_currency}; "
+            f"found {', '.join(sorted(conflicting))}",
+            details={
+                "customs.commodities.value_currency": dict(
+                    code="invalid",
+                    message="mixed commodity currencies",
+                )
+            },
+        )
+
+    # The API requires at least one customs document whenever the customs
+    # information section is present, so the document is always emitted; an
+    # invoice used for payment is commercial, otherwise a customs-only pro forma.
+    document = dhl_freight_sweden_req.CustomsDocumentType(
+        id=customs.invoice,
+        type=lib.identity(
+            "CommercialInvoice"
+            if any([customs.commercial_invoice, customs.invoice])
+            else "ProformaInvoice"
+        ),
+        # The account ships from Sweden, so a foreign destination is an
+        # export declaration; a domestic destination carries no movement.
+        transportMovement=lib.identity(
+            "Export"
+            if destination_country and destination_country
+            != settings.account_country_code
+            else None
+        ),
+        invoiceDate=lib.fdate(customs.invoice_date),
+        invoiceCurrency=declaration_currency,
+        invoiceAmount=duty.declared_value if duty else None,
+    )
+
+    return dhl_freight_sweden_req.CustomsInformationType(
+        customsDocuments=[document],
+        customsCommodities=[
+            dhl_freight_sweden_req.CustomsCommodityType(
+                countryCodeOfOrigin=commodity.origin_country,
+                customsValueCurrency=commodity.value_currency
+                or declaration_currency,
+                customsValue=commodity.value_amount,
+                # hsItemId and procedureCode are strings on the wire even
+                # though the generated type annotates them as int.
+                hsItemId=commodity.hs_code,
+                commodityDescription=commodity.description or commodity.title,
+                procedureCode=procedure_code,
+                netWeight=commodity.weight,
+                numberOfUnits=commodity.quantity,
+            )
+            for commodity in commodities
+        ],
+    )
+
+
+def _party(
+    role: str, address, id: str = None
+) -> dhl_freight_sweden_req.PartyType:
     return dhl_freight_sweden_req.PartyType(
         type=role,
+        id=id,
         name=address.company_name or address.person_name,
         contactName=address.contact,
         vatEoriSocialSecurityNumber=address.tax_id,
@@ -208,11 +332,4 @@ def _party(role: str, address) -> dhl_freight_sweden_req.PartyType:
             postalCode=str(address.postal_code) if address.postal_code else None,
             countryCode=address.country_code,
         ),
-    )
-
-
-def _payer_party(payer_code: str) -> dhl_freight_sweden_req.PartyType:
-    return dhl_freight_sweden_req.PartyType(
-        type=provider_units.PartyType.FreightPayer.value,
-        id=payer_code,
     )

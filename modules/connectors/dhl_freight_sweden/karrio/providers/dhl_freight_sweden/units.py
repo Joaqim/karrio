@@ -103,8 +103,15 @@ class ShippingOption(lib.Enum):
     # Print page layout override (PageTypeEnum).
     dhl_freight_sweden_label_page_type = lib.OptionEnum("labelPageType", str)
 
-    # Payer code (defaults to the connection account number when unset).
+    # Terms-of-delivery code: domestic products use the freight-payer codes
+    # (1 consignor, 3 consignee, 4 third party); international products use
+    # Incoterms/Combiterm codes (DAP, DDP, 022, 023, ...). Falls back to
+    # customs.incoterm, then to the consignor-pays code "1".
     dhl_freight_sweden_payer_code = lib.OptionEnum("payerCode", str)
+
+    # Customs procedure code per commodity (maxLength 4). "1042" is the
+    # standard definitive-export procedure in the Swedish export declaration.
+    dhl_freight_sweden_customs_procedure_code = lib.OptionEnum("procedureCode", str)
 
     """ Unified Option type mapping """
     email_notification = dhl_freight_sweden_notification

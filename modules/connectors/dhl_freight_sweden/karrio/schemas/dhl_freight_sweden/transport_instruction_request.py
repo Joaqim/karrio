@@ -30,6 +30,7 @@ class CustomsCommodityType:
     customsValue: typing.Optional[float] = None
     hsItemId: typing.Optional[int] = None
     commodityDescription: typing.Optional[str] = None
+    procedureCode: typing.Optional[int] = None
     netWeight: typing.Optional[float] = None
     numberOfUnits: typing.Optional[int] = None
     goodsDescription: typing.Optional[str] = None

@@ -109,6 +109,7 @@
         "customsValue": 5000.0,
         "hsItemId": "84314980",
         "commodityDescription": "Machinery parts",
+        "procedureCode": "1042",
         "netWeight": 380.0,
         "numberOfUnits": 1,
         "goodsDescription": "Machinery parts"
