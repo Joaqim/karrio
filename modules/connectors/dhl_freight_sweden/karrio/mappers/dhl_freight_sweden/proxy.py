@@ -3,10 +3,20 @@
 import karrio.lib as lib
 import karrio.api.proxy as proxy
 import karrio.mappers.dhl_freight_sweden.settings as provider_settings
+from karrio.universal.mappers.rating_proxy import RatingMixinProxy
 
 
 class Proxy(proxy.Proxy):
     settings: provider_settings.Settings
+
+    def get_rates(self, request: lib.Serializable) -> lib.Deserializable:
+        """Resolve static prices from the server-side rate sheet.
+
+        The SE API Farm pricequote API is out of Phase 0 scope, so rating
+        delegates to the universal rating mixin against the service levels
+        seeded in ``units.DEFAULT_SERVICES``; no carrier call is made.
+        """
+        return RatingMixinProxy.get_rates(self, request)
 
     def create_shipment(self, request: lib.Serializable) -> lib.Deserializable[str]:
         """Book a transport instruction, then print its documents.

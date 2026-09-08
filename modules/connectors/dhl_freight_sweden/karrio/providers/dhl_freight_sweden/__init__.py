@@ -1,6 +1,10 @@
 """Karrio DHL Freight provider imports."""
 
 from karrio.providers.dhl_freight_sweden.utils import Settings
+from karrio.providers.dhl_freight_sweden.rate import (
+    parse_rate_response,
+    rate_request,
+)
 from karrio.providers.dhl_freight_sweden.shipment import (
     parse_shipment_response,
     shipment_request,
