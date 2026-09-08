@@ -257,8 +257,8 @@ REQUEST FLOW
     → recipient/shipper      → Party(type=Consignee) / Party(type=Consignor)
     → parcels[]              → pieces[] (packageType, weight[kg], W/H/L[cm], numberOfPieces)
     → service                → productCode
-    → options.dhl_freight_payer_code   → payerCode.code (default DAP) + payer party.id = account_number
-    → options.dhl_freight_label_layout → ReportOptions.pageOptions.pageType (default Label)
+    → options.dhl_freight_sweden_payer_code   → payerCode.code (default DAP) + payer party.id = account_number
+    → options.dhl_freight_sweden_label_page_type → ReportOptions.pageOptions.pageType (default Label)
     → references             → references[] { qualifier, value }
 
 RESPONSE FLOW
@@ -285,10 +285,10 @@ Generated schema types (from the vendored OpenAPI 2.10.0 specs) drive all reques
 | `shipper` | `parties[type=Consignor]` | Yes | name, address, contact, phone, email |
 | `recipient` | `parties[type=Consignee]` | Yes | as above |
 | `service` | `productCode` | Yes | numeric code (e.g. `102`, `232`); see product table |
-| `options.dhl_freight_payer_code` | `payerCode.code` | No | default `DAP` |
+| `options.dhl_freight_sweden_payer_code` | `payerCode.code` | No | default `DAP` |
 | `settings.account_number` | payer `parties[].id` | Conditional | mandatory for the freight-payer party |
 | `parcels[]` | `pieces[]` | Yes | weight→kg, dims→cm, `packageType` (default `PAL`), `numberOfPieces` |
-| `options.dhl_freight_label_layout` | `pageOptions.pageType` | No | default `Label`; `Label2xPortraitA4` / `Label3xLandscapeA4` / `LabelCompact` / `LabelCompact2x2PortraitA4` |
+| `options.dhl_freight_sweden_label_page_type` | `pageOptions.pageType` | No | default `Label`; `Label2xPortraitA4` / `Label3xLandscapeA4` / `LabelCompact` / `LabelCompact2x2PortraitA4` |
 | `reference` / `options` | `references[]{qualifier,value}` | No | e.g. CNR/CNZ/INV |
 | booking `transportInstruction.id` | `tracking_number` | — | also `shipment_identifier` |
 
@@ -488,5 +488,5 @@ Per-connection `connection_config.server_url` overrides the host.
 | `docs.label` | `PrintResult.reports[].content` (label report) |
 | `meta.tracking_url` | `tracking_url.format(transportInstruction.id)` |
 | `service` | `productCode` |
-| `options.dhl_freight_payer_code` | `payerCode.code` |
-| `options.dhl_freight_label_layout` | `ReportOptions.pageOptions.pageType` |
+| `options.dhl_freight_sweden_payer_code` | `payerCode.code` |
+| `options.dhl_freight_sweden_label_page_type` | `ReportOptions.pageOptions.pageType` |

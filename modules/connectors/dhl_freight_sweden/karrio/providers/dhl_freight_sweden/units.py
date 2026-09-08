@@ -56,59 +56,59 @@ class ShippingService(lib.StrEnum):
     """
 
     # Domestic (Sweden)
-    dhl_freight_hemleverans_paket_b2c = "118"
-    dhl_freight_home_delivery_b2c = "401"
-    dhl_freight_home_delivery_c2b = "402"
-    dhl_freight_home_delivery_c2b_502 = "502"
-    dhl_freight_pall = "210"
-    dhl_freight_paket = "102"
-    dhl_freight_parti = "212"
-    dhl_freight_service_point_b2c = "103"
-    dhl_freight_service_point_c2b = "104"
-    dhl_freight_special = "209"
-    dhl_freight_stycke = "211"
+    dhl_freight_sweden_hemleverans_paket_b2c = "118"
+    dhl_freight_sweden_home_delivery_b2c = "401"
+    dhl_freight_sweden_home_delivery_c2b = "402"
+    dhl_freight_sweden_home_delivery_c2b_502 = "502"
+    dhl_freight_sweden_pall = "210"
+    dhl_freight_sweden_paket = "102"
+    dhl_freight_sweden_parti = "212"
+    dhl_freight_sweden_service_point_b2c = "103"
+    dhl_freight_sweden_service_point_c2b = "104"
+    dhl_freight_sweden_special = "209"
+    dhl_freight_sweden_stycke = "211"
 
     # International
-    dhl_freight_road_freight_standard = "202"
-    dhl_freight_euroconnect_plus = "232"
-    dhl_freight_road_freight_direct = "205"
-    dhl_freight_road_freight_priority = "233"
-    dhl_freight_home_delivery_international_b2c = "601"
-    dhl_freight_parcel_connect_b2c = "109"
-    dhl_freight_parcel_return_connect_c2b = "107"
-    dhl_freight_parcel_connect_plus = "112"
-    dhl_freight_standard_pallet_international = "SPI"
+    dhl_freight_sweden_road_freight_standard = "202"
+    dhl_freight_sweden_euroconnect_plus = "232"
+    dhl_freight_sweden_road_freight_direct = "205"
+    dhl_freight_sweden_road_freight_priority = "233"
+    dhl_freight_sweden_home_delivery_international_b2c = "601"
+    dhl_freight_sweden_parcel_connect_b2c = "109"
+    dhl_freight_sweden_parcel_return_connect_c2b = "107"
+    dhl_freight_sweden_parcel_connect_plus = "112"
+    dhl_freight_sweden_standard_pallet_international = "SPI"
 
 
 class ShippingOption(lib.Enum):
     """DHL Freight shipping options."""
 
     # Additional services
-    dhl_freight_notification = lib.OptionEnum(
+    dhl_freight_sweden_notification = lib.OptionEnum(
         "notification", bool, meta=dict(category="NOTIFICATION")
     )
-    dhl_freight_pre_advice = lib.OptionEnum("preAdvice", bool)
-    dhl_freight_tail_lift_unloading = lib.OptionEnum("tailLiftUnloading", bool)
-    dhl_freight_insurance = lib.OptionEnum(
+    dhl_freight_sweden_pre_advice = lib.OptionEnum("preAdvice", bool)
+    dhl_freight_sweden_tail_lift_unloading = lib.OptionEnum("tailLiftUnloading", bool)
+    dhl_freight_sweden_insurance = lib.OptionEnum(
         "insurance", float, meta=dict(category="INSURANCE")
     )
     # Access code (int) for home-delivery doorstep delivery.
-    dhl_freight_doorstep_access_code = lib.OptionEnum("doorstepDelivery", int)
+    dhl_freight_sweden_doorstep_access_code = lib.OptionEnum("doorstepDelivery", int)
 
     # Access point / service point (products 103/109): the location id and the
     # access-point sub type (ParcelShop | ParcelStation).
-    dhl_freight_service_point = lib.OptionEnum("servicepoint", str)
-    dhl_freight_service_point_type = lib.OptionEnum("servicepointType", str)
+    dhl_freight_sweden_service_point = lib.OptionEnum("servicepoint", str)
+    dhl_freight_sweden_service_point_type = lib.OptionEnum("servicepointType", str)
 
     # Print page layout override (PageTypeEnum).
-    dhl_freight_label_page_type = lib.OptionEnum("labelPageType", str)
+    dhl_freight_sweden_label_page_type = lib.OptionEnum("labelPageType", str)
 
     # Payer code (defaults to the connection account number when unset).
-    dhl_freight_payer_code = lib.OptionEnum("payerCode", str)
+    dhl_freight_sweden_payer_code = lib.OptionEnum("payerCode", str)
 
     """ Unified Option type mapping """
-    email_notification = dhl_freight_notification
-    insurance = dhl_freight_insurance
+    email_notification = dhl_freight_sweden_notification
+    insurance = dhl_freight_sweden_insurance
 
 
 def shipping_options_initializer(
@@ -142,7 +142,7 @@ def shipping_options_initializer(
 DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
     models.ServiceLevel(
         service_name="Hemleverans Paket B2C",
-        service_code="dhl_freight_hemleverans_paket_b2c",
+        service_code="dhl_freight_sweden_hemleverans_paket_b2c",
         carrier_service_code="118",
         currency="SEK",
         domicile=True,
@@ -151,7 +151,7 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
     ),
     models.ServiceLevel(
         service_name="Home Delivery B2C",
-        service_code="dhl_freight_home_delivery_b2c",
+        service_code="dhl_freight_sweden_home_delivery_b2c",
         carrier_service_code="401",
         currency="SEK",
         domicile=True,
@@ -160,7 +160,7 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
     ),
     models.ServiceLevel(
         service_name="Home Delivery C2B",
-        service_code="dhl_freight_home_delivery_c2b",
+        service_code="dhl_freight_sweden_home_delivery_c2b",
         carrier_service_code="402",
         currency="SEK",
         domicile=True,
@@ -169,7 +169,7 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
     ),
     models.ServiceLevel(
         service_name="Home Delivery C2B (502)",
-        service_code="dhl_freight_home_delivery_c2b_502",
+        service_code="dhl_freight_sweden_home_delivery_c2b_502",
         carrier_service_code="502",
         currency="SEK",
         domicile=True,
@@ -178,7 +178,7 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
     ),
     models.ServiceLevel(
         service_name="Pall",
-        service_code="dhl_freight_pall",
+        service_code="dhl_freight_sweden_pall",
         carrier_service_code="210",
         currency="SEK",
         domicile=True,
@@ -187,7 +187,7 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
     ),
     models.ServiceLevel(
         service_name="Paket",
-        service_code="dhl_freight_paket",
+        service_code="dhl_freight_sweden_paket",
         carrier_service_code="102",
         currency="SEK",
         domicile=True,
@@ -196,7 +196,7 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
     ),
     models.ServiceLevel(
         service_name="Parti",
-        service_code="dhl_freight_parti",
+        service_code="dhl_freight_sweden_parti",
         carrier_service_code="212",
         currency="SEK",
         domicile=True,
@@ -205,7 +205,7 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
     ),
     models.ServiceLevel(
         service_name="Service Point B2C",
-        service_code="dhl_freight_service_point_b2c",
+        service_code="dhl_freight_sweden_service_point_b2c",
         carrier_service_code="103",
         currency="SEK",
         domicile=True,
@@ -214,7 +214,7 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
     ),
     models.ServiceLevel(
         service_name="Service Point C2B",
-        service_code="dhl_freight_service_point_c2b",
+        service_code="dhl_freight_sweden_service_point_c2b",
         carrier_service_code="104",
         currency="SEK",
         domicile=True,
@@ -223,7 +223,7 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
     ),
     models.ServiceLevel(
         service_name="Special",
-        service_code="dhl_freight_special",
+        service_code="dhl_freight_sweden_special",
         carrier_service_code="209",
         currency="SEK",
         domicile=True,
@@ -232,7 +232,7 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
     ),
     models.ServiceLevel(
         service_name="Stycke",
-        service_code="dhl_freight_stycke",
+        service_code="dhl_freight_sweden_stycke",
         carrier_service_code="211",
         currency="SEK",
         domicile=True,
@@ -241,7 +241,7 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
     ),
     models.ServiceLevel(
         service_name="Road Freight Standard",
-        service_code="dhl_freight_road_freight_standard",
+        service_code="dhl_freight_sweden_road_freight_standard",
         carrier_service_code="202",
         currency="SEK",
         domicile=False,
@@ -250,7 +250,7 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
     ),
     models.ServiceLevel(
         service_name="Euroconnect Plus",
-        service_code="dhl_freight_euroconnect_plus",
+        service_code="dhl_freight_sweden_euroconnect_plus",
         carrier_service_code="232",
         currency="SEK",
         domicile=True,
@@ -265,7 +265,7 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
     ),
     models.ServiceLevel(
         service_name="Road Freight Direct",
-        service_code="dhl_freight_road_freight_direct",
+        service_code="dhl_freight_sweden_road_freight_direct",
         carrier_service_code="205",
         currency="SEK",
         domicile=False,
@@ -274,7 +274,7 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
     ),
     models.ServiceLevel(
         service_name="Road Freight Priority",
-        service_code="dhl_freight_road_freight_priority",
+        service_code="dhl_freight_sweden_road_freight_priority",
         carrier_service_code="233",
         currency="SEK",
         domicile=False,
@@ -283,7 +283,7 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
     ),
     models.ServiceLevel(
         service_name="Home Delivery International B2C",
-        service_code="dhl_freight_home_delivery_international_b2c",
+        service_code="dhl_freight_sweden_home_delivery_international_b2c",
         carrier_service_code="601",
         currency="SEK",
         domicile=False,
@@ -292,7 +292,7 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
     ),
     models.ServiceLevel(
         service_name="Parcel Connect B2C",
-        service_code="dhl_freight_parcel_connect_b2c",
+        service_code="dhl_freight_sweden_parcel_connect_b2c",
         carrier_service_code="109",
         currency="SEK",
         domicile=True,
@@ -307,7 +307,7 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
     ),
     models.ServiceLevel(
         service_name="Parcel Return Connect C2B",
-        service_code="dhl_freight_parcel_return_connect_c2b",
+        service_code="dhl_freight_sweden_parcel_return_connect_c2b",
         carrier_service_code="107",
         currency="SEK",
         domicile=True,
@@ -322,7 +322,7 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
     ),
     models.ServiceLevel(
         service_name="Parcel Connect Plus",
-        service_code="dhl_freight_parcel_connect_plus",
+        service_code="dhl_freight_sweden_parcel_connect_plus",
         carrier_service_code="112",
         currency="SEK",
         domicile=True,
@@ -337,7 +337,7 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
     ),
     models.ServiceLevel(
         service_name="Standard Pallet International",
-        service_code="dhl_freight_standard_pallet_international",
+        service_code="dhl_freight_sweden_standard_pallet_international",
         carrier_service_code="SPI",
         currency="SEK",
         domicile=False,

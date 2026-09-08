@@ -285,30 +285,30 @@ def _payload(service: str, recipient: dict, options: typing.Optional[dict] = Non
 
 
 # Domestic (Sweden)
-ShipmentPayload102 = _payload("dhl_freight_paket", _recipient_se)
+ShipmentPayload102 = _payload("dhl_freight_sweden_paket", _recipient_se)
 ShipmentPayload401 = _payload(
-    "dhl_freight_home_delivery_b2c",
+    "dhl_freight_sweden_home_delivery_b2c",
     _recipient_se,
-    {"dhl_freight_doorstep_access_code": 1234},
+    {"dhl_freight_sweden_doorstep_access_code": 1234},
 )
 ShipmentPayload103 = _payload(
-    "dhl_freight_service_point_b2c",
+    "dhl_freight_sweden_service_point_b2c",
     _recipient_se,
     {
-        "dhl_freight_service_point": "SE12345",
-        "dhl_freight_service_point_type": "ParcelShop",
+        "dhl_freight_sweden_service_point": "SE12345",
+        "dhl_freight_sweden_service_point_type": "ParcelShop",
     },
 )
 
 # International
-ShipmentPayload232 = _payload("dhl_freight_euroconnect_plus", _recipient_de)
-ShipmentPayload202 = _payload("dhl_freight_road_freight_standard", _recipient_de)
+ShipmentPayload232 = _payload("dhl_freight_sweden_euroconnect_plus", _recipient_de)
+ShipmentPayload202 = _payload("dhl_freight_sweden_road_freight_standard", _recipient_de)
 ShipmentPayload109 = _payload(
-    "dhl_freight_parcel_connect_b2c",
+    "dhl_freight_sweden_parcel_connect_b2c",
     _recipient_de,
     {
-        "dhl_freight_service_point": "DE98765",
-        "dhl_freight_service_point_type": "ParcelStation",
+        "dhl_freight_sweden_service_point": "DE98765",
+        "dhl_freight_sweden_service_point_type": "ParcelStation",
     },
 )
 

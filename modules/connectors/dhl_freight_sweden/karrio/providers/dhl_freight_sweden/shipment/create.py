@@ -1,9 +1,9 @@
 """Karrio DHL Freight shipment API implementation."""
 
-import karrio.schemas.dhl_freight_sweden.transport_instruction_request as dhl_freight_req
-import karrio.schemas.dhl_freight_sweden.transport_instruction_response as dhl_freight_res
-import karrio.schemas.dhl_freight_sweden.print_request as dhl_freight_print
-import karrio.schemas.dhl_freight_sweden.print_response as dhl_freight_report
+import karrio.schemas.dhl_freight_sweden.transport_instruction_request as dhl_freight_sweden_req
+import karrio.schemas.dhl_freight_sweden.transport_instruction_response as dhl_freight_sweden_res
+import karrio.schemas.dhl_freight_sweden.print_request as dhl_freight_sweden_print
+import karrio.schemas.dhl_freight_sweden.print_response as dhl_freight_sweden_report
 
 import typing
 import karrio.lib as lib
@@ -34,10 +34,10 @@ def _extract_details(
     settings: provider_utils.Settings,
 ) -> models.ShipmentDetails:
     instruction = lib.to_object(
-        dhl_freight_res.TransportInstructionType,
+        dhl_freight_sweden_res.TransportInstructionType,
         booking.get("transportInstruction") or {},
     )
-    result = lib.to_object(dhl_freight_report.PrintResponseType, printed)
+    result = lib.to_object(dhl_freight_sweden_report.PrintResponseType, printed)
     report = next(iter(result.reports or []), None)
 
     tracking_number = instruction.id
@@ -88,10 +88,10 @@ def shipment_request(
         initializer=provider_units.shipping_options_initializer,
     )
 
-    payer_code = options.dhl_freight_payer_code.state or settings.account_number
-    service_point = options.dhl_freight_service_point.state
+    payer_code = options.dhl_freight_sweden_payer_code.state or settings.account_number
+    service_point = options.dhl_freight_sweden_service_point.state
     page_type = provider_units.PageType.map(
-        options.dhl_freight_label_page_type.state
+        options.dhl_freight_sweden_label_page_type.state
         or settings.connection_config.label_page_type.state
         or provider_units.PageType.Label.value
     ).value_or_key
@@ -102,11 +102,11 @@ def shipment_request(
         *lib.identity([_payer_party(payer_code)] if payer_code else []),
         *lib.identity(
             [
-                dhl_freight_req.PartyType(
+                dhl_freight_sweden_req.PartyType(
                     id=service_point,
                     type=provider_units.PartyType.AccessPoint.value,
                     subType=provider_units.PartySubType.map(
-                        options.dhl_freight_service_point_type.state
+                        options.dhl_freight_sweden_service_point_type.state
                         or provider_units.PartySubType.ParcelShop.value
                     ).value_or_key,
                 )
@@ -116,7 +116,7 @@ def shipment_request(
         ),
     ]
 
-    request = dhl_freight_req.TransportInstructionRequestType(
+    request = dhl_freight_sweden_req.TransportInstructionRequestType(
         # productCode is generated as Optional[int]; the SPI product and codes
         # such as 402/502 must serialize as strings on the wire.
         productCode=str(service),
@@ -125,7 +125,7 @@ def shipment_request(
         totalWeight=packages.weight.KG,
         references=lib.identity(
             [
-                dhl_freight_req.ReferenceType(
+                dhl_freight_sweden_req.ReferenceType(
                     qualifier="CustomerReference", value=payload.reference
                 )
             ]
@@ -133,11 +133,11 @@ def shipment_request(
             else []
         ),
         payerCode=lib.identity(
-            dhl_freight_req.PayerCodeType(code=payer_code) if payer_code else None
+            dhl_freight_sweden_req.PayerCodeType(code=payer_code) if payer_code else None
         ),
         parties=parties,
         pieces=[
-            dhl_freight_req.PieceType(
+            dhl_freight_sweden_req.PieceType(
                 # packageType/goodsType are product-documentation dependent and
                 # not enumerated in the API Farm spec; omitted in Phase 0.
                 marksAndNumbers=package.reference_number,
@@ -154,31 +154,31 @@ def shipment_request(
             )
             for package in packages
         ],
-        additionalServices=dhl_freight_req.AdditionalServicesType(
-            notification=options.dhl_freight_notification.state,
-            preAdvice=options.dhl_freight_pre_advice.state,
-            tailLiftUnloading=options.dhl_freight_tail_lift_unloading.state,
+        additionalServices=dhl_freight_sweden_req.AdditionalServicesType(
+            notification=options.dhl_freight_sweden_notification.state,
+            preAdvice=options.dhl_freight_sweden_pre_advice.state,
+            tailLiftUnloading=options.dhl_freight_sweden_tail_lift_unloading.state,
             doorstepDelivery=lib.identity(
-                dhl_freight_req.DoorstepDeliveryType(
-                    accessCode=options.dhl_freight_doorstep_access_code.state
+                dhl_freight_sweden_req.DoorstepDeliveryType(
+                    accessCode=options.dhl_freight_sweden_doorstep_access_code.state
                 )
-                if options.dhl_freight_doorstep_access_code.state is not None
+                if options.dhl_freight_sweden_doorstep_access_code.state is not None
                 else None
             ),
             insurance=lib.identity(
-                dhl_freight_req.InsuranceType(
-                    value=options.dhl_freight_insurance.state,
+                dhl_freight_sweden_req.InsuranceType(
+                    value=options.dhl_freight_sweden_insurance.state,
                     currency=options.currency.state,
                 )
-                if options.dhl_freight_insurance.state is not None
+                if options.dhl_freight_sweden_insurance.state is not None
                 else None
             ),
         ),
     )
 
-    print_options = dhl_freight_print.OptionsType(
+    print_options = dhl_freight_sweden_print.OptionsType(
         label=True,
-        pageOptions=dhl_freight_print.PageOptionsType(pageType=page_type),
+        pageOptions=dhl_freight_sweden_print.PageOptionsType(pageType=page_type),
     )
 
     return lib.Serializable(
@@ -191,15 +191,15 @@ def shipment_request(
     )
 
 
-def _party(role: str, address) -> dhl_freight_req.PartyType:
-    return dhl_freight_req.PartyType(
+def _party(role: str, address) -> dhl_freight_sweden_req.PartyType:
+    return dhl_freight_sweden_req.PartyType(
         type=role,
         name=address.company_name or address.person_name,
         contactName=address.contact,
         vatEoriSocialSecurityNumber=address.tax_id,
         phone=address.phone_number,
         email=address.email,
-        address=dhl_freight_req.AddressType(
+        address=dhl_freight_sweden_req.AddressType(
             street=address.address_line1,
             additionalAddressInfo=address.address_line2,
             cityName=address.city,
@@ -211,8 +211,8 @@ def _party(role: str, address) -> dhl_freight_req.PartyType:
     )
 
 
-def _payer_party(payer_code: str) -> dhl_freight_req.PartyType:
-    return dhl_freight_req.PartyType(
+def _payer_party(payer_code: str) -> dhl_freight_sweden_req.PartyType:
+    return dhl_freight_sweden_req.PartyType(
         type=provider_units.PartyType.FreightPayer.value,
         id=payer_code,
     )
