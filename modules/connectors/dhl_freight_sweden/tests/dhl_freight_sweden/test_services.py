@@ -15,6 +15,22 @@ class TestDHLFreightServiceLevels(unittest.TestCase):
     def setUp(self):
         self.levels = {s.service_code: s for s in units.DEFAULT_SERVICES}
 
+    def test_service_codes_prefixed_with_carrier_id(self):
+        for member in units.ShippingService:
+            self.assertTrue(
+                member.name.startswith("dhl_freight_sweden_"),
+                f"{member.name} breaks the carrier-id naming convention",
+            )
+
+    def test_option_codes_prefixed_with_carrier_id(self):
+        unified_aliases = {"email_notification", "insurance"}
+        for member in units.ShippingOption:
+            self.assertTrue(
+                member.name.startswith("dhl_freight_sweden_")
+                or member.name in unified_aliases,
+                f"{member.name} breaks the carrier-id naming convention",
+            )
+
     def test_service_levels_cover_product_enum(self):
         self.assertEqual(
             set(self.levels.keys()),
