@@ -106,13 +106,15 @@ No live sandbox credentials are required; all Phase 0 tests are hermetic.
 | 9 | Geographic gating | None | DHL API validation is authoritative; international implicitly allowed | 2026-08-11 |
 | 10 | API host resolution | API Farm default (by `test_mode`) + `connection_config.server_url` override | Per-connection override supported | 2026-08-11 |
 | 11 | Phase 0 verification | Mocked four-method unittest pattern; no live creds | Karrio hermetic-suite norm | 2026-08-11 |
+| 12 | Booking-required fields | Payer code, consignor id, reference qualifier, customs procedure code mapped from sandbox-verified sources | Live 400 validation dump (product 601 and 102) plus the SE product manual v5.23 and the product API (`/productapi/v1/products/{code}`); both corrected bookings returned HTTP 200 | 2026-09-08 |
+| 13 | Customs declaration currency | Single declaration currency resolved from `duty.currency`, then the commodities' common currency; per-line gaps filled, conflicts raise a field error | A declaration with mixed per-line currencies corrupts `customsValueCurrency`/`invoiceCurrency` consistency | 2026-09-08 |
 
 ### Edge cases requiring input
 
 | # | Edge case | Needs |
 |---|-----------|-------|
 | 1 | Print report `content` encoding | Confirm base64 against a sample response before shipping |
-| 2 | Freight-payer party id source | Confirm whether `account_number` is a connection setting or per-request; default: connection setting used as the payer party's `id` |
+| 2 | Freight-payer party id source | Resolved: the consignor party carries `settings.account_number` as its id; the separate FreightPayer party was dropped (its id is a customer number, not the payer code) |
 | 3 | Service-point / home-delivery locator reference | Confirm whether 103 / 401 / 109 need a locator id and whether it can be caller-supplied (see Pending question #3) |
 
 ---
@@ -283,16 +285,16 @@ Generated schema types (from the vendored OpenAPI 2.10.0 specs) drive all reques
 
 | Karrio field | Carrier field | Required | Notes |
 |--------------|---------------|----------|-------|
-| `shipper` | `parties[type=Consignor]` | Yes | name, address, contact, phone, email |
+| `shipper` | `parties[type=Consignor]` | Yes | name, address, contact, phone, email; `id` = `settings.account_number` (customer/agreement number, mandatory per the payer code) |
 | `recipient` | `parties[type=Consignee]` | Yes | as above |
 | `service` | `productCode` | Yes | numeric code (e.g. `102`, `232`); see product table |
-| `options.dhl_freight_sweden_payer_code` | `payerCode.code` | No | default `DAP` |
-| `settings.account_number` | payer `parties[].id` | Conditional | mandatory for the freight-payer party |
-| `parcels[]` | `pieces[]` | Yes | weight→kg, dims→cm, `packageType` (default `PAL`), `numberOfPieces` |
+| `options.dhl_freight_sweden_payer_code` | `payerCode.code` | Yes | terms-of-delivery code: option, then `customs.incoterm`, then default `1` (consignor pays). Domestic products use `1`/`3`/`4`; international use Incoterms (`DAP`, `DDP`, …) or Combiterm (`022`/`023`); the valid set is per product (`/productapi/v1/products/{code}` `payerCodes`) |
+| `settings.account_number` | `parties[type=Consignor].id` | Yes | customer/agreement number |
+| `parcels[]` | `pieces[]` | Yes | weight→kg, dims→cm (per-product minimums apply, e.g. 102: L≥15/W≥11/H≥2; 601: L≥15/W≥11/H≥3), `numberOfPieces` |
 | `options.dhl_freight_sweden_label_page_type` | `pageOptions.pageType` | No | default `Label`; `Label2xPortraitA4` / `Label3xLandscapeA4` / `LabelCompact` / `LabelCompact2x2PortraitA4` |
-| `reference` / `options` | `references[]{qualifier,value}` | No | e.g. CNR/CNZ/INV |
-| `customs.commodities[]` | `customsInformation.customsCommodities[]` | No | description→`commodityDescription`, hs_code→`hsItemId` (wire string, max 38), value_amount/currency→`customsValue`/`customsValueCurrency`, weight→`netWeight`, quantity→`numberOfUnits`, origin_country→`countryCodeOfOrigin` |
-| `customs` invoice data | `customsInformation.customsDocuments[]` | No | invoice→`id`, type=`CommercialInvoice`, transportMovement=`Export` when destination differs from the account country, invoice_date→`invoiceDate`, duty.declared_value/currency→`invoiceAmount`/`invoiceCurrency` |
+| `reference` | `references[]{qualifier,value}` | No | qualifier `CU` (consignor reference, product manual appendix E; 3-char limit) |
+| `customs.commodities[]` | `customsInformation.customsCommodities[]` | No | description→`commodityDescription` (mandatory, max 35), hs_code→`hsItemId` (wire string, max 38), value_amount/currency→`customsValue`/`customsValueCurrency` (single declaration currency; gaps filled from `duty.currency`, conflicts rejected), weight→`netWeight`, quantity→`numberOfUnits`, origin_country→`countryCodeOfOrigin`; `procedureCode` defaults to `1042` (standard definitive export), overridable via `options.dhl_freight_sweden_customs_procedure_code` |
+| `customs` invoice data | `customsInformation.customsDocuments[]` | With customs | one document always emitted: `CommercialInvoice` when invoice/commercial-invoice data exists, else `ProformaInvoice`; invoice→`id`, transportMovement=`Export` when destination differs from the account country, invoice_date→`invoiceDate`, duty.declared_value→`invoiceAmount`, declaration currency→`invoiceCurrency` |
 | booking `transportInstruction.id` | `tracking_number` | — | also `shipment_identifier` |
 
 ### Product codes
