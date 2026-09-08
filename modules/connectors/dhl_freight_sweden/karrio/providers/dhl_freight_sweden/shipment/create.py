@@ -8,9 +8,16 @@ import karrio.schemas.dhl_freight_sweden.print_response as dhl_freight_sweden_re
 import typing
 import karrio.lib as lib
 import karrio.core.models as models
+import karrio.core.errors as errors
 import karrio.providers.dhl_freight_sweden.error as error
 import karrio.providers.dhl_freight_sweden.utils as provider_utils
 import karrio.providers.dhl_freight_sweden.units as provider_units
+
+
+class DeclarationCurrencyError(errors.ShippingSDKDetailedError):
+    """Raised when commodity value currencies conflict with the declaration."""
+
+    code = "SHIPPING_SDK_FIELD_ERROR"
 
 
 def parse_shipment_response(
@@ -230,6 +237,37 @@ def _customs_information(
     procedure_code: str,
 ) -> dhl_freight_sweden_req.CustomsInformationType:
     duty = customs.duty
+    commodities = customs.commodities or []
+    # A customs declaration carries a single currency: the duty currency when
+    # present, otherwise the commodities' common currency. Commodity lines
+    # without a currency are gap-filled from it, and a line carrying a
+    # different currency would corrupt the declaration, so it is rejected.
+    declaration_currency = lib.identity(
+        (duty.currency if duty else None)
+        or next(
+            (c.value_currency for c in commodities if c.value_currency), None
+        )
+    )
+    conflicting = {
+        commodity.value_currency
+        for commodity in commodities
+        if commodity.value_currency
+        and declaration_currency
+        and commodity.value_currency != declaration_currency
+    }
+    if any(conflicting):
+        raise DeclarationCurrencyError(
+            "Commodity value currencies must match the customs declaration "
+            f"currency {declaration_currency}; "
+            f"found {', '.join(sorted(conflicting))}",
+            details={
+                "customs.commodities.value_currency": dict(
+                    code="invalid",
+                    message="mixed commodity currencies",
+                )
+            },
+        )
+
     # The API requires at least one customs document whenever the customs
     # information section is present, so the document is always emitted; an
     # invoice used for payment is commercial, otherwise a customs-only pro forma.
@@ -249,7 +287,7 @@ def _customs_information(
             else None
         ),
         invoiceDate=lib.fdate(customs.invoice_date),
-        invoiceCurrency=duty.currency if duty else None,
+        invoiceCurrency=declaration_currency,
         invoiceAmount=duty.declared_value if duty else None,
     )
 
@@ -258,7 +296,8 @@ def _customs_information(
         customsCommodities=[
             dhl_freight_sweden_req.CustomsCommodityType(
                 countryCodeOfOrigin=commodity.origin_country,
-                customsValueCurrency=commodity.value_currency,
+                customsValueCurrency=commodity.value_currency
+                or declaration_currency,
                 customsValue=commodity.value_amount,
                 # hsItemId and procedureCode are strings on the wire even
                 # though the generated type annotates them as int.
@@ -268,7 +307,7 @@ def _customs_information(
                 netWeight=commodity.weight,
                 numberOfUnits=commodity.quantity,
             )
-            for commodity in (customs.commodities or [])
+            for commodity in commodities
         ],
     )
 
