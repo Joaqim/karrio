@@ -149,6 +149,38 @@ class TestDHLFreightShipment(unittest.TestCase):
             [{"qualifier": "CU", "value": "ORDER-2026-042"}],
         )
 
+    def test_create_shipment_request_customs_currency_gap_fill(self):
+        # Commodity lines without value_currency inherit the declaration
+        # currency (duty currency first, else the commodities' common one).
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload202GapCurrency)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        commodities = serialized["customsInformation"]["customsCommodities"]
+        self.assertEqual(
+            [c["customsValueCurrency"] for c in commodities], ["EUR", "EUR"]
+        )
+        document = serialized["customsInformation"]["customsDocuments"][0]
+        self.assertEqual(document["invoiceCurrency"], "EUR")
+
+    def test_shipment_customs_mixed_currency_surfaces_field_error(self):
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request"):
+            details, messages = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(**ShipmentPayload202MixedCurrency)
+                )
+                .from_(gateway)
+                .parse()
+            )
+
+        self.assertIsNone(details)
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0].code, "SHIPPING_SDK_FIELD_ERROR")
+        self.assertIn("customs.commodities.value_currency", messages[0].details)
+        self.assertIn("EUR", messages[0].message)
+        self.assertIn("SEK", messages[0].message)
+
     # -- proxy: two sequential calls (book -> print) with client-key header
 
     def test_create_shipment(self):
@@ -418,6 +450,45 @@ ShipmentPayload202Proforma = {
 ShipmentPayloadWithReference = {
     **_payload("dhl_freight_sweden_paket", _recipient_se),
     "reference": "ORDER-2026-042",
+}
+
+# The second commodity omits value_currency and inherits the duty currency.
+_gap_currency_commodity = {
+    key: value
+    for key, value in Customs["commodities"][0].items()
+    if key != "value_currency"
+}
+
+ShipmentPayload202GapCurrency = {
+    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_de),
+    "customs": {
+        "commodities": [
+            _gap_currency_commodity,
+            {
+                **Customs["commodities"][0],
+                "description": "Steel fasteners",
+                "hs_code": "7318159800",
+            },
+        ],
+        "incoterm": "DAP",
+        "duty": {"paid_by": "sender", "currency": "EUR", "declared_value": 1250.0},
+    },
+}
+
+ShipmentPayload202MixedCurrency = {
+    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_de),
+    "customs": {
+        "commodities": [
+            Customs["commodities"][0],
+            {
+                **Customs["commodities"][0],
+                "description": "Steel fasteners",
+                "hs_code": "7318159800",
+                "value_currency": "SEK",
+            },
+        ],
+        "incoterm": "DAP",
+    },
 }
 
 CustomsInformation = {
