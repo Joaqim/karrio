@@ -28,6 +28,7 @@ METADATA = PluginMetadata(
     options=units.ShippingOption,
     services=units.ShippingService,
     connection_configs=units.ConnectionConfig,
+    service_levels=units.DEFAULT_SERVICES,
     # Extra info
     website="https://www.dhl.com/se-en/home/our-divisions/freight.html",
     documentation="https://developer.dhl.com/api-reference/dhl-freight",

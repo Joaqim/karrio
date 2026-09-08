@@ -1,4 +1,7 @@
+import typing
+
 import karrio.lib as lib
+import karrio.core.models as models
 import karrio.core.units as units
 
 
@@ -121,3 +124,224 @@ def shipping_options_initializer(
         return key in ShippingOption  # type: ignore
 
     return units.ShippingOptions(options, ShippingOption, items_filter=items_filter)
+
+
+# The API Farm publishes no money-rate API for these products (the pricequote
+# API is a later phase); these defaults seed the rate-sheet catalog with the
+# carrier's service levels and zones so universal rating can present the
+# product set. The rate=0.0 placeholders are overridden by the merchant's
+# negotiated prices at runtime.
+#
+# Zone model (recipient-gated, account_country_code="SE"):
+# - Domestic products: domicile-only, Sweden zone.
+# - Cross-border consumer parcels (the PostNord Connect analogues): both
+#   flags set so SE->NO/DK/FI rates, Nordic zone list gates the recipient.
+# - International freight: international-only with an unrestricted zone
+#   (no country list), so any non-SE destination rates without maintaining
+#   a country list.
+DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
+    models.ServiceLevel(
+        service_name="Hemleverans Paket B2C",
+        service_code="dhl_freight_hemleverans_paket_b2c",
+        carrier_service_code="118",
+        currency="SEK",
+        domicile=True,
+        international=False,
+        zones=[models.ServiceZone(label="Sweden", rate=0.0, country_codes=["SE"])],
+    ),
+    models.ServiceLevel(
+        service_name="Home Delivery B2C",
+        service_code="dhl_freight_home_delivery_b2c",
+        carrier_service_code="401",
+        currency="SEK",
+        domicile=True,
+        international=False,
+        zones=[models.ServiceZone(label="Sweden", rate=0.0, country_codes=["SE"])],
+    ),
+    models.ServiceLevel(
+        service_name="Home Delivery C2B",
+        service_code="dhl_freight_home_delivery_c2b",
+        carrier_service_code="402",
+        currency="SEK",
+        domicile=True,
+        international=False,
+        zones=[models.ServiceZone(label="Sweden", rate=0.0, country_codes=["SE"])],
+    ),
+    models.ServiceLevel(
+        service_name="Home Delivery C2B (502)",
+        service_code="dhl_freight_home_delivery_c2b_502",
+        carrier_service_code="502",
+        currency="SEK",
+        domicile=True,
+        international=False,
+        zones=[models.ServiceZone(label="Sweden", rate=0.0, country_codes=["SE"])],
+    ),
+    models.ServiceLevel(
+        service_name="Pall",
+        service_code="dhl_freight_pall",
+        carrier_service_code="210",
+        currency="SEK",
+        domicile=True,
+        international=False,
+        zones=[models.ServiceZone(label="Sweden", rate=0.0, country_codes=["SE"])],
+    ),
+    models.ServiceLevel(
+        service_name="Paket",
+        service_code="dhl_freight_paket",
+        carrier_service_code="102",
+        currency="SEK",
+        domicile=True,
+        international=False,
+        zones=[models.ServiceZone(label="Sweden", rate=0.0, country_codes=["SE"])],
+    ),
+    models.ServiceLevel(
+        service_name="Parti",
+        service_code="dhl_freight_parti",
+        carrier_service_code="212",
+        currency="SEK",
+        domicile=True,
+        international=False,
+        zones=[models.ServiceZone(label="Sweden", rate=0.0, country_codes=["SE"])],
+    ),
+    models.ServiceLevel(
+        service_name="Service Point B2C",
+        service_code="dhl_freight_service_point_b2c",
+        carrier_service_code="103",
+        currency="SEK",
+        domicile=True,
+        international=False,
+        zones=[models.ServiceZone(label="Sweden", rate=0.0, country_codes=["SE"])],
+    ),
+    models.ServiceLevel(
+        service_name="Service Point C2B",
+        service_code="dhl_freight_service_point_c2b",
+        carrier_service_code="104",
+        currency="SEK",
+        domicile=True,
+        international=False,
+        zones=[models.ServiceZone(label="Sweden", rate=0.0, country_codes=["SE"])],
+    ),
+    models.ServiceLevel(
+        service_name="Special",
+        service_code="dhl_freight_special",
+        carrier_service_code="209",
+        currency="SEK",
+        domicile=True,
+        international=False,
+        zones=[models.ServiceZone(label="Sweden", rate=0.0, country_codes=["SE"])],
+    ),
+    models.ServiceLevel(
+        service_name="Stycke",
+        service_code="dhl_freight_stycke",
+        carrier_service_code="211",
+        currency="SEK",
+        domicile=True,
+        international=False,
+        zones=[models.ServiceZone(label="Sweden", rate=0.0, country_codes=["SE"])],
+    ),
+    models.ServiceLevel(
+        service_name="Road Freight Standard",
+        service_code="dhl_freight_road_freight_standard",
+        carrier_service_code="202",
+        currency="SEK",
+        domicile=False,
+        international=True,
+        zones=[models.ServiceZone(label="International", rate=0.0)],
+    ),
+    models.ServiceLevel(
+        service_name="Euroconnect Plus",
+        service_code="dhl_freight_euroconnect_plus",
+        carrier_service_code="232",
+        currency="SEK",
+        domicile=True,
+        international=True,
+        zones=[
+            models.ServiceZone(
+                label="Nordic",
+                rate=0.0,
+                country_codes=["SE", "NO", "DK", "FI"],
+            )
+        ],
+    ),
+    models.ServiceLevel(
+        service_name="Road Freight Direct",
+        service_code="dhl_freight_road_freight_direct",
+        carrier_service_code="205",
+        currency="SEK",
+        domicile=False,
+        international=True,
+        zones=[models.ServiceZone(label="International", rate=0.0)],
+    ),
+    models.ServiceLevel(
+        service_name="Road Freight Priority",
+        service_code="dhl_freight_road_freight_priority",
+        carrier_service_code="233",
+        currency="SEK",
+        domicile=False,
+        international=True,
+        zones=[models.ServiceZone(label="International", rate=0.0)],
+    ),
+    models.ServiceLevel(
+        service_name="Home Delivery International B2C",
+        service_code="dhl_freight_home_delivery_international_b2c",
+        carrier_service_code="601",
+        currency="SEK",
+        domicile=False,
+        international=True,
+        zones=[models.ServiceZone(label="International", rate=0.0)],
+    ),
+    models.ServiceLevel(
+        service_name="Parcel Connect B2C",
+        service_code="dhl_freight_parcel_connect_b2c",
+        carrier_service_code="109",
+        currency="SEK",
+        domicile=True,
+        international=True,
+        zones=[
+            models.ServiceZone(
+                label="Nordic",
+                rate=0.0,
+                country_codes=["SE", "NO", "DK", "FI"],
+            )
+        ],
+    ),
+    models.ServiceLevel(
+        service_name="Parcel Return Connect C2B",
+        service_code="dhl_freight_parcel_return_connect_c2b",
+        carrier_service_code="107",
+        currency="SEK",
+        domicile=True,
+        international=True,
+        zones=[
+            models.ServiceZone(
+                label="Nordic",
+                rate=0.0,
+                country_codes=["SE", "NO", "DK", "FI"],
+            )
+        ],
+    ),
+    models.ServiceLevel(
+        service_name="Parcel Connect Plus",
+        service_code="dhl_freight_parcel_connect_plus",
+        carrier_service_code="112",
+        currency="SEK",
+        domicile=True,
+        international=True,
+        zones=[
+            models.ServiceZone(
+                label="Nordic",
+                rate=0.0,
+                country_codes=["SE", "NO", "DK", "FI"],
+            )
+        ],
+    ),
+    models.ServiceLevel(
+        service_name="Standard Pallet International",
+        service_code="dhl_freight_standard_pallet_international",
+        carrier_service_code="SPI",
+        currency="SEK",
+        domicile=False,
+        international=True,
+        zones=[models.ServiceZone(label="International", rate=0.0)],
+    ),
+]
