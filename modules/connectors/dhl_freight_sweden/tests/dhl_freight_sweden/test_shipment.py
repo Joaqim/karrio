@@ -114,6 +114,41 @@ class TestDHLFreightShipment(unittest.TestCase):
 
         self.assertNotIn("customsInformation", serialized)
 
+    def test_create_shipment_request_customs_without_invoice_is_proforma(self):
+        # The API requires at least one customs document whenever the customs
+        # section is present, so commodities alone still emit a document.
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload202Proforma)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        document = serialized["customsInformation"]["customsDocuments"][0]
+        self.assertEqual(document["type"], "ProformaInvoice")
+        self.assertNotIn("id", document)
+        self.assertEqual(
+            serialized["customsInformation"]["customsCommodities"][0]["procedureCode"],
+            "1042",
+        )
+
+    def test_create_shipment_request_payer_from_customs_incoterm(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload202Customs)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        self.assertEqual(serialized["payerCode"], {"code": "DAP"})
+
+    def test_create_shipment_request_reference_uses_cu_qualifier(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayloadWithReference)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        self.assertEqual(
+            serialized["references"],
+            [{"qualifier": "CU", "value": "ORDER-2026-042"}],
+        )
+
     # -- proxy: two sequential calls (book -> print) with client-key header
 
     def test_create_shipment(self):
@@ -238,7 +273,7 @@ def _booking(shipment_id: str, product: int) -> str:
                 "productCode": product,
                 "totalNumberOfPieces": 1,
                 "totalWeight": 5.0,
-                "payerCode": {"code": "1234567"},
+                "payerCode": {"code": "1"},
                 "pieces": [
                     {"id": [f"{shipment_id}-P1"], "numberOfPieces": 1, "weight": 5.0}
                 ],
@@ -372,6 +407,19 @@ ShipmentPayload102Customs = {
     "customs": Customs,
 }
 
+ShipmentPayload202Proforma = {
+    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_de),
+    "customs": {
+        "commodities": Customs["commodities"],
+        "incoterm": "DAP",
+    },
+}
+
+ShipmentPayloadWithReference = {
+    **_payload("dhl_freight_sweden_paket", _recipient_se),
+    "reference": "ORDER-2026-042",
+}
+
 CustomsInformation = {
     "customsDocuments": [
         {
@@ -390,6 +438,7 @@ CustomsInformation = {
             "customsValue": 1200.0,
             "hsItemId": "7615101090",
             "commodityDescription": "Aluminium brackets",
+            "procedureCode": "1042",
             "netWeight": 2.5,
             "numberOfUnits": 4,
         }
@@ -420,6 +469,7 @@ ShipmentRequest102 = {
             },
             "contactName": "Sven Svensson",
             "email": "shipper@example.se",
+            "id": "1234567",
             "name": "Test Shipper AB",
             "phone": "+46 8 123 456",
             "type": "Consignor",
@@ -437,9 +487,8 @@ ShipmentRequest102 = {
             "phone": "+46 31 987 654",
             "type": "Consignee",
         },
-        {"id": "1234567", "type": "FreightPayer"},
     ],
-    "payerCode": {"code": "1234567"},
+    "payerCode": {"code": "1"},
     "pieces": [
         {
             "height": 15.0,
@@ -468,6 +517,7 @@ ShipmentRequest232 = {
             },
             "contactName": "Sven Svensson",
             "email": "shipper@example.se",
+            "id": "1234567",
             "name": "Test Shipper AB",
             "phone": "+46 8 123 456",
             "type": "Consignor",
@@ -485,9 +535,8 @@ ShipmentRequest232 = {
             "phone": "+46 31 987 654",
             "type": "Consignee",
         },
-        {"id": "1234567", "type": "FreightPayer"},
     ],
-    "payerCode": {"code": "1234567"},
+    "payerCode": {"code": "1"},
     "pieces": [
         {
             "height": 15.0,
