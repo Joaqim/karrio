@@ -88,7 +88,17 @@ def shipment_request(
         initializer=provider_units.shipping_options_initializer,
     )
 
-    payer_code = options.dhl_freight_sweden_payer_code.state or settings.account_number
+    # PayerCode carries the product's terms-of-delivery code (see the product
+    # documentation): domestic products use the freight-payer codes 1/3/4,
+    # international products use Incoterms or Combiterm codes.
+    payer_code = lib.identity(
+        options.dhl_freight_sweden_payer_code.state
+        or (payload.customs.incoterm if payload.customs else None)
+        or "1"
+    )
+    procedure_code = (
+        options.dhl_freight_sweden_customs_procedure_code.state or "1042"
+    )
     service_point = options.dhl_freight_sweden_service_point.state
     page_type = provider_units.PageType.map(
         options.dhl_freight_sweden_label_page_type.state
@@ -96,7 +106,9 @@ def shipment_request(
         or provider_units.PageType.Label.value
     ).value_or_key
     customs = lib.identity(
-        _customs_information(payload.customs, settings, recipient.country_code)
+        _customs_information(
+            payload.customs, settings, recipient.country_code, procedure_code
+        )
         if payload.customs
         and any(
             [
@@ -109,9 +121,12 @@ def shipment_request(
     )
 
     parties = [
-        _party(provider_units.PartyType.Consignor, shipper),
+        # The consignor id is the customer/agreement number and is mandatory
+        # according to the payer code; the consignor-pays default always needs it.
+        _party(
+            provider_units.PartyType.Consignor, shipper, id=settings.account_number
+        ),
         _party(provider_units.PartyType.Consignee, recipient),
-        *lib.identity([_payer_party(payer_code)] if payer_code else []),
         *lib.identity(
             [
                 dhl_freight_sweden_req.PartyType(
@@ -138,7 +153,11 @@ def shipment_request(
         references=lib.identity(
             [
                 dhl_freight_sweden_req.ReferenceType(
-                    qualifier="CustomerReference", value=payload.reference
+                    # DHL Freight (Sweden) shipment-level reference qualifiers
+                    # (product manual appendix E); the qualifier is limited to
+                    # 3 characters and karrio's reference is the consignor's.
+                    qualifier="CU",
+                    value=payload.reference,
                 )
             ]
             if payload.reference
@@ -208,39 +227,44 @@ def _customs_information(
     customs: models.Customs,
     settings: provider_utils.Settings,
     destination_country: str,
+    procedure_code: str,
 ) -> dhl_freight_sweden_req.CustomsInformationType:
     duty = customs.duty
-    document = lib.identity(
-        dhl_freight_sweden_req.CustomsDocumentType(
-            id=customs.invoice,
-            type="CommercialInvoice",
-            # The account ships from Sweden, so a foreign destination is an
-            # export declaration; a domestic destination carries no movement.
-            transportMovement=lib.identity(
-                "Export"
-                if destination_country and destination_country
-                != settings.account_country_code
-                else None
-            ),
-            invoiceDate=lib.fdate(customs.invoice_date),
-            invoiceCurrency=duty.currency if duty else None,
-            invoiceAmount=duty.declared_value if duty else None,
-        )
-        if any([customs.commercial_invoice, customs.invoice, customs.invoice_date])
-        else None
+    # The API requires at least one customs document whenever the customs
+    # information section is present, so the document is always emitted; an
+    # invoice used for payment is commercial, otherwise a customs-only pro forma.
+    document = dhl_freight_sweden_req.CustomsDocumentType(
+        id=customs.invoice,
+        type=lib.identity(
+            "CommercialInvoice"
+            if any([customs.commercial_invoice, customs.invoice])
+            else "ProformaInvoice"
+        ),
+        # The account ships from Sweden, so a foreign destination is an
+        # export declaration; a domestic destination carries no movement.
+        transportMovement=lib.identity(
+            "Export"
+            if destination_country and destination_country
+            != settings.account_country_code
+            else None
+        ),
+        invoiceDate=lib.fdate(customs.invoice_date),
+        invoiceCurrency=duty.currency if duty else None,
+        invoiceAmount=duty.declared_value if duty else None,
     )
 
     return dhl_freight_sweden_req.CustomsInformationType(
-        customsDocuments=[document] if document else [],
+        customsDocuments=[document],
         customsCommodities=[
             dhl_freight_sweden_req.CustomsCommodityType(
                 countryCodeOfOrigin=commodity.origin_country,
                 customsValueCurrency=commodity.value_currency,
                 customsValue=commodity.value_amount,
-                # hsItemId is a string (maxLength 38) on the wire even though
-                # the generated type annotates it as int.
+                # hsItemId and procedureCode are strings on the wire even
+                # though the generated type annotates them as int.
                 hsItemId=commodity.hs_code,
                 commodityDescription=commodity.description or commodity.title,
+                procedureCode=procedure_code,
                 netWeight=commodity.weight,
                 numberOfUnits=commodity.quantity,
             )
@@ -249,9 +273,12 @@ def _customs_information(
     )
 
 
-def _party(role: str, address) -> dhl_freight_sweden_req.PartyType:
+def _party(
+    role: str, address, id: str = None
+) -> dhl_freight_sweden_req.PartyType:
     return dhl_freight_sweden_req.PartyType(
         type=role,
+        id=id,
         name=address.company_name or address.person_name,
         contactName=address.contact,
         vatEoriSocialSecurityNumber=address.tax_id,
@@ -266,11 +293,4 @@ def _party(role: str, address) -> dhl_freight_sweden_req.PartyType:
             postalCode=str(address.postal_code) if address.postal_code else None,
             countryCode=address.country_code,
         ),
-    )
-
-
-def _payer_party(payer_code: str) -> dhl_freight_sweden_req.PartyType:
-    return dhl_freight_sweden_req.PartyType(
-        type=provider_units.PartyType.FreightPayer.value,
-        id=payer_code,
     )
