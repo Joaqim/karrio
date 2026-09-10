@@ -181,6 +181,7 @@ locker→ParcelStation rule.
 |-----|------|-------|
 | `shipper` / `recipient` | `{postal_code, country_code}` | minimum; maps to Consignor/Consignee `AddressMatchCriteria` (the only formally required spec fields) |
 | `parcels[]` | `{weight, width, height, length, volume?, package_type?}` | optional piece criteria |
+| `total_weight` / `total_volume` / `total_loading_meters` / `total_pallet_places` / `total_number_of_pieces` | number / int | optional shipment totals; sent one-variant as `totalWeight`/`totalVolume`/`totalLoadingMeters`/`totalPalletPlaces`/`totalNumberOfPieces` |
 | `import_export` | `"E"` \| `"I"` | optional |
 
 Guard: both `shipper` and `recipient` (with postal+country) must be present; otherwise a `SHIPPING_SDK_FIELD_ERROR`-style field error naming the Consignor+Consignee requirement fires before any carrier call.
