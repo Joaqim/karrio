@@ -51,7 +51,7 @@ The sandbox accepts either at booking without registry validation (2026-09-10 ev
 
 | # | Question | Context | Status |
 |---|----------|---------|--------|
-| 1 | Which service-point identifier the booking consumes (`id` vs `servicePointId`) | The sandbox accepted a bogus id with an invented name (2026-09-10), and routing derives from the party postalCode/countryCode, so the choice may be unobservable at booking time | Expose both; residual — if a production misroute ever implicates the id, probe deliberately |
+| 1 | Which service-point identifier the booking consumes (`id` vs `servicePointId`) | The sandbox accepted a bogus id with an invented name (2026-09-10), and routing derives from the party postalCode/countryCode, so the choice may be unobservable at booking time. PL capture 2026-09-10 sharpens it: `id` is a constant point-type code there (`101` = parcelshop, `501` = parcelstation) while `servicePointId` is the unique identifier (`8005-PL-4516440`) | Expose both; callers should prefer `service_point_id`; residual — if a production misroute ever implicates the id, probe deliberately |
 | 2 | Opening hours for recipient-facing display | ServicePointLocator 2.10.0 exposes no opening-hours field on either endpoint | DHL API gap; surfaced to DHL if the UI ever needs it |
 
 ### Resolved decisions
@@ -253,10 +253,10 @@ Both hosts resolve through the existing `server_url`/test-mode logic; base paths
 | 1 | Product-match provider + guard | `karrio/providers/dhl_freight_sweden/product_matches.py`, `__init__.py` re-export | Done | M |
 | 1 | Proxy method | `karrio/mappers/dhl_freight_sweden/proxy.py` (`find_product_matches`) | Done | S |
 | 1 | Tests + captured fixture | `tests/dhl_freight_sweden/test_product_matches.py` | Done | M |
-| 2 | Service-point provider + normalizer | `karrio/providers/dhl_freight_sweden/service_points.py`, `__init__.py` re-export | Pending | M |
-| 2 | `LocationType` enum + subType mapping | `karrio/providers/dhl_freight_sweden/units.py` | Pending | S |
-| 2 | Proxy method | `karrio/mappers/dhl_freight_sweden/proxy.py` (`find_service_points`) | Pending | S |
-| 2 | Tests + captured fixture | `tests/dhl_freight_sweden/test_service_points.py` | Pending | M |
+| 2 | Service-point provider + normalizer | `karrio/providers/dhl_freight_sweden/service_points.py`, `__init__.py` re-export | Done | M |
+| 2 | `LocationType` enum + subType mapping | `karrio/providers/dhl_freight_sweden/units.py` | Done | S |
+| 2 | Proxy method | `karrio/mappers/dhl_freight_sweden/proxy.py` (`find_service_points`) | Done | S |
+| 2 | Tests + captured fixture | `tests/dhl_freight_sweden/test_service_points.py` | Done | M |
 | 3 | README calling conventions; PRD closeout | `modules/connectors/dhl_freight_sweden/README.md`, this file | Pending | S |
 
 Fixture capture: one bounded live sandbox call per endpoint (productmatches SE→PL; findnearest for a PL address), recorded as evidence; the shipped tests consume the captured JSON hermetically.
