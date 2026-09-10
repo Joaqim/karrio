@@ -9,8 +9,8 @@ class ConnectionConfig(lib.Enum):
     """DHL Freight connection configuration options."""
 
     server_url = lib.OptionEnum("server_url", str)
-    # Informational/account-aligned label type. The API has no raster selector;
-    # the actual document format is read from the Print response contentType.
+    # Last-resort label type tag. The API has no raster selector; the document
+    # format is read from the printed bytes, then the report contentType.
     label_type = lib.OptionEnum("label_type", str, "PDF")
     # Print page layout, mapped to the Print API PageTypeEnum.
     label_page_type = lib.OptionEnum("label_page_type", str, "Label")

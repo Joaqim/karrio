@@ -34,6 +34,22 @@ dhl_freight_sweden = karrio.gateway["dhl_freight_sweden"].create(
 
 Check the [Karrio Mutli-carrier SDK docs](https://docs.karrio.io) for Shipping API requests
 
+## Connection settings
+
+Connection settings are passed through the gateway's `config` dict (e.g. `config={"label_type": "ZPL"}`).
+
+| Setting | Default | Notes |
+|---------|---------|-------|
+| `label_type` | `PDF` | Tags the returned document format when the carrier response does not identify it. The Print API exposes no format parameter, so the emitted format is governed by the DHL account (live-verified PDF A4, 2026-09-10); the connector derives the tag from the decoded document's magic prefix (`%PDF-`, `^XA`) first, then the report `contentType`, and uses this setting as the last resort. |
+
+## Label printing behavior
+
+The connector always transmits the consignee `phone_number` on the booking; DHL's label renderer decides per destination country whether it prints (live-verified 2026-09-10: suppressed for SE→DE, absent on a DK PUDO label — in both cases only the sender phone printed, as `Phn.`).
+For parcelshop/parcelstation-addressed 109 shipments the mandatory "Customer information" label section is auto-composed from the Consignee party, so no connector input is needed.
+`parties[].references` exists as the optional shipper-controlled free-text channel for custom label print text.
+Phone format per product manual Appendix D: exactly one prefix (foreign country prefixes are fine), then digits, dash, and space only — dots, letters, and slash are forbidden.
+The connector transmits `phone_number` as given, so callers should pre-format numbers to those constraints.
+
 ## Capabilities
 
 | Capability | Notes |

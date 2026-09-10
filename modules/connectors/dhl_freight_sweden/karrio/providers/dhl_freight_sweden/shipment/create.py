@@ -5,6 +5,7 @@ import karrio.schemas.dhl_freight_sweden.transport_instruction_response as dhl_f
 import karrio.schemas.dhl_freight_sweden.print_request as dhl_freight_sweden_print
 import karrio.schemas.dhl_freight_sweden.print_response as dhl_freight_sweden_report
 
+import base64
 import typing
 import karrio.lib as lib
 import karrio.core.models as models
@@ -54,27 +55,13 @@ def _extract_details(
     report = next(iter(result.reports or []), None)
 
     tracking_number = instruction.id
-    content_type = getattr(report, "contentType", None) or ""
-    label_type = lib.identity(
-        "PDF"
-        if "pdf" in content_type.lower()
-        else (
-            "ZPL"
-            if "zpl" in content_type.lower()
-            else (
-                "PNG"
-                if "png" in content_type.lower()
-                else settings.connection_config.label_type.state or "PDF"
-            )
-        )
-    )
 
     return models.ShipmentDetails(
         carrier_id=settings.carrier_id,
         carrier_name=settings.carrier_name,
         tracking_number=tracking_number,
         shipment_identifier=tracking_number,
-        label_type=label_type,
+        label_type=_label_type(report, settings),
         docs=models.Documents(label=getattr(report, "content", None) or ""),
         meta=dict(
             carrier_tracking_link=settings.tracking_url.format(tracking_number),
@@ -84,6 +71,40 @@ def _extract_details(
                 else None
             ),
         ),
+    )
+
+
+# The Print API has no raster-format parameter, so the emitted document
+# format is governed by the DHL account and is identified from the decoded
+# report bytes' magic prefix (live-verified PDF A4, 2026-09-10).
+LABEL_MAGICS: typing.Tuple[typing.Tuple[bytes, str], ...] = (
+    (b"%PDF-", "PDF"),
+    (b"^XA", "ZPL"),
+)
+CONTENT_TYPE_LABELS: typing.Tuple[typing.Tuple[str, str], ...] = (
+    ("pdf", "PDF"),
+    ("zpl", "ZPL"),
+    ("png", "PNG"),
+)
+
+
+def _label_type(report, settings: provider_utils.Settings) -> str:
+    prefix = (
+        lib.failsafe(
+            lambda: base64.b64decode(getattr(report, "content", None) or "")[:16].strip()
+        )
+        or b""
+    )
+    content_type = (getattr(report, "contentType", None) or "").lower()
+
+    return (
+        next((label for magic, label in LABEL_MAGICS if prefix.startswith(magic)), None)
+        or next(
+            (label for keyword, label in CONTENT_TYPE_LABELS if keyword in content_type),
+            None,
+        )
+        or settings.connection_config.label_type.state
+        or "PDF"
     )
 
 
@@ -216,10 +237,7 @@ def shipment_request(
     return lib.Serializable(
         request,
         lib.to_dict,
-        dict(
-            print_options=lib.to_dict(print_options),
-            label_type=settings.connection_config.label_type.state or "PDF",
-        ),
+        dict(print_options=lib.to_dict(print_options)),
     )
 
 
