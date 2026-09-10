@@ -15,3 +15,7 @@ from karrio.providers.dhl_freight_sweden.product_matches import (
     parse_product_matches_response,
     product_matches_request,
 )
+from karrio.providers.dhl_freight_sweden.service_points import (
+    parse_service_points_response,
+    service_points_request,
+)

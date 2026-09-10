@@ -99,3 +99,27 @@ class Proxy(proxy.Proxy):
         )
 
         return lib.Deserializable(response, lib.to_dict)
+
+    def find_service_points(
+        self, request: lib.Serializable
+    ) -> lib.Deserializable[dict]:
+        """Look up the nearest service points for an address (connector-local).
+
+        POSTs the serialized ``NearestServicePointRequest`` body to the
+        Servicepoint API's ``findnearestservicepoints`` endpoint with the
+        standard client-key headers; the caller invokes this duck-typed method
+        directly on the proxy, as with the postnord precedent.
+        """
+        response = lib.request(
+            url=f"{self.settings.service_point_locator_url}/servicepoint/findnearestservicepoints",
+            data=lib.to_json(request.serialize()),
+            trace=self.trace_as("json"),
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "client-key": self.settings.client_key,
+            },
+            on_error=lib.error_decoder,
+        )
+
+        return lib.Deserializable(response, lib.to_dict)

@@ -9,6 +9,7 @@ guard the zone invariants the rating mixin depends on.
 import unittest
 
 from karrio.providers.dhl_freight_sweden import units
+from karrio.references import get_carrier_capabilities
 
 
 class TestDHLFreightServiceLevels(unittest.TestCase):
@@ -56,8 +57,17 @@ class TestDHLFreightServiceLevels(unittest.TestCase):
 
     def test_zone_partition(self):
         domestic = {
-            "118", "401", "402", "502", "210", "102",
-            "212", "103", "104", "209", "211",
+            "118",
+            "401",
+            "402",
+            "502",
+            "210",
+            "102",
+            "212",
+            "103",
+            "104",
+            "209",
+            "211",
         }
         # Recipient footprints mirrored from the DHL Product API catalog
         # (test host, fetched 2026-09-10): 109 covers 24 from-SE countries,
@@ -109,23 +119,98 @@ class TestDHLFreightServiceLevels(unittest.TestCase):
             else:  # pragma: no cover
                 self.fail(f"unclassified product code: {code}")
 
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_capabilities_unchanged_by_lookup_methods(self):
+        # The connector-local lookups are duck-typed proxy methods: they must
+        # not register capabilities (the server derives connection
+        # capabilities from this same detection path).
+        self.assertEqual(
+            set(get_carrier_capabilities("dhl_freight_sweden")),
+            {"shipping", "rating"},
+        )
 
 
 # Catalog mirrors (deliberately not imported from ``units`` so a typo in
 # either side fails this suite rather than propagating).
 ParcelConnectB2CCountries = [
-    "AT", "BE", "BG", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "HR", "HU",
-    "IE", "IT", "LT", "LU", "LV", "NL", "NO", "PL", "PT", "RO", "SI", "SK",
+    "AT",
+    "BE",
+    "BG",
+    "CZ",
+    "DE",
+    "DK",
+    "EE",
+    "ES",
+    "FI",
+    "FR",
+    "HR",
+    "HU",
+    "IE",
+    "IT",
+    "LT",
+    "LU",
+    "LV",
+    "NL",
+    "NO",
+    "PL",
+    "PT",
+    "RO",
+    "SI",
+    "SK",
 ]
 ParcelConnectPlusCountries = [
-    "AT", "BE", "BG", "CZ", "DE", "DK", "EE", "ES", "FI", "HR", "HU", "IE",
-    "IT", "LT", "LU", "LV", "NL", "NO", "PL", "PT", "RO", "SI", "SK",
+    "AT",
+    "BE",
+    "BG",
+    "CZ",
+    "DE",
+    "DK",
+    "EE",
+    "ES",
+    "FI",
+    "HR",
+    "HU",
+    "IE",
+    "IT",
+    "LT",
+    "LU",
+    "LV",
+    "NL",
+    "NO",
+    "PL",
+    "PT",
+    "RO",
+    "SI",
+    "SK",
 ]
 EuroconnectPlusCountries = [
-    "AT", "BE", "BG", "CH", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GB",
-    "GR", "HU", "IE", "IT", "LT", "LU", "LV", "NL", "NO", "PL", "PT", "RO",
-    "SI", "SK",
+    "AT",
+    "BE",
+    "BG",
+    "CH",
+    "CZ",
+    "DE",
+    "DK",
+    "EE",
+    "ES",
+    "FI",
+    "FR",
+    "GB",
+    "GR",
+    "HU",
+    "IE",
+    "IT",
+    "LT",
+    "LU",
+    "LV",
+    "NL",
+    "NO",
+    "PL",
+    "PT",
+    "RO",
+    "SI",
+    "SK",
 ]
+
+
+if __name__ == "__main__":
+    unittest.main()
