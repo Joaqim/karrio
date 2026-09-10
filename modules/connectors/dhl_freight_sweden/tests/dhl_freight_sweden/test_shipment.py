@@ -292,8 +292,8 @@ class TestDHLFreightShipment(unittest.TestCase):
 
     def test_parse_label_type_pdf_magic_over_zpl_config(self):
         # The account emits PDF regardless of the connection's label type
-        # (live sandbox 2026-09-10); the decoded document magic prefix wins
-        # over both contentType and the connection config tag.
+        # (live sandbox 2026-09-10); the decoded document magic prefix
+        # outranks the connection config tag.
         with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
             mock.side_effect = [BookingResponse102, PdfMagicPrintResponse]
             details, messages = (
@@ -320,6 +320,36 @@ class TestDHLFreightShipment(unittest.TestCase):
         self.assertIsNotNone(details)
         self.assertEqual(details.label_type, "ZPL")
         self.assertEqual(details.docs.label, ZplMagicBase64)
+
+    def test_parse_label_type_zpl_magic_over_pdf_content_type(self):
+        # The decoded document bytes identify the format when the report
+        # contentType disagrees.
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            mock.side_effect = [BookingResponse102, ZplBytesPdfContentTypePrintResponse]
+            details, messages = (
+                karrio.Shipment.create(models.ShipmentRequest(**ShipmentPayload102))
+                .from_(gateway)
+                .parse()
+            )
+
+        self.assertEqual(messages, [])
+        self.assertIsNotNone(details)
+        self.assertEqual(details.label_type, "ZPL")
+        self.assertEqual(details.docs.label, ZplMagicBase64)
+
+    def test_parse_label_type_pdf_magic_over_zpl_content_type(self):
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            mock.side_effect = [BookingResponse102, PdfBytesZplContentTypePrintResponse]
+            details, messages = (
+                karrio.Shipment.create(models.ShipmentRequest(**ShipmentPayload102))
+                .from_(gateway)
+                .parse()
+            )
+
+        self.assertEqual(messages, [])
+        self.assertIsNotNone(details)
+        self.assertEqual(details.label_type, "PDF")
+        self.assertEqual(details.docs.label, PdfMagicBase64)
 
     def test_parse_label_type_config_last_resort(self):
         # Without a known magic prefix or contentType, the connection's
@@ -850,6 +880,36 @@ PlainTextPrintResponse = lib.to_json(
                 "name": "Label",
                 "content": PlainTextBase64,
                 "contentType": "application/octet-stream",
+                "type": "Label",
+                "valid": True,
+            }
+        ]
+    }
+)
+
+# Conflicting-contentType fixtures: the decoded bytes pin the format when
+# the report contentType names a different one.
+ZplBytesPdfContentTypePrintResponse = lib.to_json(
+    {
+        "reports": [
+            {
+                "name": "Label",
+                "content": ZplMagicBase64,
+                "contentType": "application/pdf",
+                "type": "Label",
+                "valid": True,
+            }
+        ]
+    }
+)
+
+PdfBytesZplContentTypePrintResponse = lib.to_json(
+    {
+        "reports": [
+            {
+                "name": "Label",
+                "content": PdfMagicBase64,
+                "contentType": "application/zpl",
                 "type": "Label",
                 "valid": True,
             }
