@@ -3,8 +3,8 @@
 | Field | Value |
 |-------|-------|
 | Project | DHL Freight Sweden carrier connector (`dhl_freight_sweden`) |
-| Version | 1.1 |
-| Date | 2026-08-11 |
+| Version | 1.2 |
+| Date | 2026-09-10 |
 | Status | Planning |
 | Owner | Joaqim Planstedt |
 | Type | Integration |
@@ -87,9 +87,8 @@ No live sandbox credentials are required; all Phase 0 tests are hermetic.
 
 | # | Question | Context | Options | Status |
 |---|----------|---------|---------|--------|
-| 1 | Which print operation to use | Booking returns an id; the Print API offers by-id and full-payload variants. | (a) `printdocumentsbyid` with `{ shipmentIds: [id] }` — default; (b) `printdocuments` full payload | Default (a); confirm exact op during schema analysis |
+| 1 | Which print operation to use | Booking returns an id; the Print API offers by-id and full-payload variants. | (a) `printdocumentsbyid` with `{ shipmentIds: [id] }` — default; (b) `printdocuments` full payload | Op (a) live-verified 2026-09-10 (`label_2906723792.pdf`, ~102k base64 report content); the connector ships (b) because the generated schemas have no by-id request type |
 | 2 | Correct public tracking-URL template for DHL Freight Sweden | Tracking is URL-only; the template lives in `utils.py`. | (a) a DHL Freight Sweden portal template; (b) an `activetracing.dhl.com` variant | Confirm with DHL Freight Sweden docs |
-| 3 | Locator reference for service-point / home-delivery products | 103 / 401 / 109 may require an `AccessPoint` / `Delivery` party with a `subType` (`Servicepoint`) and a locator id. | (a) caller supplies the reference; (b) drop 103/401/109 from the fixture set | If it cannot be caller-supplied, drop the three; 102/232/202 still cover the pipeline |
 
 ### Resolved decisions
 
@@ -108,6 +107,7 @@ No live sandbox credentials are required; all Phase 0 tests are hermetic.
 | 11 | Phase 0 verification | Mocked four-method unittest pattern; no live creds | Karrio hermetic-suite norm | 2026-08-11 |
 | 12 | Booking-required fields | Payer code, consignor id, reference qualifier, customs procedure code mapped from sandbox-verified sources | Live 400 validation dump (product 601 and 102) plus the SE product manual v5.23 and the product API (`/productapi/v1/products/{code}`); both corrected bookings returned HTTP 200 | 2026-09-08 |
 | 13 | Customs declaration currency | Single declaration currency resolved from `duty.currency`, then the commodities' common currency; per-line gaps filled, conflicts raise a field error | A declaration with mixed per-line currencies corrupts `customsValueCurrency`/`invoiceCurrency` consistency | 2026-09-08 |
+| 14 | Service-point locator reference | Caller supplies the full service-point details via `options` (id + name + street + city + postal code + country code); the connector emits a complete `AccessPoint` party (`subType` `ParcelShop` \| `ParcelStation`); no client-side product/country gating | Live sandbox 2026-09-10: an id-only party is rejected (validationErrors 22001 "Address is mandatory for party AccessPoint" / "Name is mandatory for party AccessPoint", 22006 linehaul failure without postalCode); a full party returns HTTP 200 for 103 SE ParcelShop and 109 DK ParcelShop + ParcelStation (bookings 2906723792 / 2906723800 / 2906723826); the consignee party stays alongside the AccessPoint | 2026-09-10 |
 
 ### Edge cases requiring input
 
@@ -115,7 +115,7 @@ No live sandbox credentials are required; all Phase 0 tests are hermetic.
 |---|-----------|-------|
 | 1 | Print report `content` encoding | Confirm base64 against a sample response before shipping |
 | 2 | Freight-payer party id source | Resolved: the consignor party carries `settings.account_number` as its id; the separate FreightPayer party was dropped (its id is a customer number, not the payer code) |
-| 3 | Service-point / home-delivery locator reference | Confirm whether 103 / 401 / 109 need a locator id and whether it can be caller-supplied (see Pending question #3) |
+| 3 | Service-point party data integrity: DHL does not registry-validate the id or name at booking (a bogus id with an invented name booked successfully in the sandbox); routing derives from the party postalCode/countryCode | Callers must source ids and details from the Service Point Locator API `findnearestservicepoints`, which returns the full address (`getservicepointdetails` does not); production may validate more strictly (see Resolved decision #14) |
 
 ---
 
@@ -293,6 +293,13 @@ Generated schema types (from the vendored OpenAPI 2.10.0 specs) drive all reques
 | `parcels[]` | `pieces[]` | Yes | weight→kg, dims→cm (per-product minimums apply, e.g. 102: L≥15/W≥11/H≥2; 601: L≥15/W≥11/H≥3), `numberOfPieces` |
 | `options.dhl_freight_sweden_label_page_type` | `pageOptions.pageType` | No | default `Label`; `Label2xPortraitA4` / `Label3xLandscapeA4` / `LabelCompact` / `LabelCompact2x2PortraitA4` |
 | `reference` | `references[]{qualifier,value}` | No | qualifier `CU` (consignor reference, product manual appendix E; 3-char limit) |
+| `options.dhl_freight_sweden_service_point` | `parties[type=AccessPoint].id` | With service point | service-point id sourced from `findnearestservicepoints`; not registry-validated by DHL at booking |
+| `options.dhl_freight_sweden_service_point_type` | `parties[type=AccessPoint].subType` | No | `ParcelShop` (default) or `ParcelStation`; 109 DE allows `ParcelShop` only per the product catalog |
+| `options.dhl_freight_sweden_service_point_name` | `parties[type=AccessPoint].name` | With service point | required with the id; missing details raise a `SHIPPING_SDK_FIELD_ERROR` naming the missing options |
+| `options.dhl_freight_sweden_service_point_street` | `parties[type=AccessPoint].address.street` | With service point | as above |
+| `options.dhl_freight_sweden_service_point_city` | `parties[type=AccessPoint].address.cityName` | With service point | as above |
+| `options.dhl_freight_sweden_service_point_postal_code` | `parties[type=AccessPoint].address.postalCode` | With service point | as above; drives DHL linehaul routing |
+| `options.dhl_freight_sweden_service_point_country_code` | `parties[type=AccessPoint].address.countryCode` | With service point | as above; drives DHL linehaul routing |
 | `customs.commodities[]` | `customsInformation.customsCommodities[]` | No | description→`commodityDescription` (mandatory, max 35), hs_code→`hsItemId` (wire string, max 38), value_amount/currency→`customsValue`/`customsValueCurrency` (single declaration currency; gaps filled from `duty.currency`, conflicts rejected), weight→`netWeight`, quantity→`numberOfUnits`, origin_country→`countryCodeOfOrigin`; `procedureCode` defaults to `1042` (standard definitive export), overridable via `options.dhl_freight_sweden_customs_procedure_code` |
 | `customs` invoice data | `customsInformation.customsDocuments[]` | With customs | one document always emitted: `CommercialInvoice` when invoice/commercial-invoice data exists, else `ProformaInvoice`; invoice→`id`, transportMovement=`Export` when destination differs from the account country, invoice_date→`invoiceDate`, duty.declared_value→`invoiceAmount`, declaration currency→`invoiceCurrency` |
 | booking `transportInstruction.id` | `tracking_number` | — | also `shipment_identifier` |
@@ -325,8 +332,10 @@ Only the six marked (Fixture) products get hermetic test fixtures in Phase 0; th
 | International (to/from SE) | 112 | Parcel Connect Plus | |
 | International (to/from SE) | SPI | Standard Pallet International | |
 
-The three B2C / service-point fixture products (103, 401, 109) may require an `AccessPoint` or `Delivery` party carrying a `subType` (`Servicepoint`) and a locator id sourced from the Service Point or Home Delivery Locator APIs.
-If that reference cannot be caller-supplied in Phase 0, these three drop from the fixture set; 102, 232, and 202 still fully exercise the book-then-print pipeline (see Pending question #3).
+The service-point fixture products (103, 109) require an `AccessPoint` party with a `subType` of `ParcelShop` or `ParcelStation` (the subType enum — not `Servicepoint`) carrying a caller-supplied service-point id, name, and full address; DHL rejects an id-only party (validationErrors 22001/22006, live sandbox 2026-09-10, see Resolved decision #14).
+Per the product catalog (`GET /productapi/v1/products/{code}`), 109 DE allows `ParcelShop` only while DK allows both subTypes; the connector imposes no product/country gating of its own.
+The home-delivery fixture product (401) uses the `doorstepDelivery` access-code path, not an AccessPoint party.
+Service-point ids and details are sourced from the Service Point Locator API `findnearestservicepoints`, which returns the full address; `getservicepointdetails` does not.
 
 ### API changes
 
@@ -350,7 +359,7 @@ Each service's base path (`/transportinstructionapi/v1`, `/printapi/v1`, ...) is
 | Print report `content` not base64 | Assume base64 per DHL norm; verify against a sample before release |
 | Missing `account_number` when payer party requires id | Validate early; return a clear `Message` rather than a DHL 400 |
 | International shipment | Allowed; no geo gate — DHL API validates |
-| Service-point / home-delivery product without a locator reference | Return a clear `Message` if the API rejects it; may drop these products from Phase 0 fixtures |
+| Service-point product with incomplete party details | Raise a `SHIPPING_SDK_FIELD_ERROR` naming the missing options before any carrier call; DHL rejects id-only AccessPoint parties (validationErrors 22001/22006, Resolved decision #14) |
 | Multiple print reports (label + waybill) | Select the label report for `docs.label`; others ignored in Phase 0 |
 
 ### Failure modes
@@ -384,26 +393,26 @@ Tracking (`tracking.py`) and cancel (`cancel.py`) remain documented deferred stu
 
 | Task | Files | Status | Effort |
 |------|-------|--------|--------|
-| Settings + resolvable server URL (config override, default-by-test_mode) + tracking_url + label_type | `karrio/providers/dhl_freight_sweden/utils.py`, `karrio/mappers/dhl_freight_sweden/settings.py` | Pending | M |
-| `ConnectionConfig.server_url` override + `label_type` | `karrio/providers/dhl_freight_sweden/units.py`, `karrio/plugins/dhl_freight_sweden/__init__.py` | Pending | S |
-| Services (full product set) / options enums | `karrio/providers/dhl_freight_sweden/units.py` | Pending | M |
-| Error parser (booking/print) | `karrio/providers/dhl_freight_sweden/error.py` | Pending | S |
-| Proxy: `create_shipment` (book→print) with `client-key` header | `karrio/mappers/dhl_freight_sweden/proxy.py` | Pending | M |
+| Settings + resolvable server URL (config override, default-by-test_mode) + tracking_url + label_type | `karrio/providers/dhl_freight_sweden/utils.py`, `karrio/mappers/dhl_freight_sweden/settings.py` | Done | M |
+| `ConnectionConfig.server_url` override + `label_type` | `karrio/providers/dhl_freight_sweden/units.py`, `karrio/plugins/dhl_freight_sweden/__init__.py` | Done | S |
+| Services (full product set) / options enums | `karrio/providers/dhl_freight_sweden/units.py` | Done | M |
+| Error parser (booking/print) | `karrio/providers/dhl_freight_sweden/error.py` | Done | S |
+| Proxy: `create_shipment` (book→print) with `client-key` header | `karrio/mappers/dhl_freight_sweden/proxy.py` | Done | M |
 
 ### Phase 3: Providers
 
 | Task | Files | Status | Effort |
 |------|-------|--------|--------|
-| Shipment create request build + response parse (with `meta.tracking_url`) | `karrio/providers/dhl_freight_sweden/shipment/create.py` | Pending | L |
-| Public exports + plugin METADATA (shipping only) | `karrio/providers/dhl_freight_sweden/__init__.py`, `karrio/plugins/dhl_freight_sweden/__init__.py` | Pending | S |
-| Deferred stubs documented (`tracking.py`, `cancel.py`) | `karrio/providers/dhl_freight_sweden/{tracking.py,shipment/cancel.py}` | Pending | S |
+| Shipment create request build + response parse (with `meta.tracking_url`) | `karrio/providers/dhl_freight_sweden/shipment/create.py` | Done | L |
+| Public exports + plugin METADATA (shipping only) | `karrio/providers/dhl_freight_sweden/__init__.py`, `karrio/plugins/dhl_freight_sweden/__init__.py` | Done | S |
+| Deferred stubs documented (`tracking.py`, `cancel.py`) | `karrio/providers/dhl_freight_sweden/{tracking.py,shipment/cancel.py}` | Done | S |
 
 ### Phase 4: Tests
 
 | Task | Files | Status | Effort |
 |------|-------|--------|--------|
-| Fixtures + shipment tests (book+print mocks) for the six fixture products | `tests/dhl_freight_sweden/fixture.py`, `test_shipment.py` | Pending | M |
-| Run suites, confirm plugin registration + capabilities | — | Pending | S |
+| Fixtures + shipment tests (book+print mocks) for the six fixture products | `tests/dhl_freight_sweden/fixture.py`, `test_shipment.py` | Done | M |
+| Run suites, confirm plugin registration + capabilities | — | Done | S |
 
 ---
 
@@ -451,10 +460,10 @@ python -m unittest discover -v -f modules/connectors/dhl_freight_sweden/tests
 | Risk | Impact | Probability | Mitigation |
 |------|--------|-------------|------------|
 | Print report `content` not base64 | Corrupt label | Medium | Verify against a sample before release; isolate decode in one helper |
-| Service-point / home-delivery products need a locator reference | 103/401/109 cannot be booked without it | Medium | Confirm whether it is caller-supplied (Pending #3); drop from fixtures if not — 102/232/202 still cover the pipeline |
+| Service-point party data integrity: DHL does not registry-validate the id or name at booking | A bogus or stale service point books successfully and misroutes (sandbox 2026-09-10) | Medium | Callers source ids/details from `findnearestservicepoints` (returns the full address; `getservicepointdetails` does not); the connector requires the complete party details (Resolved decision #14); production may validate more strictly |
 | Booking succeeds but print fails | Orphaned booking without label | Low | Surface error + keep booking id in `meta`; document recovery |
 | Wrong tracking-URL template | Broken tracking link | Low | Confirm template (Pending #2); single source in `utils.py` |
-| Print operation choice (`byid` vs full payload) | Rework in create flow | Low | Resolve during schema analysis (Pending #1); default `byid` |
+| Print operation choice (`byid` vs full payload) | Rework in create flow | Low | Op (a) live-verified 2026-09-10 (Pending #1); connector ships (b) full-payload; a switch is a proxy-only change |
 | Raster format (PDF/ZPL) assumption | Mismatched label type tag | Low | `label_type` tags returned bytes; provisional pending user confirmation |
 
 ---
