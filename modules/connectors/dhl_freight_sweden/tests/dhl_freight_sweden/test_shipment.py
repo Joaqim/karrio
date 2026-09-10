@@ -84,6 +84,16 @@ class TestDHLFreightShipment(unittest.TestCase):
         self.assertIsInstance(serialized["productCode"], str)
         self.assertEqual(_access_point(serialized), AccessPointStation)
 
+    def test_create_shipment_request_109_access_point_shop(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload109Shop)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        self.assertEqual(serialized["productCode"], "109")
+        self.assertIsInstance(serialized["productCode"], str)
+        self.assertEqual(_access_point(serialized), AccessPointShopDK)
+
     def test_create_shipment_request_202_customs(self):
         request = gateway.mapper.create_shipment_request(
             models.ShipmentRequest(**ShipmentPayload202Customs)
@@ -180,6 +190,32 @@ class TestDHLFreightShipment(unittest.TestCase):
         self.assertIn("customs.commodities.value_currency", messages[0].details)
         self.assertIn("EUR", messages[0].message)
         self.assertIn("SEK", messages[0].message)
+
+    def test_shipment_service_point_missing_details_surfaces_field_error(self):
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request"):
+            details, messages = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(**ShipmentPayload103MissingDetails)
+                )
+                .from_(gateway)
+                .parse()
+            )
+
+        self.assertIsNone(details)
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0].code, "SHIPPING_SDK_FIELD_ERROR")
+        self.assertEqual(
+            set(messages[0].details),
+            {
+                "dhl_freight_sweden_service_point_name",
+                "dhl_freight_sweden_service_point_street",
+                "dhl_freight_sweden_service_point_city",
+                "dhl_freight_sweden_service_point_postal_code",
+                "dhl_freight_sweden_service_point_country_code",
+            },
+        )
+        self.assertIn("service point details", messages[0].message)
+        self.assertIn("postal_code", messages[0].message)
 
     # -- proxy: two sequential calls (book -> print) with client-key header
 
@@ -360,6 +396,13 @@ _recipient_de = {
     "country_code": "DE",
 }
 
+_recipient_dk = {
+    **_recipient_se,
+    "city": "Frederiksberg",
+    "postal_code": "2000",
+    "country_code": "DK",
+}
+
 _parcel = {
     "weight": 5.0,
     "width": 20.0,
@@ -392,7 +435,24 @@ ShipmentPayload103 = _payload(
     "dhl_freight_sweden_service_point_b2c",
     _recipient_se,
     {
-        "dhl_freight_sweden_service_point": "SE12345",
+        "dhl_freight_sweden_service_point": "SE-230500",
+        "dhl_freight_sweden_service_point_type": "ParcelShop",
+        "dhl_freight_sweden_service_point_name": "KUNGSKLIPPAN TOBAK, T-BANA RÅDHUSET",
+        "dhl_freight_sweden_service_point_street": "KUNGSKLIPPAN 17",
+        "dhl_freight_sweden_service_point_city": "STOCKHOLM",
+        "dhl_freight_sweden_service_point_postal_code": "11225",
+        "dhl_freight_sweden_service_point_country_code": "SE",
+    },
+)
+
+# An id-only service point: DHL rejects the AccessPoint party without name
+# and address (validation errors 22001/22006, live sandbox 2026-09-10), so
+# the request surfaces a field error instead of a carrier 400.
+ShipmentPayload103MissingDetails = _payload(
+    "dhl_freight_sweden_service_point_b2c",
+    _recipient_se,
+    {
+        "dhl_freight_sweden_service_point": "SE-230500",
         "dhl_freight_sweden_service_point_type": "ParcelShop",
     },
 )
@@ -400,12 +460,32 @@ ShipmentPayload103 = _payload(
 # International
 ShipmentPayload232 = _payload("dhl_freight_sweden_euroconnect_plus", _recipient_de)
 ShipmentPayload202 = _payload("dhl_freight_sweden_road_freight_standard", _recipient_de)
+# 109 access points: DK allows both sub types per the product catalog
+# (GET /productapi/v1/products/109); DE allows ParcelShop only.
 ShipmentPayload109 = _payload(
     "dhl_freight_sweden_parcel_connect_b2c",
-    _recipient_de,
+    _recipient_dk,
     {
-        "dhl_freight_sweden_service_point": "DE98765",
+        "dhl_freight_sweden_service_point": "8009-591371",
         "dhl_freight_sweden_service_point_type": "ParcelStation",
+        "dhl_freight_sweden_service_point_name": "Pakkeboks Westmarket",
+        "dhl_freight_sweden_service_point_street": "Matthæusgade 46",
+        "dhl_freight_sweden_service_point_city": "København V",
+        "dhl_freight_sweden_service_point_postal_code": "1600",
+        "dhl_freight_sweden_service_point_country_code": "DK",
+    },
+)
+ShipmentPayload109Shop = _payload(
+    "dhl_freight_sweden_parcel_connect_b2c",
+    _recipient_dk,
+    {
+        "dhl_freight_sweden_service_point": "8009-591479",
+        "dhl_freight_sweden_service_point_type": "ParcelShop",
+        "dhl_freight_sweden_service_point_name": "Føtex Vesterbrogade",
+        "dhl_freight_sweden_service_point_street": "Vesterbrogade 74",
+        "dhl_freight_sweden_service_point_city": "København V",
+        "dhl_freight_sweden_service_point_postal_code": "1620",
+        "dhl_freight_sweden_service_point_country_code": "DK",
     },
 )
 
@@ -521,11 +601,44 @@ PrintOptions = {
     "pageOptions": {"pageType": "Label"},
 }
 
-AccessPointShop = {"id": "SE12345", "subType": "ParcelShop", "type": "AccessPoint"}
-AccessPointStation = {
-    "id": "DE98765",
-    "subType": "ParcelStation",
+# Full AccessPoint parties as booked against the live sandbox 2026-09-10:
+# DHL requires name and address (street, cityName, postalCode, countryCode)
+# alongside the id (validation errors 22001/22006 without them).
+AccessPointShop = {
+    "id": "SE-230500",
     "type": "AccessPoint",
+    "subType": "ParcelShop",
+    "name": "KUNGSKLIPPAN TOBAK, T-BANA RÅDHUSET",
+    "address": {
+        "street": "KUNGSKLIPPAN 17",
+        "cityName": "STOCKHOLM",
+        "postalCode": "11225",
+        "countryCode": "SE",
+    },
+}
+AccessPointStation = {
+    "id": "8009-591371",
+    "type": "AccessPoint",
+    "subType": "ParcelStation",
+    "name": "Pakkeboks Westmarket",
+    "address": {
+        "street": "Matthæusgade 46",
+        "cityName": "København V",
+        "postalCode": "1600",
+        "countryCode": "DK",
+    },
+}
+AccessPointShopDK = {
+    "id": "8009-591479",
+    "type": "AccessPoint",
+    "subType": "ParcelShop",
+    "name": "Føtex Vesterbrogade",
+    "address": {
+        "street": "Vesterbrogade 74",
+        "cityName": "København V",
+        "postalCode": "1620",
+        "countryCode": "DK",
+    },
 }
 
 ShipmentRequest102 = {
