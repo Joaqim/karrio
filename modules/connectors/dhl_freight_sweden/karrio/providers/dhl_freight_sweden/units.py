@@ -157,11 +157,31 @@ def shipping_options_initializer(
 #
 # Zone model (recipient-gated, account_country_code="SE"):
 # - Domestic products: domicile-only, Sweden zone.
-# - Cross-border consumer parcels (the PostNord Connect analogues): both
-#   flags set so SE->NO/DK/FI rates, Nordic zone list gates the recipient.
+# - Outbound parcel family (109/112/232): both flags set so all lanes are
+#   granted, Europe zone list from the product catalog gates the recipient.
+# - Parcel Return Connect (107): the reverse lane to Sweden; the zone matches
+#   the recipient, so Sweden.
 # - International freight: international-only with an unrestricted zone
 #   (no country list), so any non-SE destination rates without maintaining
 #   a country list.
+#
+# Outbound destination footprints from the DHL Product API catalog
+# (test host, fetched 2026-09-10: GET /productapi/v1/products/{code}
+# toCountries, all from SE; every product below is isDomestic=false).
+PARCEL_CONNECT_B2C_COUNTRIES = [
+    "AT", "BE", "BG", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "HR", "HU",
+    "IE", "IT", "LT", "LU", "LV", "NL", "NO", "PL", "PT", "RO", "SI", "SK",
+]
+PARCEL_CONNECT_PLUS_COUNTRIES = [
+    "AT", "BE", "BG", "CZ", "DE", "DK", "EE", "ES", "FI", "HR", "HU", "IE",
+    "IT", "LT", "LU", "LV", "NL", "NO", "PL", "PT", "RO", "SI", "SK",
+]
+EUROCONNECT_PLUS_COUNTRIES = [
+    "AT", "BE", "BG", "CH", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GB",
+    "GR", "HU", "IE", "IT", "LT", "LU", "LV", "NL", "NO", "PL", "PT", "RO",
+    "SI", "SK",
+]
+
 DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
     models.ServiceLevel(
         service_name="Hemleverans Paket B2C",
@@ -280,9 +300,9 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
         international=True,
         zones=[
             models.ServiceZone(
-                label="Nordic",
+                label="Europe",
                 rate=0.0,
-                country_codes=["SE", "NO", "DK", "FI"],
+                country_codes=EUROCONNECT_PLUS_COUNTRIES,
             )
         ],
     ),
@@ -322,9 +342,9 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
         international=True,
         zones=[
             models.ServiceZone(
-                label="Nordic",
+                label="Europe",
                 rate=0.0,
-                country_codes=["SE", "NO", "DK", "FI"],
+                country_codes=PARCEL_CONNECT_B2C_COUNTRIES,
             )
         ],
     ),
@@ -336,11 +356,7 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
         domicile=True,
         international=True,
         zones=[
-            models.ServiceZone(
-                label="Nordic",
-                rate=0.0,
-                country_codes=["SE", "NO", "DK", "FI"],
-            )
+            models.ServiceZone(label="Sweden", rate=0.0, country_codes=["SE"])
         ],
     ),
     models.ServiceLevel(
@@ -352,9 +368,9 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
         international=True,
         zones=[
             models.ServiceZone(
-                label="Nordic",
+                label="Europe",
                 rate=0.0,
-                country_codes=["SE", "NO", "DK", "FI"],
+                country_codes=PARCEL_CONNECT_PLUS_COUNTRIES,
             )
         ],
     ),

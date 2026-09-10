@@ -59,7 +59,17 @@ class TestDHLFreightServiceLevels(unittest.TestCase):
             "118", "401", "402", "502", "210", "102",
             "212", "103", "104", "209", "211",
         }
-        nordic = {"109", "107", "112", "232"}
+        # Recipient footprints mirrored from the DHL Product API catalog
+        # (test host, fetched 2026-09-10): 109 covers 24 from-SE countries,
+        # 112 the same list minus FR, 232 26 countries adding CH/GB/GR and
+        # dropping HR; 107 is the reverse lane (EU -> SE), gated on the
+        # recipient, so Sweden only.
+        europe = {
+            "109": ParcelConnectB2CCountries,
+            "112": ParcelConnectPlusCountries,
+            "232": EuroconnectPlusCountries,
+        }
+        return_lane = {"107"}
         international = {"202", "205", "233", "601", "SPI"}
 
         for _, level in self.levels.items():
@@ -73,12 +83,23 @@ class TestDHLFreightServiceLevels(unittest.TestCase):
                     [c for z in level.zones for c in (z.country_codes or [])],
                     ["SE"],
                 )
-            elif code in nordic:
+            elif code in europe:
                 self.assertTrue(level.domicile)
                 self.assertTrue(level.international)
                 self.assertEqual(
-                    sorted(c for z in level.zones for c in (z.country_codes or [])),
-                    ["DK", "FI", "NO", "SE"],
+                    [z.label for z in level.zones],
+                    ["Europe"],
+                )
+                self.assertEqual(
+                    [c for z in level.zones for c in (z.country_codes or [])],
+                    europe[code],
+                )
+            elif code in return_lane:
+                self.assertTrue(level.domicile)
+                self.assertTrue(level.international)
+                self.assertEqual(
+                    [(z.label, z.country_codes) for z in level.zones],
+                    [("Sweden", ["SE"])],
                 )
             elif code in international:
                 self.assertFalse(level.domicile)
@@ -91,3 +112,20 @@ class TestDHLFreightServiceLevels(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# Catalog mirrors (deliberately not imported from ``units`` so a typo in
+# either side fails this suite rather than propagating).
+ParcelConnectB2CCountries = [
+    "AT", "BE", "BG", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "HR", "HU",
+    "IE", "IT", "LT", "LU", "LV", "NL", "NO", "PL", "PT", "RO", "SI", "SK",
+]
+ParcelConnectPlusCountries = [
+    "AT", "BE", "BG", "CZ", "DE", "DK", "EE", "ES", "FI", "HR", "HU", "IE",
+    "IT", "LT", "LU", "LV", "NL", "NO", "PL", "PT", "RO", "SI", "SK",
+]
+EuroconnectPlusCountries = [
+    "AT", "BE", "BG", "CH", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GB",
+    "GR", "HU", "IE", "IT", "LT", "LU", "LV", "NL", "NO", "PL", "PT", "RO",
+    "SI", "SK",
+]
