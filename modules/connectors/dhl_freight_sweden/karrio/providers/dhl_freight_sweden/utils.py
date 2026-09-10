@@ -34,6 +34,14 @@ class Settings(core.Settings):
         return f"{self.server_url}/printapi/v1"
 
     @property
+    def product_api_url(self):
+        return f"{self.server_url}/productapi/v1"
+
+    @property
+    def service_point_locator_url(self):
+        return f"{self.server_url}/servicepointlocatorapi/v1"
+
+    @property
     def tracking_url(self):
         # The API Farm exposes no native shipment-tracking URL, so this uses the
         # public DHL Freight Sweden tracking widget keyed by shipment id.

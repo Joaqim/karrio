@@ -36,7 +36,16 @@ def _extract_errors(response: dict) -> typing.List[dict]:
     if not isinstance(response, dict):
         return []
     if not (response.get("errorMessage") or response.get("validationErrors")):
-        return []
+        # The productapi declares no 4xx responses and signals failures as a
+        # BadRequestError body ({error, errors[]}); the item shape matches
+        # ValidationErrorType, so remap it onto the shared ErrorResponse.
+        if response.get("error") or response.get("errors"):
+            response = dict(
+                errorMessage=response.get("error"),
+                validationErrors=response.get("errors"),
+            )
+        else:
+            return []
 
     error = lib.to_object(dhl_freight.ErrorResponseType, response)
     validation_errors = error.validationErrors or []

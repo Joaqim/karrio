@@ -11,3 +11,7 @@ from karrio.providers.dhl_freight_sweden.shipment import (
     parse_shipment_cancel_response,
     shipment_cancel_request,
 )
+from karrio.providers.dhl_freight_sweden.product_matches import (
+    parse_product_matches_response,
+    product_matches_request,
+)
