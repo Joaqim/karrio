@@ -3,9 +3,9 @@
 | Field | Value |
 |-------|-------|
 | Project | DHL Freight Sweden carrier connector (`dhl_freight_sweden`) |
-| Version | 1.3 |
+| Version | 1.4 |
 | Date | 2026-09-10 |
-| Status | Planning |
+| Status | Implemented |
 | Owner | Joaqim Planstedt |
 | Type | Integration |
 | Reference | [AGENTS.md](../AGENTS.md), [CARRIER_INTEGRATION_GUIDE.md](../CARRIER_INTEGRATION_GUIDE.md) |
@@ -67,6 +67,7 @@ The default host is the API Farm — test `https://test-api.freight-logistics.dh
 Each API's base path (`/transportinstructionapi/v1`, `/printapi/v1`, `/productapi/v1`, ...) is appended to the resolved host.
 9. **Phase 0 verification is Karrio's mocked four-method unittest pattern.**
 No live sandbox credentials are required; all Phase 0 tests are hermetic.
+Live sandbox probes (2026-09-08, 2026-09-10) supplied decision evidence only; the shipped test suite remains hermetic.
 
 ### Scope
 
@@ -85,9 +86,7 @@ No live sandbox credentials are required; all Phase 0 tests are hermetic.
 
 ### Pending questions
 
-| # | Question | Context | Options | Status |
-|---|----------|---------|---------|--------|
-| 2 | Correct public tracking-URL template for DHL Freight Sweden | Tracking is URL-only; the template lives in `utils.py`. | (a) a DHL Freight Sweden portal template; (b) an `activetracing.dhl.com` variant | Confirm with DHL Freight Sweden docs |
+None — all questions are resolved (see Resolved decisions).
 
 ### Resolved decisions
 
@@ -108,12 +107,13 @@ No live sandbox credentials are required; all Phase 0 tests are hermetic.
 | 13 | Customs declaration currency | Single declaration currency resolved from `duty.currency`, then the commodities' common currency; per-line gaps filled, conflicts raise a field error | A declaration with mixed per-line currencies corrupts `customsValueCurrency`/`invoiceCurrency` consistency | 2026-09-08 |
 | 14 | Service-point locator reference | Caller supplies the full service-point details via `options` (id + name + street + city + postal code + country code); the connector emits a complete `AccessPoint` party (`subType` `ParcelShop` \| `ParcelStation`); no client-side product/country gating | Live sandbox 2026-09-10: an id-only party is rejected (validationErrors 22001 "Address is mandatory for party AccessPoint" / "Name is mandatory for party AccessPoint", 22006 linehaul failure without postalCode); a full party returns HTTP 200 for 103 SE ParcelShop and 109 DK ParcelShop + ParcelStation (bookings 2906723792 / 2906723800 / 2906723826); the consignee party stays alongside the AccessPoint | 2026-09-10 |
 | 15 | Print operation | By-id: `POST /print/printdocumentsbyid` with `{ shipmentIds: [id], options: ReportOptions }` | The booking response carries the shipment id, so the by-id op prints without re-sending the shipment; live-verified 2026-09-10 (`label_2906723792.pdf`, base64 PDF `reports[].content`); the generated schemas now carry the by-id request type (`PrintRequestByIDType`); the full-payload `printdocuments` op remains available as fallback knowledge | 2026-09-10 |
+| 16 | Tracking-URL template | Keep the shipped template: `https://www.dhl.com/se-en/home/tracking/tracking-freight.html?submit=1&tracking-id={id}` | DHL Freight Sweden's own tracking FAQ links its track CTAs to `/se-en/home/tracking/tracking-freight.html` (verified in the page's raw HTML); the page runs the same Shipment Tracking Unified API widget and `?submit=1&tracking-id=` convention as all five sibling DHL connectors; the FAQ's "normally 10 digits" freight number matches `transportInstruction.id`; `activetracing.dhl.com` rejected (bare form page, no documented deep-link param, myACT login-gated). Residual: the client-side widget's auto-submit was not directly observed — close by clicking one production id in a browser or confirming with se.ecom@dhl.com | 2026-09-10 |
 
 ### Edge cases requiring input
 
 | # | Edge case | Needs |
 |---|-----------|-------|
-| 1 | Print report `content` encoding | Confirm base64 against a sample response before shipping |
+| 1 | Print report `content` encoding | Resolved: `reports[].content` is base64 — live-verified 2026-09-10 by decoding the by-id print response to a valid PDF (`label_2906723792.pdf`, Resolved decision #15) |
 | 2 | Freight-payer party id source | Resolved: the consignor party carries `settings.account_number` as its id; the separate FreightPayer party was dropped (its id is a customer number, not the payer code) |
 | 3 | Service-point party data integrity: DHL does not registry-validate the id or name at booking (a bogus id with an invented name booked successfully in the sandbox); routing derives from the party postalCode/countryCode | Callers must source ids and details from the Service Point Locator API `findnearestservicepoints`, which returns the full address (`getservicepointdetails` does not); production may validate more strictly (see Resolved decision #14) |
 
@@ -169,10 +169,10 @@ authenticating with a single client-key header against the SE API Farm.
 
 ### Launch criteria
 
-- [ ] P0: all four shipment test methods pass (mocked, hermetic).
-- [ ] P0: `./bin/run-sdk-tests` green (hermetic suite; no live calls).
-- [ ] P0: the shipment parse asserts a tracking number, a label, and `meta.tracking_url`.
-- [ ] P1: capabilities report `shipping` only.
+- [x] P0: all four shipment test methods pass (mocked, hermetic).
+- [x] P0: `./bin/run-sdk-tests` green (hermetic suite; no live calls).
+- [x] P0: the shipment parse asserts a tracking number, a label, and `meta.tracking_url`.
+- [x] P1: capabilities report `shipping` + `rating` (static rate sheet via `RatingMixinProxy`); no `tracking` / `pickup`.
 
 ---
 
@@ -356,7 +356,7 @@ Each service's base path (`/transportinstructionapi/v1`, `/printapi/v1`, ...) is
 | Case | Handling |
 |------|----------|
 | Booking succeeds, print fails | Surface print error as `Messages`; booking id still recoverable via `meta`; return `ShipmentDetails` with empty label + `meta.tracking_url`, or fail per parser policy |
-| Print report `content` not base64 | Assume base64 per DHL norm; verify against a sample before release |
+| Print report `content` not base64 | Closed: base64 confirmed by decoding the live by-id print response to a valid PDF (2026-09-10, Resolved decision #15) |
 | Missing `account_number` when payer party requires id | Validate early; return a clear `Message` rather than a DHL 400 |
 | International shipment | Allowed; no geo gate — DHL API validates |
 | Service-point product with incomplete party details | Raise a `SHIPPING_SDK_FIELD_ERROR` naming the missing options before any carrier call; DHL rejects id-only AccessPoint parties (validationErrors 22001/22006, Resolved decision #14) |
@@ -386,8 +386,8 @@ Tracking (`tracking.py`) and cancel (`cancel.py`) remain documented deferred stu
 |------|-------|--------|--------|
 | Scaffold connector | `./bin/cli sdk add-extension` | Done | S |
 | Vendor raw specs (upstream filenames, git-tracked) | `modules/connectors/dhl_freight_sweden/vendor/se-api-farm/*.json` | Done | S |
-| Derive JSON generation samples from the vendored specs | `modules/connectors/dhl_freight_sweden/schemas/*.json` | In progress | M |
-| Configure + run generation | `generate`, `./bin/run-generate-on modules/connectors/dhl_freight_sweden` | In progress | S |
+| Derive JSON generation samples from the vendored specs | `modules/connectors/dhl_freight_sweden/schemas/*.json` | Done | M |
+| Configure + run generation | `generate`, `./bin/run-generate-on modules/connectors/dhl_freight_sweden` | Done | S |
 
 ### Phase 2: Settings, units, errors, proxy
 
@@ -404,7 +404,7 @@ Tracking (`tracking.py`) and cancel (`cancel.py`) remain documented deferred stu
 | Task | Files | Status | Effort |
 |------|-------|--------|--------|
 | Shipment create request build + response parse (with `meta.tracking_url`) | `karrio/providers/dhl_freight_sweden/shipment/create.py` | Done | L |
-| Public exports + plugin METADATA (shipping only) | `karrio/providers/dhl_freight_sweden/__init__.py`, `karrio/plugins/dhl_freight_sweden/__init__.py` | Done | S |
+| Public exports + plugin METADATA (shipping + rating) | `karrio/providers/dhl_freight_sweden/__init__.py`, `karrio/plugins/dhl_freight_sweden/__init__.py` | Done | S |
 | Deferred stubs documented (`tracking.py`, `cancel.py`) | `karrio/providers/dhl_freight_sweden/{tracking.py,shipment/cancel.py}` | Done | S |
 
 ### Phase 4: Tests
@@ -459,10 +459,10 @@ python -m unittest discover -v -f modules/connectors/dhl_freight_sweden/tests
 
 | Risk | Impact | Probability | Mitigation |
 |------|--------|-------------|------------|
-| Print report `content` not base64 | Corrupt label | Medium | Verify against a sample before release; isolate decode in one helper |
+| Print report `content` not base64 | Corrupt label | Low (retired) | Closed: base64 confirmed against the live by-id print response (`label_2906723792.pdf`, 2026-09-10) |
 | Service-point party data integrity: DHL does not registry-validate the id or name at booking | A bogus or stale service point books successfully and misroutes (sandbox 2026-09-10) | Medium | Callers source ids/details from `findnearestservicepoints` (returns the full address; `getservicepointdetails` does not); the connector requires the complete party details (Resolved decision #14); production may validate more strictly |
 | Booking succeeds but print fails | Orphaned booking without label | Low | Surface error + keep booking id in `meta`; document recovery |
-| Wrong tracking-URL template | Broken tracking link | Low | Confirm template (Pending #2); single source in `utils.py` |
+| Wrong tracking-URL template | Broken tracking link | Low | Resolved (decision #16): template confirmed against DHL's own FAQ and the fleet-wide param convention; single source in `utils.py`; residual JS auto-submit check documented in the decision |
 | Print operation choice (`byid` vs full payload) | Rework in create flow | Low | Resolved 2026-09-10 (Resolved decision #15): the connector ships the by-id op, live-verified via `label_2906723792.pdf`; the full-payload op remains fallback knowledge |
 | Raster format (PDF/ZPL) assumption | Mismatched label type tag | Low | `label_type` tags returned bytes; provisional pending user confirmation |
 
@@ -485,7 +485,7 @@ The DHL Freight Sweden API Farm OpenAPI 2.10.0 set includes, among others:
 
 - Authentication: a single `client-key` HTTP header on every request (`apiKey`, `in: header`); no token exchange.
 - Booking `productCode` set: enumerated in the product table above; the runtime source of truth is the Product API `GET /products`.
-- Tracking URL template: a DHL Freight Sweden portal template (Pending #2), applied locally to `transportInstruction.id`.
+- Tracking URL template: `https://www.dhl.com/se-en/home/tracking/tracking-freight.html?submit=1&tracking-id={id}` (Resolved decision #16), applied locally to `transportInstruction.id`; swapping `se-en` for `se-sv` yields Swedish-facing links if wanted.
 
 Hosts (resolved host + spec base path):
 
