@@ -20,6 +20,12 @@ class DeclarationCurrencyError(errors.ShippingSDKDetailedError):
     code = "SHIPPING_SDK_FIELD_ERROR"
 
 
+class ServicePointDetailsError(errors.ShippingSDKDetailedError):
+    """Raised when an access point party is missing service point details."""
+
+    code = "SHIPPING_SDK_FIELD_ERROR"
+
+
 def parse_shipment_response(
     _response: lib.Deserializable[typing.List[dict]],
     settings: provider_utils.Settings,
@@ -106,7 +112,7 @@ def shipment_request(
     procedure_code = (
         options.dhl_freight_sweden_customs_procedure_code.state or "1042"
     )
-    service_point = options.dhl_freight_sweden_service_point.state
+    service_point_party = _service_point_party(options)
     page_type = provider_units.PageType.map(
         options.dhl_freight_sweden_label_page_type.state
         or settings.connection_config.label_page_type.state
@@ -134,20 +140,7 @@ def shipment_request(
             provider_units.PartyType.Consignor, shipper, id=settings.account_number
         ),
         _party(provider_units.PartyType.Consignee, recipient),
-        *lib.identity(
-            [
-                dhl_freight_sweden_req.PartyType(
-                    id=service_point,
-                    type=provider_units.PartyType.AccessPoint.value,
-                    subType=provider_units.PartySubType.map(
-                        options.dhl_freight_sweden_service_point_type.state
-                        or provider_units.PartySubType.ParcelShop.value
-                    ).value_or_key,
-                )
-            ]
-            if service_point
-            else []
-        ),
+        *lib.identity([service_point_party] if service_point_party else []),
     ]
 
     request = dhl_freight_sweden_req.TransportInstructionRequestType(
@@ -309,6 +302,58 @@ def _customs_information(
             )
             for commodity in commodities
         ],
+    )
+
+
+def _service_point_party(
+    options,
+) -> typing.Optional[dhl_freight_sweden_req.PartyType]:
+    service_point = options.dhl_freight_sweden_service_point.state
+
+    if not service_point:
+        return None
+
+    # Keys double as the ``dhl_freight_sweden_service_point_{key}`` option names.
+    details = dict(
+        name=options.dhl_freight_sweden_service_point_name.state,
+        street=options.dhl_freight_sweden_service_point_street.state,
+        city=options.dhl_freight_sweden_service_point_city.state,
+        postal_code=options.dhl_freight_sweden_service_point_postal_code.state,
+        country_code=options.dhl_freight_sweden_service_point_country_code.state,
+    )
+    missing = [key for key, value in details.items() if not value]
+
+    # DHL rejects an AccessPoint party without name and address (validation
+    # errors 22001 and 22006, live sandbox 2026-09-10), so incomplete details
+    # fail here with the missing option names instead of as a carrier 400.
+    if any(missing):
+        raise ServicePointDetailsError(
+            "The service point option requires the full service point details; "
+            f"missing {', '.join(missing)}",
+            details={
+                f"dhl_freight_sweden_service_point_{key}": dict(
+                    code="required", message="service point detail is required"
+                )
+                for key in missing
+            },
+        )
+
+    return dhl_freight_sweden_req.PartyType(
+        id=service_point,
+        type=provider_units.PartyType.AccessPoint.value,
+        subType=provider_units.PartySubType.map(
+            options.dhl_freight_sweden_service_point_type.state
+            or provider_units.PartySubType.ParcelShop.value
+        ).value_or_key,
+        name=details["name"],
+        address=dhl_freight_sweden_req.AddressType(
+            street=details["street"],
+            cityName=details["city"],
+            # postalCode is generated as Optional[int]; keep it a string so
+            # alphanumeric/space-bearing postal codes survive serialization.
+            postalCode=str(details["postal_code"]) if details["postal_code"] else None,
+            countryCode=details["country_code"],
+        ),
     )
 
 
