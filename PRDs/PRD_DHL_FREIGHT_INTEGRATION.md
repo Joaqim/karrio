@@ -60,8 +60,8 @@ Shipment cancellation and returns are out of scope; `cancel.py` remains a docume
 7. **Label layout is selectable; raster format (PDF/ZPL) is not an API parameter.**
 The Print API models label page layout via `ReportOptions.pageOptions.pageType` (`Label`, `Label2xPortraitA4`, `Label3xLandscapeA4`, `LabelCompact`, `LabelCompact2x2PortraitA4`); default `Label`.
 The Print API 2.10.0 exposes no raster-format field, so PDF-versus-ZPL is governed by DHL account configuration, not by a request parameter.
-A per-connection `label_type` setting (default `PDF`) tags and interprets the returned label bytes so they align with the account's configured output; it is account-aligned metadata, not an API request parameter.
-This raster-format treatment is provisional pending user confirmation of any out-of-band DHL mechanism.
+A per-connection `label_type` setting (default `PDF`) tags the returned label bytes as the last resort; it is account-aligned metadata, not an API request parameter.
+Live confirmation 2026-09-10: the account/sandbox emits PDF A4 regardless of the connection's `label_type`, so the label type is derived from the decoded document's magic prefix, then the report `contentType`, then the `label_type` setting.
 8. **API host is per-connection overridable.**
 The default host is the API Farm — test `https://test-api.freight-logistics.dhl.com`, production `https://api.freight-logistics.dhl.com` — selected by `test_mode`, with a `connection_config.server_url` override.
 Each API's base path (`/transportinstructionapi/v1`, `/printapi/v1`, `/productapi/v1`, ...) is appended to the resolved host.
@@ -99,7 +99,7 @@ None — all questions are resolved (see Resolved decisions).
 | 5 | Rating | Not implemented in Phase 0 | Price Quote API deferred beyond Phase 0 | 2026-08-11 |
 | 6 | Cancel / returns | Not implemented in Phase 0; `cancel.py` a documented stub | Out of scope for Phase 0 | 2026-08-11 |
 | 7 | Label layout | Expose `pageType` layout; default `Label` | Print API models page layout, not raster format | 2026-08-11 |
-| 8 | Raster format (PDF/ZPL) | Not a request parameter; account-governed; `label_type` setting tags returned bytes | Print API 2.10.0 has no raster-format field | 2026-08-11 |
+| 8 | Raster format (PDF/ZPL) | Not a request parameter; account-governed; label type derived from the decoded document magic prefix (`%PDF-`, `^XA`), then report `contentType`, with the `label_type` setting as last-resort tag | Print API 2.10.0 has no raster-format field; live sandbox emits PDF A4 regardless of connection config (`%PDF-1.6`, 2026-09-10) | 2026-09-10 |
 | 9 | Geographic gating | None | DHL API validation is authoritative; international implicitly allowed | 2026-08-11 |
 | 10 | API host resolution | API Farm default (by `test_mode`) + `connection_config.server_url` override | Per-connection override supported | 2026-08-11 |
 | 11 | Phase 0 verification | Mocked four-method unittest pattern; no live creds | Karrio hermetic-suite norm | 2026-08-11 |
@@ -468,7 +468,7 @@ python -m unittest discover -v -f modules/connectors/dhl_freight_sweden/tests
 | Booking succeeds but print fails | Orphaned booking without label | Low | Surface error + keep booking id in `meta`; document recovery |
 | Wrong tracking-URL template | Broken tracking link | Low | Resolved (decision #16): template confirmed against DHL's own FAQ and the fleet-wide param convention; single source in `utils.py`; residual JS auto-submit check documented in the decision |
 | Print operation choice (`byid` vs full payload) | Rework in create flow | Low | Resolved 2026-09-10 (Resolved decision #15): the connector ships the by-id op, live-verified via `label_2906723792.pdf`; the full-payload op remains fallback knowledge |
-| Raster format (PDF/ZPL) assumption | Mismatched label type tag | Low | `label_type` tags returned bytes; provisional pending user confirmation |
+| Raster format (PDF/ZPL) assumption | Mismatched label type tag | Low (retired) | Closed: live confirmation 2026-09-10 — the account/sandbox emits PDF A4 regardless of connection config; label type now derived from the decoded document magic prefix with the `label_type` tag as last resort |
 
 ---
 

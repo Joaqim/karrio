@@ -34,6 +34,14 @@ dhl_freight_sweden = karrio.gateway["dhl_freight_sweden"].create(
 
 Check the [Karrio Mutli-carrier SDK docs](https://docs.karrio.io) for Shipping API requests
 
+## Connection settings
+
+Connection settings are passed through the gateway's `config` dict (e.g. `config={"label_type": "ZPL"}`).
+
+| Setting | Default | Notes |
+|---------|---------|-------|
+| `label_type` | `PDF` | Tags the returned document format when the carrier response does not identify it. The Print API exposes no format parameter, so the emitted format is governed by the DHL account (live-verified PDF A4, 2026-09-10); the connector derives the tag from the decoded document's magic prefix (`%PDF-`, `^XA`) first, then the report `contentType`, and uses this setting as the last resort. |
+
 ## Capabilities
 
 | Capability | Notes |
