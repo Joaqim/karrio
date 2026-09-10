@@ -36,6 +36,26 @@ class PartySubType(lib.StrEnum):
     ParcelStation = "ParcelStation"
 
 
+class LocationType(lib.StrEnum):
+    """DHL Freight Servicepoint API location types (LocationTypeEnum)."""
+
+    servicepoint = "servicepoint"
+    locker = "locker"
+    postoffice = "postoffice"
+    postbank = "postbank"
+
+
+# AccessPoint subType derivation from the transport-instruction spec:
+# a locationType of "locker" books as a ParcelStation, every other
+# location type books as a ParcelShop.
+SUB_TYPE_BY_LOCATION_TYPE: typing.Dict[LocationType, PartySubType] = {
+    LocationType.servicepoint: PartySubType.ParcelShop,
+    LocationType.locker: PartySubType.ParcelStation,
+    LocationType.postoffice: PartySubType.ParcelShop,
+    LocationType.postbank: PartySubType.ParcelShop,
+}
+
+
 class PageType(lib.StrEnum):
     """DHL Freight Print API page layouts (PageTypeEnum)."""
 
@@ -169,17 +189,83 @@ def shipping_options_initializer(
 # (test host, fetched 2026-09-10: GET /productapi/v1/products/{code}
 # toCountries, all from SE; every product below is isDomestic=false).
 PARCEL_CONNECT_B2C_COUNTRIES = [
-    "AT", "BE", "BG", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "HR", "HU",
-    "IE", "IT", "LT", "LU", "LV", "NL", "NO", "PL", "PT", "RO", "SI", "SK",
+    "AT",
+    "BE",
+    "BG",
+    "CZ",
+    "DE",
+    "DK",
+    "EE",
+    "ES",
+    "FI",
+    "FR",
+    "HR",
+    "HU",
+    "IE",
+    "IT",
+    "LT",
+    "LU",
+    "LV",
+    "NL",
+    "NO",
+    "PL",
+    "PT",
+    "RO",
+    "SI",
+    "SK",
 ]
 PARCEL_CONNECT_PLUS_COUNTRIES = [
-    "AT", "BE", "BG", "CZ", "DE", "DK", "EE", "ES", "FI", "HR", "HU", "IE",
-    "IT", "LT", "LU", "LV", "NL", "NO", "PL", "PT", "RO", "SI", "SK",
+    "AT",
+    "BE",
+    "BG",
+    "CZ",
+    "DE",
+    "DK",
+    "EE",
+    "ES",
+    "FI",
+    "HR",
+    "HU",
+    "IE",
+    "IT",
+    "LT",
+    "LU",
+    "LV",
+    "NL",
+    "NO",
+    "PL",
+    "PT",
+    "RO",
+    "SI",
+    "SK",
 ]
 EUROCONNECT_PLUS_COUNTRIES = [
-    "AT", "BE", "BG", "CH", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GB",
-    "GR", "HU", "IE", "IT", "LT", "LU", "LV", "NL", "NO", "PL", "PT", "RO",
-    "SI", "SK",
+    "AT",
+    "BE",
+    "BG",
+    "CH",
+    "CZ",
+    "DE",
+    "DK",
+    "EE",
+    "ES",
+    "FI",
+    "FR",
+    "GB",
+    "GR",
+    "HU",
+    "IE",
+    "IT",
+    "LT",
+    "LU",
+    "LV",
+    "NL",
+    "NO",
+    "PL",
+    "PT",
+    "RO",
+    "SI",
+    "SK",
 ]
 
 DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
@@ -355,9 +441,7 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
         currency="SEK",
         domicile=True,
         international=True,
-        zones=[
-            models.ServiceZone(label="Sweden", rate=0.0, country_codes=["SE"])
-        ],
+        zones=[models.ServiceZone(label="Sweden", rate=0.0, country_codes=["SE"])],
     ),
     models.ServiceLevel(
         service_name="Parcel Connect Plus",
