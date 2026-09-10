@@ -3,9 +3,9 @@
 | Field | Value |
 |-------|-------|
 | Project | dhl_freight_sweden connector-local lookup capabilities |
-| Version | 1.0 |
+| Version | 1.1 |
 | Date | 2026-09-10 |
-| Status | Approved |
+| Status | Implemented |
 | Owner | Joaqim Planstedt |
 | Type | Integration |
 | Reference | [PRD_DHL_FREIGHT_INTEGRATION](PRD_DHL_FREIGHT_INTEGRATION.md) (booking, print, PUDO options, decisions #14/#17) |
@@ -112,10 +112,10 @@ locker→ParcelStation rule.
 
 ### Launch criteria
 
-- [ ] P0: all eight new test methods pass hermetically.
-- [ ] P0: `./bin/run-sdk-tests` green.
-- [ ] P1: capabilities assert unchanged; README documents both calling conventions.
-- [ ] P1: live capture transcript recorded (evidence only; suite stays hermetic).
+- [x] P0: all new test methods pass hermetically (nine lookup tests plus the capabilities-stability assertion).
+- [x] P0: `./bin/run-sdk-tests` green.
+- [x] P1: capabilities assert unchanged; README documents both calling conventions.
+- [x] P1: live capture transcript recorded (`docs/notes/evidence/dhl-freight-sweden-pudo-lookups-live-capture.md`; suite stays hermetic).
 
 ---
 
@@ -257,7 +257,7 @@ Both hosts resolve through the existing `server_url`/test-mode logic; base paths
 | 2 | `LocationType` enum + subType mapping | `karrio/providers/dhl_freight_sweden/units.py` | Done | S |
 | 2 | Proxy method | `karrio/mappers/dhl_freight_sweden/proxy.py` (`find_service_points`) | Done | S |
 | 2 | Tests + captured fixture | `tests/dhl_freight_sweden/test_service_points.py` | Done | M |
-| 3 | README calling conventions; PRD closeout | `modules/connectors/dhl_freight_sweden/README.md`, this file | Pending | S |
+| 3 | README calling conventions; PRD closeout | `modules/connectors/dhl_freight_sweden/README.md`, this file | Done | S |
 
 Fixture capture: one bounded live sandbox call per endpoint (productmatches SE→PL; findnearest for a PL address), recorded as evidence; the shipped tests consume the captured JSON hermetically.
 No bookings are created by this work.
