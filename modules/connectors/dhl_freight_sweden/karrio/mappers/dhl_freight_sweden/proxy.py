@@ -75,3 +75,27 @@ class Proxy(proxy.Proxy):
             ],
             ctx,
         )
+
+    def find_product_matches(
+        self, request: lib.Serializable
+    ) -> lib.Deserializable[dict]:
+        """Look up matching products for an address pair (connector-local).
+
+        POSTs the serialized ``MatchCriteria`` body to the Product API's
+        ``/productmatches`` endpoint with the standard client-key headers; the
+        caller invokes this duck-typed method directly on the proxy, as with
+        the postnord ``find_service_points`` precedent.
+        """
+        response = lib.request(
+            url=f"{self.settings.product_api_url}/productmatches",
+            data=lib.to_json(request.serialize()),
+            trace=self.trace_as("json"),
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "client-key": self.settings.client_key,
+            },
+            on_error=lib.error_decoder,
+        )
+
+        return lib.Deserializable(response, lib.to_dict)
