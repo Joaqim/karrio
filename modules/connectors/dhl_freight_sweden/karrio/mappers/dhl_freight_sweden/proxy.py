@@ -3,6 +3,7 @@
 import karrio.lib as lib
 import karrio.api.proxy as proxy
 import karrio.mappers.dhl_freight_sweden.settings as provider_settings
+import karrio.schemas.dhl_freight_sweden.print_request_by_id as dhl_freight_sweden_print
 from karrio.universal.mappers.rating_proxy import RatingMixinProxy
 
 
@@ -19,12 +20,11 @@ class Proxy(proxy.Proxy):
         return RatingMixinProxy.get_rates(self, request)
 
     def create_shipment(self, request: lib.Serializable) -> lib.Deserializable[str]:
-        """Book a transport instruction, then print its documents.
+        """Book a transport instruction, then print its documents by id.
 
-        The Print API has no by-id request type in the generated schemas, so
-        the printed documents are produced by feeding the Shipment echoed in
-        the booking response (which now carries the shipment id and piece ids)
-        into ``/print/printdocuments`` (PrintOptions.shipment).
+        The shipment id only exists once the booking response returns, so the
+        by-id print request is completed here with the runtime id and posted
+        to ``/print/printdocumentsbyid`` — the booked shipment is not re-sent.
         """
         ctx = request.ctx or {}
         headers = {
@@ -46,16 +46,16 @@ class Proxy(proxy.Proxy):
 
         printed = lib.identity(
             lib.request(
-                url=f"{self.settings.print_url}/print/printdocuments",
+                url=f"{self.settings.print_url}/print/printdocumentsbyid",
                 data=lib.to_json(
-                    dict(
-                        # Re-send the shipment echoed by the booking response
-                        # intact: it is the same Shipment model the Print API
-                        # accepts, and round-tripping through the generated
-                        # print ShipmentType silently drops optional fields it
-                        # was not sampled with (totalNumberOfPieces, totalWeight).
-                        shipment=instruction,
-                        options=ctx.get("print_options") or {},
+                    lib.to_dict(
+                        dhl_freight_sweden_print.PrintRequestByIDType(
+                            shipmentIds=[shipment_id],
+                            options=lib.to_object(
+                                dhl_freight_sweden_print.OptionsType,
+                                ctx.get("print_options") or {},
+                            ),
+                        )
                     )
                 ),
                 trace=self.trace_as("json"),
