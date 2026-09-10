@@ -3,7 +3,7 @@
 | Field | Value |
 |-------|-------|
 | Project | DHL Freight Sweden carrier connector (`dhl_freight_sweden`) |
-| Version | 1.4 |
+| Version | 1.5 |
 | Date | 2026-09-10 |
 | Status | Implemented |
 | Owner | Joaqim Planstedt |
@@ -108,6 +108,7 @@ None — all questions are resolved (see Resolved decisions).
 | 14 | Service-point locator reference | Caller supplies the full service-point details via `options` (id + name + street + city + postal code + country code); the connector emits a complete `AccessPoint` party (`subType` `ParcelShop` \| `ParcelStation`); no client-side product/country gating | Live sandbox 2026-09-10: an id-only party is rejected (validationErrors 22001 "Address is mandatory for party AccessPoint" / "Name is mandatory for party AccessPoint", 22006 linehaul failure without postalCode); a full party returns HTTP 200 for 103 SE ParcelShop and 109 DK ParcelShop + ParcelStation (bookings 2906723792 / 2906723800 / 2906723826); the consignee party stays alongside the AccessPoint | 2026-09-10 |
 | 15 | Print operation | By-id: `POST /print/printdocumentsbyid` with `{ shipmentIds: [id], options: ReportOptions }` | The booking response carries the shipment id, so the by-id op prints without re-sending the shipment; live-verified 2026-09-10 (`label_2906723792.pdf`, base64 PDF `reports[].content`); the generated schemas now carry the by-id request type (`PrintRequestByIDType`); the full-payload `printdocuments` op remains available as fallback knowledge | 2026-09-10 |
 | 16 | Tracking-URL template | Keep the shipped template: `https://www.dhl.com/se-en/home/tracking/tracking-freight.html?submit=1&tracking-id={id}` | DHL Freight Sweden's own tracking FAQ links its track CTAs to `/se-en/home/tracking/tracking-freight.html` (verified in the page's raw HTML); the page runs the same Shipment Tracking Unified API widget and `?submit=1&tracking-id=` convention as all five sibling DHL connectors; the FAQ's "normally 10 digits" freight number matches `transportInstruction.id`; `activetracing.dhl.com` rejected (bare form page, no documented deep-link param, myACT login-gated). Residual: the client-side widget's auto-submit was not directly observed — close by clicking one production id in a browser or confirming with se.ecom@dhl.com | 2026-09-10 |
+| 17 | Rate-sheet zone coverage for the international parcel family | Zones sourced from the Product API `toCountries` (test host, fetched 2026-09-10, `GET /productapi/v1/products/{code}`, all from SE): 109 → `Europe` zone with 24 countries (AT BE BG CZ DE DK EE ES FI FR HR HU IE IT LT LU LV NL NO PL PT RO SI SK); 112 → the same list minus FR (23); 232 → 26 countries adding CH/GB/GR and dropping HR; 107 → `Sweden` zone (`["SE"]`) | All four products are `isDomestic: false` per the catalog, so a Nordic-only zone understated the footprint (live-confirmed 2026-09-10: a SE→PL rate query offered only 202/205/233/601/SPI). The zone matches the recipient, so the reverse lane 107 (EU → SE) is gated on SE; the Nordic entries NO/DK/FI are not valid 107 recipients per the catalog. 107 keeps `domicile=True, international=True` because the universal rating mixin computes `is_domicile` as account-or-shipper country == recipient country, so a PL→SE return flow classifies as domicile and 107 surfaces through its domicile flag. The catalog's per-country `postalCodeExcludes` (e.g. DK `38*`, NO `917*`, PT `9*`) cannot be expressed in `ServiceZone` (inclusion lists only) — booking-time DHL validation stays authoritative for postal exclusions. Residual: the unified SDK interface additionally rejects any request whose shipper country differs from `account_country_code="SE"` (`SHIPPING_SDK_ORIGIN_NOT_SERVICED_ERROR`) before the mixin runs, so the return lane reaches rating only through a connection-level rate pipeline | 2026-09-10 |
 
 ### Edge cases requiring input
 
@@ -331,6 +332,9 @@ Only the six marked (Fixture) products get hermetic test fixtures in Phase 0; th
 | International (to/from SE) | 107 | Parcel Return Connect C2B | |
 | International (to/from SE) | 112 | Parcel Connect Plus | |
 | International (to/from SE) | SPI | Standard Pallet International | |
+
+Rate-sheet zones follow the Product API destination footprint (Resolved decision #17): the outbound parcels 109/112/232 carry `Europe` zones from their from-SE `toCountries` (109: 24 countries; 112: the same list minus FR; 232: 26 countries including CH/GB/GR but not HR), the return product 107 carries a `Sweden` zone because the zone matches the recipient, and the international freight products keep unrestricted zones.
+Per-country `postalCodeExcludes` in the catalog are not expressible in `ServiceZone` (inclusion lists only), so booking-time DHL validation stays authoritative for postal exclusions.
 
 The service-point fixture products (103, 109) require an `AccessPoint` party with a `subType` of `ParcelShop` or `ParcelStation` (the subType enum — not `Servicepoint`) carrying a caller-supplied service-point id, name, and full address; DHL rejects an id-only party (validationErrors 22001/22006, live sandbox 2026-09-10, see Resolved decision #14).
 Per the product catalog (`GET /productapi/v1/products/{code}`), 109 DE allows `ParcelShop` only while DK allows both subTypes; the connector imposes no product/country gating of its own.
