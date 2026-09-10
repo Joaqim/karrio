@@ -1,0 +1,21 @@
+{
+  "shipmentIds": ["2906723792"],
+  "options": {
+    "label": true,
+    "waybill": false,
+    "returnLabel": false,
+    "guarantee": false,
+    "shipmentList": false,
+    "shipmentListType": "Consignee",
+    "qrCode": false,
+    "licensePlateBarCode": "GS1",
+    "itemStartSequence": 1,
+    "pageOptions": {
+      "pageType": "Label",
+      "marginLeft": 0,
+      "marginTop": 0,
+      "padding": 0,
+      "paddingTop": 0
+    }
+  }
+}

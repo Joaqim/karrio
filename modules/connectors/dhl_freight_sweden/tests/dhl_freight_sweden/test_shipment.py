@@ -4,7 +4,7 @@ The connector books a transport instruction and then prints its documents in
 a two-call chain per shipment create. The proxy issues:
 
     1. POST {transportinstructionapi/v1}/transportinstruction/sendtransportinstruction
-    2. POST {printapi/v1}/print/printdocuments
+    2. POST {printapi/v1}/print/printdocumentsbyid  { shipmentIds: [id], options }
 
 Both requests carry the ``client-key`` header. Product codes serialize as
 strings on the wire (e.g. "102", "SPI").
@@ -234,7 +234,7 @@ class TestDHLFreightShipment(unittest.TestCase):
         )
         self.assertEqual(
             print_call.kwargs["url"],
-            f"{gateway.settings.print_url}/print/printdocuments",
+            f"{gateway.settings.print_url}/print/printdocumentsbyid",
         )
         self.assertEqual(
             booking_call.kwargs["headers"]["client-key"],
@@ -244,6 +244,7 @@ class TestDHLFreightShipment(unittest.TestCase):
             print_call.kwargs["headers"]["client-key"],
             gateway.settings.client_key,
         )
+        self.assertEqual(lib.to_dict(print_call.kwargs["data"]), PrintByIdRequest)
 
     # -- parse response (book -> print => ShipmentDetails)
 
@@ -599,6 +600,12 @@ CustomsInformation = {
 PrintOptions = {
     "label": True,
     "pageOptions": {"pageType": "Label"},
+}
+
+# The by-id print payload the proxy completes with the runtime shipment id.
+PrintByIdRequest = {
+    "shipmentIds": ["TI-102-0001"],
+    "options": PrintOptions,
 }
 
 # Full AccessPoint parties as booked against the live sandbox 2026-09-10:
