@@ -13,7 +13,7 @@ strings on the wire (e.g. "102", "SPI").
 import typing
 import unittest
 from unittest.mock import patch
-from .fixture import gateway
+from .fixture import gateway, zpl_gateway
 
 import karrio.sdk as karrio
 import karrio.lib as lib
@@ -287,6 +287,55 @@ class TestDHLFreightShipment(unittest.TestCase):
 
     def test_parse_shipment_response_109(self):
         self._assert_labelled_parse(ShipmentPayload109, "TI-109-0001", 109)
+
+    # -- label type resolution (document magic prefix -> contentType -> config)
+
+    def test_parse_label_type_pdf_magic_over_zpl_config(self):
+        # The account emits PDF regardless of the connection's label type
+        # (live sandbox 2026-09-10); the decoded document magic prefix wins
+        # over both contentType and the connection config tag.
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            mock.side_effect = [BookingResponse102, PdfMagicPrintResponse]
+            details, messages = (
+                karrio.Shipment.create(models.ShipmentRequest(**ShipmentPayload102))
+                .from_(zpl_gateway)
+                .parse()
+            )
+
+        self.assertEqual(messages, [])
+        self.assertIsNotNone(details)
+        self.assertEqual(details.label_type, "PDF")
+        self.assertEqual(details.docs.label, PdfMagicBase64)
+
+    def test_parse_label_type_zpl_magic_without_content_type(self):
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            mock.side_effect = [BookingResponse102, ZplMagicPrintResponse]
+            details, messages = (
+                karrio.Shipment.create(models.ShipmentRequest(**ShipmentPayload102))
+                .from_(gateway)
+                .parse()
+            )
+
+        self.assertEqual(messages, [])
+        self.assertIsNotNone(details)
+        self.assertEqual(details.label_type, "ZPL")
+        self.assertEqual(details.docs.label, ZplMagicBase64)
+
+    def test_parse_label_type_config_last_resort(self):
+        # Without a known magic prefix or contentType, the connection's
+        # label_type tag is the last resort.
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            mock.side_effect = [BookingResponse102, PlainTextPrintResponse]
+            details, messages = (
+                karrio.Shipment.create(models.ShipmentRequest(**ShipmentPayload102))
+                .from_(zpl_gateway)
+                .parse()
+            )
+
+        self.assertEqual(messages, [])
+        self.assertIsNotNone(details)
+        self.assertEqual(details.label_type, "ZPL")
+        self.assertEqual(details.docs.label, PlainTextBase64)
 
     def _assert_labelled_parse(self, payload: dict, shipment_id: str, product: int):
         with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
@@ -754,6 +803,53 @@ PrintResponse = lib.to_json(
                 "name": "Label",
                 "content": LabelBase64,
                 "contentType": "application/pdf",
+                "type": "Label",
+                "valid": True,
+            }
+        ]
+    }
+)
+
+# Magic-prefix fixtures: content values are base64 strings in the real API
+# shape, with contentType absent or opaque so only the decoded document
+# bytes identify the format.
+PdfMagicBase64 = "JVBERi0xLjYgc2FtcGxlIGxhYmVs"  # b"%PDF-1.6 sample label"
+ZplMagicBase64 = "XlhBCl5GTzUwLDUwXkZEVEVTVF5GUwpeWFo="  # b"^XA\n^FO50,50^FDTEST^FS\n^XZ"
+PlainTextBase64 = "cGxhaW4gdGV4dCBkb2N1bWVudCBieXRlcw=="  # b"plain text document bytes"
+
+PdfMagicPrintResponse = lib.to_json(
+    {
+        "reports": [
+            {
+                "name": "Label",
+                "content": PdfMagicBase64,
+                "type": "Label",
+                "valid": True,
+            }
+        ]
+    }
+)
+
+ZplMagicPrintResponse = lib.to_json(
+    {
+        "reports": [
+            {
+                "name": "Label",
+                "content": ZplMagicBase64,
+                "type": "Label",
+                "valid": True,
+            }
+        ]
+    }
+)
+
+PlainTextPrintResponse = lib.to_json(
+    {
+        "reports": [
+            {
+                "name": "Label",
+                "content": PlainTextBase64,
+                "contentType": "application/octet-stream",
                 "type": "Label",
                 "valid": True,
             }
