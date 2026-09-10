@@ -74,10 +74,6 @@ class TestDHLFreightSwedenServicePoints(unittest.TestCase):
             self.assertListEqual(lib.to_dict(parsed), ParsedErrorResponse)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 ServicePointsParams = {
     "address": {
         "street": "Nowogrodzka",
@@ -219,3 +215,7 @@ ParsedErrorResponse = [
         }
     ],
 ]
+
+
+if __name__ == "__main__":
+    unittest.main()

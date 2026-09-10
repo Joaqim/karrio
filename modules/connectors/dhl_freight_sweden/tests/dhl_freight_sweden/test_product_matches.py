@@ -90,10 +90,6 @@ class TestDHLFreightSwedenProductMatches(unittest.TestCase):
             self.assertListEqual(lib.to_dict(parsed), ParsedErrorResponse)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 ProductMatchParams = {
     "shipper": {"postal_code": "11120", "country_code": "SE"},
     "recipient": {"postal_code": "00001", "country_code": "PL"},
@@ -381,3 +377,7 @@ ParsedErrorResponse = [
         }
     ],
 ]
+
+
+if __name__ == "__main__":
+    unittest.main()
