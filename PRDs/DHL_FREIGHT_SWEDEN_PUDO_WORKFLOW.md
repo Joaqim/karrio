@@ -249,10 +249,10 @@ Both hosts resolve through the existing `server_url`/test-mode logic; base paths
 
 | Phase | Task | Files | Status | Effort |
 |-------|------|-------|--------|--------|
-| 1 | URL properties | `karrio/providers/dhl_freight_sweden/utils.py` | Pending | S |
-| 1 | Product-match provider + guard | `karrio/providers/dhl_freight_sweden/product_matches.py`, `__init__.py` re-export | Pending | M |
-| 1 | Proxy method | `karrio/mappers/dhl_freight_sweden/proxy.py` (`find_product_matches`) | Pending | S |
-| 1 | Tests + captured fixture | `tests/dhl_freight_sweden/test_product_matches.py` | Pending | M |
+| 1 | URL properties | `karrio/providers/dhl_freight_sweden/utils.py` | Done | S |
+| 1 | Product-match provider + guard | `karrio/providers/dhl_freight_sweden/product_matches.py`, `__init__.py` re-export | Done | M |
+| 1 | Proxy method | `karrio/mappers/dhl_freight_sweden/proxy.py` (`find_product_matches`) | Done | S |
+| 1 | Tests + captured fixture | `tests/dhl_freight_sweden/test_product_matches.py` | Done | M |
 | 2 | Service-point provider + normalizer | `karrio/providers/dhl_freight_sweden/service_points.py`, `__init__.py` re-export | Pending | M |
 | 2 | `LocationType` enum + subType mapping | `karrio/providers/dhl_freight_sweden/units.py` | Pending | S |
 | 2 | Proxy method | `karrio/mappers/dhl_freight_sweden/proxy.py` (`find_service_points`) | Pending | S |
