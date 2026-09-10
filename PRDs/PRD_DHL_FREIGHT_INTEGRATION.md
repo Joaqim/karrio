@@ -3,7 +3,7 @@
 | Field | Value |
 |-------|-------|
 | Project | DHL Freight Sweden carrier connector (`dhl_freight_sweden`) |
-| Version | 1.2 |
+| Version | 1.3 |
 | Date | 2026-09-10 |
 | Status | Planning |
 | Owner | Joaqim Planstedt |
@@ -41,7 +41,7 @@ Phase 0 targets the API Farm exclusively, as documented by the vendored OpenAPI 
 1. **`shipment/create` chains book then print (approach A).**
 One proxy method books via `POST /transportinstruction/sendtransportinstruction`, captures the assigned `transportInstruction.id`, then calls the Print API and returns a merged `{ booking, print }` payload.
 This preserves Karrio's expectation that create returns a label in one step.
-The exact print operation (`POST /print/printdocumentsbyid` with `{ shipmentIds: [id] }`, or full-payload `POST /print/printdocuments`) is TBD, resolved during schema analysis.
+The print step posts `POST /print/printdocumentsbyid` with `{ shipmentIds: [id] }` (Resolved decision #15); the full-payload `POST /print/printdocuments` operation remains available as fallback knowledge.
 2. **Authentication is a single `client-key` HTTP header.**
 Every request to every API Farm service sends `client-key: <api-key>`.
 There is no token exchange, no `authenticate` step, and no token cache; the vendored specs declare an `apiKey` security scheme named `client-key`, `in: header`, on each API.
@@ -73,7 +73,7 @@ No live sandbox credentials are required; all Phase 0 tests are hermetic.
 | In scope | Out of scope |
 |----------|--------------|
 | Shipment booking (`POST /transportinstruction/sendtransportinstruction`) | Rating / price quotes (Price Quote API deferred) |
-| Label retrieval (Print API, op TBD) | Live tracking events (`TrackingRequest` to `TrackingDetails`) |
+| Label retrieval (Print API, by-id operation) | Live tracking events (`TrackingRequest` to `TrackingDetails`) |
 | `client-key` header authentication | Shipment cancellation / returns |
 | Tracking link + tracking id (URL-only, via shipment meta) | Pickup, manifest, service-point / home-delivery locator lookups |
 | `productCode` services + `payerCode` / label-layout options | Dangerous goods, temperature-controlled, ADR (later phase) |
@@ -87,7 +87,6 @@ No live sandbox credentials are required; all Phase 0 tests are hermetic.
 
 | # | Question | Context | Options | Status |
 |---|----------|---------|---------|--------|
-| 1 | Which print operation to use | Booking returns an id; the Print API offers by-id and full-payload variants. | (a) `printdocumentsbyid` with `{ shipmentIds: [id] }` — default; (b) `printdocuments` full payload | Op (a) live-verified 2026-09-10 (`label_2906723792.pdf`, ~102k base64 report content); the connector ships (b) because the generated schemas have no by-id request type |
 | 2 | Correct public tracking-URL template for DHL Freight Sweden | Tracking is URL-only; the template lives in `utils.py`. | (a) a DHL Freight Sweden portal template; (b) an `activetracing.dhl.com` variant | Confirm with DHL Freight Sweden docs |
 
 ### Resolved decisions
@@ -108,6 +107,7 @@ No live sandbox credentials are required; all Phase 0 tests are hermetic.
 | 12 | Booking-required fields | Payer code, consignor id, reference qualifier, customs procedure code mapped from sandbox-verified sources | Live 400 validation dump (product 601 and 102) plus the SE product manual v5.23 and the product API (`/productapi/v1/products/{code}`); both corrected bookings returned HTTP 200 | 2026-09-08 |
 | 13 | Customs declaration currency | Single declaration currency resolved from `duty.currency`, then the commodities' common currency; per-line gaps filled, conflicts raise a field error | A declaration with mixed per-line currencies corrupts `customsValueCurrency`/`invoiceCurrency` consistency | 2026-09-08 |
 | 14 | Service-point locator reference | Caller supplies the full service-point details via `options` (id + name + street + city + postal code + country code); the connector emits a complete `AccessPoint` party (`subType` `ParcelShop` \| `ParcelStation`); no client-side product/country gating | Live sandbox 2026-09-10: an id-only party is rejected (validationErrors 22001 "Address is mandatory for party AccessPoint" / "Name is mandatory for party AccessPoint", 22006 linehaul failure without postalCode); a full party returns HTTP 200 for 103 SE ParcelShop and 109 DK ParcelShop + ParcelStation (bookings 2906723792 / 2906723800 / 2906723826); the consignee party stays alongside the AccessPoint | 2026-09-10 |
+| 15 | Print operation | By-id: `POST /print/printdocumentsbyid` with `{ shipmentIds: [id], options: ReportOptions }` | The booking response carries the shipment id, so the by-id op prints without re-sending the shipment; live-verified 2026-09-10 (`label_2906723792.pdf`, base64 PDF `reports[].content`); the generated schemas now carry the by-id request type (`PrintRequestByIDType`); the full-payload `printdocuments` op remains available as fallback knowledge | 2026-09-10 |
 
 ### Edge cases requiring input
 
@@ -182,7 +182,7 @@ authenticating with a single client-key header against the SE API Farm.
 |----------|------|------|----------|
 | **A. Book then print, chained in `create_shipment`** | One-step create returns label; honors Karrio's contract | Two sequential API calls; must merge two responses | **Chosen** |
 | B. Book only; print deferred to a separate document call | Simpler create | Breaks "order label" in one step; consumers get no label at create time | Rejected |
-| C. Print via full-payload `/print/printdocuments` | No id round-trip dependency | Re-sends the shipment; by-id is the leaner path | Kept open as the op-TBD alternative |
+| C. Print via full-payload `/print/printdocuments` | No id round-trip dependency | Re-sends the shipment; by-id is the leaner path | Rejected (Resolved decision #15); retained as fallback knowledge |
 
 ### Trade-off analysis
 
@@ -225,8 +225,8 @@ If the print call fails after a successful booking, the booking still exists at 
                         │  client-key: <api-key>  (every request)
           ┌─────────────▼───────────────┐   ┌───────────────────────┐
           │  Transport Instruction API  │   │  Print API            │
-          │  /transportinstruction/     │   │  /print/printdocuments│
-          │   sendtransportinstruction  │──▶│   byid (op TBD)       │
+          │  /transportinstruction/     │   │  /print/              │
+          │   sendtransportinstruction  │──▶│   printdocumentsbyid  │
           │  → transportInstruction.id  │   │  → reports[].content  │
           └─────────────────────────────┘   └───────────────────────┘
    Tracking (URL-only): create stamps meta.tracking_url.format(id); no API call.
@@ -242,7 +242,7 @@ create_shipment(ShipmentRequest)
    │      (mapped Shipment: parties, pieces, payerCode, productCode)
    │   ◀─ { status, transportInstruction: { id } }        # tracking id
    │
-   ├─▶ POST /printapi/v1/print/printdocumentsbyid          (op TBD)
+   ├─▶ POST /printapi/v1/print/printdocumentsbyid
    │      { shipmentIds: [id], options: { label, pageOptions.pageType } }
    │   ◀─ { reports: [ { name, content, contentType, type, valid } ] }
    │
@@ -342,7 +342,7 @@ Service-point ids and details are sourced from the Service Point Locator API `fi
 | Endpoint (base path + operation) | Method | Auth | Purpose |
 |----------------------------------|--------|------|---------|
 | `/transportinstructionapi/v1/transportinstruction/sendtransportinstruction` | POST | `client-key` header | Create booking → tracking id |
-| `/printapi/v1/print/printdocumentsbyid` (op TBD) | POST | `client-key` header | Retrieve label bytes by id |
+| `/printapi/v1/print/printdocumentsbyid` | POST | `client-key` header | Retrieve label bytes by id |
 
 Base host resolution (in `utils.py`): `self.connection_config.server_url.state` if set, else the API Farm default — test `https://test-api.freight-logistics.dhl.com`, production `https://api.freight-logistics.dhl.com` — selected by `test_mode`.
 Each service's base path (`/transportinstructionapi/v1`, `/printapi/v1`, ...) is appended to the resolved host.
@@ -463,7 +463,7 @@ python -m unittest discover -v -f modules/connectors/dhl_freight_sweden/tests
 | Service-point party data integrity: DHL does not registry-validate the id or name at booking | A bogus or stale service point books successfully and misroutes (sandbox 2026-09-10) | Medium | Callers source ids/details from `findnearestservicepoints` (returns the full address; `getservicepointdetails` does not); the connector requires the complete party details (Resolved decision #14); production may validate more strictly |
 | Booking succeeds but print fails | Orphaned booking without label | Low | Surface error + keep booking id in `meta`; document recovery |
 | Wrong tracking-URL template | Broken tracking link | Low | Confirm template (Pending #2); single source in `utils.py` |
-| Print operation choice (`byid` vs full payload) | Rework in create flow | Low | Op (a) live-verified 2026-09-10 (Pending #1); connector ships (b) full-payload; a switch is a proxy-only change |
+| Print operation choice (`byid` vs full payload) | Rework in create flow | Low | Resolved 2026-09-10 (Resolved decision #15): the connector ships the by-id op, live-verified via `label_2906723792.pdf`; the full-payload op remains fallback knowledge |
 | Raster format (PDF/ZPL) assumption | Mismatched label type tag | Low | `label_type` tags returned bytes; provisional pending user confirmation |
 
 ---
@@ -499,7 +499,7 @@ Per-connection `connection_config.server_url` overrides the host.
 | Karrio field | DHL Freight field |
 |--------------|-------------------|
 | `tracking_number` | booking `transportInstruction.id` |
-| `docs.label` | `PrintResult.reports[].content` (label report) |
+| `docs.label` | `PrintResult.reports[].content` via `POST /print/printdocumentsbyid` (label report) |
 | `meta.tracking_url` | `tracking_url.format(transportInstruction.id)` |
 | `service` | `productCode` |
 | `options.dhl_freight_sweden_payer_code` | `payerCode.code` |
