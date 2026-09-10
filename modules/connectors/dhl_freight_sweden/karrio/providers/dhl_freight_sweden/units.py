@@ -95,10 +95,26 @@ class ShippingOption(lib.Enum):
     # Access code (int) for home-delivery doorstep delivery.
     dhl_freight_sweden_doorstep_access_code = lib.OptionEnum("doorstepDelivery", int)
 
-    # Access point / service point (products 103/109): the location id and the
-    # access-point sub type (ParcelShop | ParcelStation).
+    # Access point / service point (products 103/109): the location id, the
+    # access-point sub type (ParcelShop | ParcelStation), and the party
+    # details DHL requires on the AccessPoint party (name + address).
     dhl_freight_sweden_service_point = lib.OptionEnum("servicepoint", str)
     dhl_freight_sweden_service_point_type = lib.OptionEnum("servicepointType", str)
+    dhl_freight_sweden_service_point_name = lib.OptionEnum(
+        "servicepointName", str, meta=dict(category="PUDO")
+    )
+    dhl_freight_sweden_service_point_street = lib.OptionEnum(
+        "servicepointStreet", str, meta=dict(category="PUDO")
+    )
+    dhl_freight_sweden_service_point_city = lib.OptionEnum(
+        "servicepointCity", str, meta=dict(category="PUDO")
+    )
+    dhl_freight_sweden_service_point_postal_code = lib.OptionEnum(
+        "servicepointPostalCode", str, meta=dict(category="PUDO")
+    )
+    dhl_freight_sweden_service_point_country_code = lib.OptionEnum(
+        "servicepointCountryCode", str, meta=dict(category="PUDO")
+    )
 
     # Print page layout override (PageTypeEnum).
     dhl_freight_sweden_label_page_type = lib.OptionEnum("labelPageType", str)
