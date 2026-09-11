@@ -169,6 +169,8 @@ def shipment_request(
         # such as 402/502 must serialize as strings on the wire.
         productCode=str(service),
         shippingDate=lib.fdate(payload.options.get("shipment_date")),
+        pickupInstruction=options.dhl_freight_sweden_pickup_instruction.state,
+        deliveryInstruction=options.dhl_freight_sweden_delivery_instruction.state,
         totalNumberOfPieces=len(packages),
         totalWeight=packages.weight.KG,
         references=lib.identity(

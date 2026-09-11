@@ -115,6 +115,11 @@ class ShippingOption(lib.Enum):
     # Access code (int) for home-delivery doorstep delivery.
     dhl_freight_sweden_doorstep_access_code = lib.OptionEnum("doorstepDelivery", int)
 
+    # Driver instructions (maxLength 140 characters each per the
+    # transport-instruction spec).
+    dhl_freight_sweden_pickup_instruction = lib.OptionEnum("pickupInstruction", str)
+    dhl_freight_sweden_delivery_instruction = lib.OptionEnum("deliveryInstruction", str)
+
     # Access point / service point (products 103/109): the location id, the
     # access-point sub type (ParcelShop | ParcelStation), and the party
     # details DHL requires on the AccessPoint party (name + address).
@@ -152,6 +157,8 @@ class ShippingOption(lib.Enum):
     """ Unified Option type mapping """
     email_notification = dhl_freight_sweden_notification
     insurance = dhl_freight_sweden_insurance
+    shipper_instructions = dhl_freight_sweden_pickup_instruction
+    recipient_instructions = dhl_freight_sweden_delivery_instruction
 
 
 def shipping_options_initializer(
