@@ -3,8 +3,8 @@
 | Field | Value |
 |-------|-------|
 | Project | DHL Freight Sweden carrier connector (`dhl_freight_sweden`) |
-| Version | 1.5 |
-| Date | 2026-09-10 |
+| Version | 1.6 |
+| Date | 2026-09-11 |
 | Status | Implemented |
 | Owner | Joaqim Planstedt |
 | Type | Integration |
@@ -110,6 +110,7 @@ None — all questions are resolved (see Resolved decisions).
 | 16 | Tracking-URL template | Keep the shipped template: `https://www.dhl.com/se-en/home/tracking/tracking-freight.html?submit=1&tracking-id={id}` | DHL Freight Sweden's own tracking FAQ links its track CTAs to `/se-en/home/tracking/tracking-freight.html` (verified in the page's raw HTML); the page runs the same Shipment Tracking Unified API widget and `?submit=1&tracking-id=` convention as all five sibling DHL connectors; the FAQ's "normally 10 digits" freight number matches `transportInstruction.id`; `activetracing.dhl.com` rejected (bare form page, no documented deep-link param, myACT login-gated). Residual: the client-side widget's auto-submit was not directly observed — close by clicking one production id in a browser or confirming with se.ecom@dhl.com | 2026-09-10 |
 | 17 | Rate-sheet zone coverage for the international parcel family | Zones sourced from the Product API `toCountries` (test host, fetched 2026-09-10, `GET /productapi/v1/products/{code}`, all from SE): 109 → `Europe` zone with 24 countries (AT BE BG CZ DE DK EE ES FI FR HR HU IE IT LT LU LV NL NO PL PT RO SI SK); 112 → the same list minus FR (23); 232 → 26 countries adding CH/GB/GR and dropping HR; 107 → `Sweden` zone (`["SE"]`) | All four products are `isDomestic: false` per the catalog, so a Nordic-only zone understated the footprint (live-confirmed 2026-09-10: a SE→PL rate query offered only 202/205/233/601/SPI). The zone matches the recipient, so the reverse lane 107 (EU → SE) is gated on SE; the Nordic entries NO/DK/FI are not valid 107 recipients per the catalog. 107 keeps `domicile=True, international=True` because the universal rating mixin computes `is_domicile` as account-or-shipper country == recipient country, so a PL→SE return flow classifies as domicile and 107 surfaces through its domicile flag. The catalog's per-country `postalCodeExcludes` (e.g. DK `38*`, NO `917*`, PT `9*`) cannot be expressed in `ServiceZone` (inclusion lists only) — booking-time DHL validation stays authoritative for postal exclusions. Residual: the unified SDK interface additionally rejects any request whose shipper country differs from `account_country_code="SE"` (`SHIPPING_SDK_ORIGIN_NOT_SERVICED_ERROR`) before the mixin runs, so the return lane reaches rating only through a connection-level rate pipeline | 2026-09-10 |
 | 18 | Receiver-phone label print rule | The connector sends the consignee phone unconditionally; no client-side suppression by destination country | The manual's 109/112 forbidden/mandatory receiver-phone country lists (label section 9) are enforced by DHL's label renderer server-side — live-verified 2026-09-10: the SE→DE probe's marker phone `+49 170 7000 777` was echoed verbatim in the booking response (booking 2906724865) yet is absent from the decoded label in every digit-normalized variant, and the DK PUDO reprint (booking 2906723800) printed no consignee phone either — in both cases exactly one `Phn.` line prints, the sender's; no machine-readable form of the rule exists in any vendored spec, the product-109 catalog, or a fresh `GET /products/112`. Label section 16 "Customer information" is auto-composed from the Consignee party for PUDO shipments. No connector change required (evidence: `docs/notes/evidence/dhl-freight-sweden-phone-print-live-probe.md`) | 2026-09-10 |
+| 19 | Driver instructions | Map the SDK's universal instruction options — `shipper_instructions` → `pickupInstruction`, `recipient_instructions` → `deliveryInstruction` — with carrier-prefixed aliases; pass-through lengths with DHL validation authoritative | The transport-instruction spec carries both as optional top-level `Shipment` fields (maxLength 140 each) and the generated schema already typed them; the universal options are the fleet convention (FedEx consumer precedent, SDK category `INSTRUCTIONS`) and the initializer remaps them onto the carrier member names, so callers may use either key. Length handling follows the customs `commodityDescription` max-35 precedent (create passes through, DHL 400s on overruns) rather than client-side truncation or a guard | 2026-09-11 |
 
 ### Edge cases requiring input
 
@@ -264,6 +265,7 @@ REQUEST FLOW
     → service                → productCode
     → options.dhl_freight_sweden_payer_code   → payerCode.code (default DAP) + payer party.id = account_number
     → options.dhl_freight_sweden_label_page_type → ReportOptions.pageOptions.pageType (default Label)
+  → options.shipper_instructions / .recipient_instructions → pickupInstruction / deliveryInstruction
     → references             → references[] { qualifier, value }
 
 RESPONSE FLOW
@@ -294,6 +296,8 @@ Generated schema types (from the vendored OpenAPI 2.10.0 specs) drive all reques
 | `settings.account_number` | `parties[type=Consignor].id` | Yes | customer/agreement number |
 | `parcels[]` | `pieces[]` | Yes | weight→kg, dims→cm (per-product minimums apply, e.g. 102: L≥15/W≥11/H≥2; 601: L≥15/W≥11/H≥3), `numberOfPieces` |
 | `options.dhl_freight_sweden_label_page_type` | `pageOptions.pageType` | No | default `Label`; `Label2xPortraitA4` / `Label3xLandscapeA4` / `LabelCompact` / `LabelCompact2x2PortraitA4` |
+| `options.shipper_instructions` | `pickupInstruction` | No | alias `dhl_freight_sweden_pickup_instruction`; driver instruction for the pickup side, maxLength 140, DHL-validated (no client-side truncation) |
+| `options.recipient_instructions` | `deliveryInstruction` | No | alias `dhl_freight_sweden_delivery_instruction`; driver instruction for the delivery side, maxLength 140, DHL-validated (no client-side truncation) |
 | `reference` | `references[]{qualifier,value}` | No | qualifier `CU` (consignor reference, product manual appendix E; 3-char limit) |
 | `options.dhl_freight_sweden_service_point` | `parties[type=AccessPoint].id` | With service point | service-point id sourced from `findnearestservicepoints`; not registry-validated by DHL at booking |
 | `options.dhl_freight_sweden_service_point_type` | `parties[type=AccessPoint].subType` | No | `ParcelShop` (default) or `ParcelStation`; 109 DE allows `ParcelShop` only per the product catalog |
