@@ -159,6 +159,15 @@ class TestDHLFreightShipment(unittest.TestCase):
             [{"qualifier": "CU", "value": "ORDER-2026-042"}],
         )
 
+    def test_create_shipment_request_instructions(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayloadWithInstructions)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        self.assertEqual(serialized["pickupInstruction"], "Ring the bell on arrival")
+        self.assertEqual(serialized["deliveryInstruction"], "Leave at reception")
+
     def test_create_shipment_request_customs_currency_gap_fill(self):
         # Commodity lines without value_currency inherit the declaration
         # currency (duty currency first, else the commodities' common one).
@@ -611,6 +620,17 @@ ShipmentPayloadWithReference = {
     **_payload("dhl_freight_sweden_paket", _recipient_se),
     "reference": "ORDER-2026-042",
 }
+
+# Universal instruction options (SDK category INSTRUCTIONS) map onto the
+# transport instruction's free-text driver instructions.
+ShipmentPayloadWithInstructions = _payload(
+    "dhl_freight_sweden_paket",
+    _recipient_se,
+    {
+        "shipper_instructions": "Ring the bell on arrival",
+        "recipient_instructions": "Leave at reception",
+    },
+)
 
 # The second commodity omits value_currency and inherits the duty currency.
 _gap_currency_commodity = {
