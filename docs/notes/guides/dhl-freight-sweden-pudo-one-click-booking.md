@@ -188,9 +188,9 @@ payload = {
         "dhl_freight_sweden_service_point_city": point["address"]["city"],
         "dhl_freight_sweden_service_point_postal_code": point["address"]["postal_code"],
         "dhl_freight_sweden_service_point_country_code": point["address"]["country_code"],
-        # optional driver instructions land on the transport instruction once the
-        # driver-instructions branch merges: "shipper_instructions" /
-        # "recipient_instructions" → pickupInstruction / deliveryInstruction
+        # optional driver instructions land on the transport instruction:
+        # "shipper_instructions" / "recipient_instructions" →
+        # pickupInstruction / deliveryInstruction (max 140 characters each)
     },
     # international lanes additionally need customs (commodities, incoterm);
     # payer code resolves from dhl_freight_sweden_payer_code, else
