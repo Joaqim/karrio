@@ -7,6 +7,8 @@ acceptable service point near the recipient, and books the shipment with its lab
 The intended implementer is external workflow tooling — a Python driver running
 where the `dhl_freight_sweden` connector is importable (the repository environment
 or the deployed API container).
+A REST-only variant for drivers that cannot import the connector is described in
+"REST-only variant (no Python SDK)" below.
 No dashboard UI is involved; that is a deliberate decision (2026-09-11), and the
 UI surface (HTTP routes plus a picker) is deferred PUDO-PRD alternative B.
 
@@ -226,6 +228,152 @@ Keep the candidate list from step 2 and retry step 3 with the next acceptable
 point on AccessPoint-related validation errors; booking itself is not idempotent,
 so only retry when no booking id was returned.
 
+## REST-only variant (no Python SDK)
+
+The workflow above requires a Python runtime with the connector importable.
+A driver in any language can run the same one-click flow by splitting it into
+two halves: the lookups go directly to the DHL API Farm, because karrio
+exposes no REST surface for them (the deferred PUDO-PRD alternative B), and
+the booking, tracking, and void legs ride the karrio REST proxy endpoints.
+
+```
+  driver (any language, HTTP only)
+        │
+        │ A. POST {dhl-host}/productapi/v1/productmatches
+        │ B. POST {dhl-host}/servicepointlocatorapi/v1/servicepoint/findnearestservicepoints
+        │    header: client-key: <DHL client key>
+        │    → driver parses the raw DHL body, applies the acceptance policy itself
+        ▼
+  karrio REST (Authorization: Token <api token>)
+        │ 1. POST /v1/proxy/rates            required: REST booking is rate-first
+        │ 2. POST /v1/proxy/shipping         selected_rate_id + the six options
+        │    → tracking_number, docs.label, meta.carrier_tracking_link
+        │ 3. GET  /v1/proxy/tracking/dhl_freight_sweden/{tracking_number}
+        │ 4. POST /v1/proxy/shipping/dhl_freight_sweden/cancel
+        ▼
+  fallback loop: identical candidate-retry semantics
+```
+
+### Lookups — direct DHL calls
+
+The hosts are `https://test-api.freight-logistics.dhl.com` (test mode) and
+`https://api.freight-logistics.dhl.com` (production); the connector's
+per-connection `server_url` config plays no role here, so the driver picks its
+own host.
+Every call carries the API Farm `client-key` header.
+Karrio never returns stored connection credentials over REST, so the client key
+must reach the driver through a separate secret channel.
+
+The product matches body is the `MatchCriteria` shape that
+`product_matches_request` builds:
+
+```json
+{
+  "parties": [
+    {"type": "Consignor", "address": {"countryCode": "SE", "postalCode": "11120"}},
+    {"type": "Consignee", "address": {"countryCode": "PL", "postalCode": "00-251"}}
+  ],
+  "pieces": [{"weight": 2.5, "length": 40, "width": 30, "height": 15}]
+}
+```
+
+Both parties are required (a prose-only rule in the API's 200 description; the
+connector enforces it client-side, a raw driver must enforce its own).
+A 200 body is a list of `ProductMatchResult` entries; the driver keeps entries
+whose `product.code` is in the service-point set and reads delivery-type
+eligibility off `product.rulesForCountryAndDeliveryTypes` as in step 1.
+
+The service points body is the `NearestServicePointRequest` shape:
+
+```json
+{
+  "address": {
+    "street": "Nowogrodzka", "cityName": "Warszawa",
+    "postalCode": "00-251", "countryCode": "PL"
+  },
+  "maxNumberOfItems": 5,
+  "locationTypes": ["servicepoint", "locker"],
+  "distance": 2, "distanceUnit": "km",
+  "piece": {"weight": 2.5, "length": 40, "width": 30, "height": 15}
+}
+```
+
+The 200 body carries `servicePoints` plus in-band `status`/`errorMessage`.
+The driver performs the normalization the connector would have done: prefer
+`servicePointId` over `id` (a point-type code in some countries), map
+`locationType` `locker` to `ParcelStation` and every other type to
+`ParcelShop`, and enforce the four-field address completeness check from the
+acceptance policy.
+Identifier semantics with captured examples live in
+`docs/notes/evidence/dhl-freight-sweden-pudo-lookups-live-capture.md`.
+
+### Booking — karrio REST, rate-first
+
+The REST booking endpoint resolves the org connection from the selected rate,
+so the rates call is mandatory where the SDK path treats it as optional:
+
+```bash
+curl -X POST "$KARRIO/v1/proxy/rates" \
+  -H "Authorization: Token $KARRIO_TOKEN" -H "Content-Type: application/json" \
+  -d @- <<'JSON'
+{
+  "shipper": {"postal_code": "11120", "country_code": "SE"},
+  "recipient": {"postal_code": "00-251", "country_code": "PL"},
+  "parcels": [{"weight": 2.5, "length": 40, "width": 30, "height": 15}],
+  "services": ["dhl_freight_sweden_parcel_connect_b2c"]
+}
+JSON
+
+curl -X POST "$KARRIO/v1/proxy/shipping" \
+  -H "Authorization: Token $KARRIO_TOKEN" -H "Content-Type: application/json" \
+  -d @- <<'JSON'
+{
+  "shipper": {"postal_code": "11120", "country_code": "SE"},
+  "recipient": {"postal_code": "00-251", "country_code": "PL"},
+  "parcels": [{"weight": 2.5, "length": 40, "width": 30, "height": 15}],
+  "selected_rate_id": "<id from the rates response>",
+  "options": {
+    "dhl_freight_sweden_service_point": "8005-PL-4516440",
+    "dhl_freight_sweden_service_point_type": "ParcelShop",
+    "dhl_freight_sweden_service_point_name": "...",
+    "dhl_freight_sweden_service_point_street": "...",
+    "dhl_freight_sweden_service_point_city": "...",
+    "dhl_freight_sweden_service_point_postal_code": "...",
+    "dhl_freight_sweden_service_point_country_code": "..."
+  }
+}
+JSON
+```
+
+Booking-leg specifics:
+
+- The `services` filter in the rates call takes karrio service codes
+  (`dhl_freight_sweden_parcel_connect_b2c`), not carrier codes — the rating
+  mixin matches karrio `service_code`s only.
+- The proxy view requires `person_name` and `address_line1` on both addresses,
+  stricter than the base request model.
+- The response carries `tracking_number` (the transport instruction id),
+  `docs.label` (base64 PDF), and `meta.carrier_tracking_link`.
+- `POST /api/v1/shipments` accepts the same payload when persistent shipment
+  records are wanted (see step 3).
+- Void is `POST /v1/proxy/shipping/dhl_freight_sweden/cancel` with
+  `{"shipment_identifier": "<tracking number>"}`.
+
+Trade-offs versus the SDK path:
+
+| Aspect | SDK path | REST-only path |
+|---|---|---|
+| Lookup normalization | connector-maintained | driver reimplements; connector changes stop propagating |
+| DHL credentials | connection settings | separate secret channel, driver-managed host choice |
+| Rates step | optional (step 1 recommended) | mandatory; connection resolved from `selected_rate_id` |
+| Service identifier | carrier code or enum key at booking | enum key in the rates `services` filter |
+| Origin gate | lookups bypass it; booking gated | same, and the mandatory rates call is itself gated |
+| Error semantics | Messages from `parse()` | the same DHL validation errors as REST error payloads |
+
+The error table above and the fallback loop apply unchanged: on
+AccessPoint-related DHL validation errors, reject the candidate and retry the
+booking leg with the next acceptable point.
+
 ## Operational notes
 
 - The locator and product matches are live carrier calls; cache per address pair
@@ -243,6 +391,8 @@ so only retry when no booking id was returned.
   (`tests/dhl_freight_sweden/test_product_matches.py`,
   `test_service_points.py`, `test_shipment.py`); run
   `python -m unittest discover -v -f modules/connectors/dhl_freight_sweden/tests`.
+  The REST-only variant has no hermetic coverage; its lookup bodies and
+  normalization duties are specified against the same fixtures and evidence.
 - Live smoke: point the driver at the sandbox, run one address pair end to end,
   decode the returned label, and record the transcript as evidence; do not loop
   bookings.
