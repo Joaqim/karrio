@@ -22,7 +22,7 @@ let
       ps.pillow
       ps.phonenumbers
       ps.python-barcode
-      ps.pypdf2
+      ps.pypdf
       ps.toml
       ps.loguru
       # CLI (modules/cli)
