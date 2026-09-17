@@ -145,6 +145,7 @@ result = karrio.Address.validate(
 - [ ] Pre-flight matrix tests passing in `test_shipment.py`
 - [ ] `test_services.py` drift guard extended and settled (capabilities assertion reflects actual `get_carrier_capabilities()` output)
 - [ ] Existing connector tests unchanged and green (default `off` path)
+- [x] References payload regression test passing (`address_validation` classified as string enum; `test_references.py`)
 
 **Nice-to-have (P1):**
 
@@ -347,7 +348,8 @@ Errors (HTTP 400): `ErrorResult {status: int, errorCode: int, userMessage: str}`
 
 Karrio surface: none added manually.
 Implementing the protocol method auto-registers `validate_address` in proxy methods, which opens the server's existing `Address.validate` route (406 gate at `modules/core/karrio/server/core/gateway.py:253`).
-The dashboard connection dialog renders the new `address_validation` enum option as a Select automatically from `/v1/references`.
+The dashboard connection dialog renders the `address_validation` enum option as a Select automatically from `/v1/references`.
+Two conditions must hold: the option must classify as a string enum — `parse_type` in `karrio.references` classifies any enum class whose name contains "Address" as the Address model type, which the dialog's config renderer drops (hence `ServabilityMode`, locked in by a references-payload regression test) — and the server must have rebuilt its boot-cached reference models since the connector version shipped (API restart; constance `DHL_FREIGHT_SWEDEN_ENABLED` gates inclusion).
 
 DHL surface consumed (one endpoint of seven; full list in Appendix A):
 
@@ -376,6 +378,7 @@ Hosts: `postal_code_api_url = {server_url}/postalcodeapi/v1` where `server_url` 
 | Unscoped unified call | `success = bookable` | D5 |
 | `options.service` accepts karrio service code or `"118"` | Resolve via `ShippingService.map(...).value_or_key` | Same resolution as `create.py:118` |
 | Non-SE country in unified call | Surface DHL `ErrorResult` as `Message` (API is SE-oriented) | No connector-side country guard on the unified path |
+| Config value casing or unrecognized mode value | Resolve case-insensitively; values naming no mode resolve to `off` (no check) | `proxy._destination_route_messages` mode resolution |
 
 ### Failure Modes
 
@@ -384,6 +387,7 @@ Hosts: `postal_code_api_url = {server_url}/postalcodeapi/v1` where `server_url` 
 | PostalCodes API outage under `enforce` | Bookings would fail | Fail-open by design (warn + proceed) |
 | `mapper.py` regeneration conflicts | Broken fluent wiring | Verify generation mechanism first; wire through the generator if mapper.py is generated, hand-edit only if repo practice shows it is hand-maintained |
 | Capabilities drift-guard failure | `test_services.py` assertion breaks | Settle the contradictory research claims empirically (`get_carrier_capabilities()` run) and assert the actual result |
+| Stale references payload after deploy | Dashboard shows no `address_validation` option | Restart the API (reference models are built at import and cached) and verify `/v1/references` lists the option with `type: "string"` |
 | Undocumented prod base path | 404s in production | Follow sibling convention; verify with one live route GET against prod when credentials allow |
 | Warn-mode message plumbing breaks existing parse | Existing shipment tests fail | Optional third `Deserializable` element only appended when a warning exists; default `off` path byte-identical |
 

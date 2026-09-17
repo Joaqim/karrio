@@ -422,6 +422,17 @@ a verdict (network error, timeout, 5xx) warns and proceeds in both modes, so a
 PostalCodes API outage cannot take down bookings.
 Roll per connection with no redeploy: set the config, then flip `off` → `warn`
 → `enforce` as trust builds.
+Mode values resolve case-insensitively; a stored value that names no mode
+resolves to `off`, so a bad value never silently enables the check.
+
+The option appears in the dashboard's Connection configuration only when the
+server's references are fresh: reference models are built at API boot and
+cached, so a deployment shipping a new connector version needs an API restart
+before the dropdown shows, and the constance `DHL_FREIGHT_SWEDEN_ENABLED`
+flag must be set.
+Verify with `GET /v1/references` —
+`connection_configs.dhl_freight_sweden.address_validation` must read
+`type: "string"` with `enum: ["off", "warn", "enforce"]`.
 
 Route facts above were live-verified against the sandbox on 2026-09-17; the
 captured bodies (Stockholm 11120 and Göteborg 41103 servable, Kiruna 98138
