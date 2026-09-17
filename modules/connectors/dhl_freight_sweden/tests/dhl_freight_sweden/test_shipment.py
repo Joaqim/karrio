@@ -13,11 +13,19 @@ strings on the wire (e.g. "102", "SPI").
 import typing
 import unittest
 from unittest.mock import patch
-from .fixture import gateway, zpl_gateway
+from .fixture import (
+    gateway,
+    warn_gateway,
+    warn_case_gateway,
+    enforce_gateway,
+    unrecognized_gateway,
+    zpl_gateway,
+)
 
 import karrio.sdk as karrio
 import karrio.lib as lib
 import karrio.core.models as models
+from karrio.providers.dhl_freight_sweden.address import PostalCodeNotServableError
 
 
 class TestDHLFreightShipment(unittest.TestCase):
@@ -398,6 +406,185 @@ class TestDHLFreightShipment(unittest.TestCase):
 
         self.assertListEqual(lib.to_dict(parsed_response), ParsedErrorResponse)
 
+    def _called_urls(self, mock) -> typing.List[str]:
+        return [call.kwargs["url"] for call in mock.call_args_list]
+
+    def test_preflight_off_makes_no_route_call(self):
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            mock.side_effect = [BookingResponse118, PrintResponse]
+            details, messages = (
+                karrio.Shipment.create(models.ShipmentRequest(**ShipmentPayload118))
+                .from_(gateway)
+                .parse()
+            )
+
+        self.assertEqual(messages, [])
+        self.assertEqual(details.tracking_number, "TI-118-0001")
+        self.assertEqual(
+            self._called_urls(mock),
+            [
+                f"{gateway.settings.transport_instruction_url}"
+                "/transportinstruction/sendtransportinstruction",
+                f"{gateway.settings.print_url}/print/printdocumentsbyid",
+            ],
+        )
+
+    def test_preflight_case_insensitive_mode_resolves(self):
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            mock.side_effect = [RouteResponseGoteborg, BookingResponse118, PrintResponse]
+            details, messages = (
+                karrio.Shipment.create(models.ShipmentRequest(**ShipmentPayload118))
+                .from_(warn_case_gateway)
+                .parse()
+            )
+
+        self.assertEqual(messages, [])
+        self.assertEqual(details.tracking_number, "TI-118-0001")
+        self.assertTrue(
+            self._called_urls(mock)[0].endswith("/postalcodes/SE/41103/route")
+        )
+
+    def test_preflight_unrecognized_mode_skips_check(self):
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            mock.side_effect = [BookingResponse118, PrintResponse]
+            details, messages = (
+                karrio.Shipment.create(models.ShipmentRequest(**ShipmentPayload118))
+                .from_(unrecognized_gateway)
+                .parse()
+            )
+
+        self.assertEqual(messages, [])
+        self.assertEqual(details.tracking_number, "TI-118-0001")
+        self.assertEqual(
+            self._called_urls(mock),
+            [
+                f"{gateway.settings.transport_instruction_url}"
+                "/transportinstruction/sendtransportinstruction",
+                f"{gateway.settings.print_url}/print/printdocumentsbyid",
+            ],
+        )
+
+    def test_preflight_warn_servable_books_without_messages(self):
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            mock.side_effect = [RouteResponseGoteborg, BookingResponse118, PrintResponse]
+            details, messages = (
+                karrio.Shipment.create(models.ShipmentRequest(**ShipmentPayload118))
+                .from_(warn_gateway)
+                .parse()
+            )
+
+        self.assertEqual(messages, [])
+        self.assertEqual(details.tracking_number, "TI-118-0001")
+        self.assertTrue(
+            self._called_urls(mock)[0].endswith("/postalcodes/SE/41103/route")
+        )
+
+    def test_preflight_warn_not_servable_books_with_warning(self):
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            mock.side_effect = [RouteResponseKiruna, BookingResponse118, PrintResponse]
+            details, messages = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(**ShipmentPayload118Kiruna)
+                )
+                .from_(warn_gateway)
+                .parse()
+            )
+
+        self.assertIsNotNone(details)
+        self.assertEqual(details.tracking_number, "TI-118-0001")
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0].code, "postal_code_not_servable")
+        self.assertEqual(
+            messages[0].details, dict(postal_code="98138", product="118")
+        )
+        self.assertIn("98138", messages[0].message)
+
+    def test_preflight_enforce_not_servable_blocks_booking(self):
+        request = enforce_gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload118Kiruna)
+        )
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            mock.return_value = RouteResponseKiruna
+            with self.assertRaises(PostalCodeNotServableError) as context:
+                enforce_gateway.proxy.create_shipment(request)
+
+        self.assertEqual(context.exception.code, "SHIPPING_SDK_FIELD_ERROR")
+        self.assertIn("98138", str(context.exception))
+        urls = self._called_urls(mock)
+        self.assertEqual(len(urls), 1)
+        self.assertTrue(urls[0].endswith("/postalcodes/SE/98138/route"))
+
+    def test_preflight_enforce_invalid_code_blocks_booking(self):
+        request = enforce_gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload118Invalid)
+        )
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            mock.return_value = RouteLookupInvalidCode
+            with self.assertRaises(PostalCodeNotServableError) as context:
+                enforce_gateway.proxy.create_shipment(request)
+
+        self.assertIn("99999", str(context.exception))
+        urls = self._called_urls(mock)
+        self.assertEqual(len(urls), 1)
+        self.assertTrue(urls[0].endswith("/postalcodes/SE/99999/route"))
+
+    def test_preflight_enforce_outage_fails_open(self):
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            mock.side_effect = [
+                ConnectionError("route API unreachable"),
+                BookingResponse118,
+                PrintResponse,
+            ]
+            details, messages = (
+                karrio.Shipment.create(models.ShipmentRequest(**ShipmentPayload118))
+                .from_(enforce_gateway)
+                .parse()
+            )
+
+        self.assertIsNotNone(details)
+        self.assertEqual(details.tracking_number, "TI-118-0001")
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0].code, "address_validation_unavailable")
+
+    def test_preflight_enforce_unavailable_api_fails_open(self):
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            mock.side_effect = [RouteApiUnavailable, BookingResponse118, PrintResponse]
+            details, messages = (
+                karrio.Shipment.create(models.ShipmentRequest(**ShipmentPayload118))
+                .from_(enforce_gateway)
+                .parse()
+            )
+
+        self.assertIsNotNone(details)
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0].code, "address_validation_unavailable")
+
+    def test_preflight_enforce_non_118_service_skips_check(self):
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            mock.side_effect = [BookingResponse102, PrintResponse]
+            details, messages = (
+                karrio.Shipment.create(models.ShipmentRequest(**ShipmentPayload102))
+                .from_(enforce_gateway)
+                .parse()
+            )
+
+        self.assertEqual(messages, [])
+        self.assertEqual(details.tracking_number, "TI-102-0001")
+        self.assertEqual(len(self._called_urls(mock)), 2)
+
+    def test_preflight_enforce_non_se_consignee_skips_check(self):
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            mock.side_effect = [BookingResponse118, PrintResponse]
+            details, messages = (
+                karrio.Shipment.create(models.ShipmentRequest(**ShipmentPayload118De))
+                .from_(enforce_gateway)
+                .parse()
+            )
+
+        self.assertEqual(messages, [])
+        self.assertEqual(details.tracking_number, "TI-118-0001")
+        self.assertEqual(len(self._called_urls(mock)), 2)
+
 
 if __name__ == "__main__":
     unittest.main()
@@ -482,6 +669,19 @@ _recipient_dk = {
     "country_code": "DK",
 }
 
+# Pre-flight trigger scope: product 118 (the only product with a documented
+# per-product route flag) to Swedish consignees with a postal code.
+_recipient_kiruna = {
+    **_recipient_se,
+    "city": "Kiruna",
+    "postal_code": "98138",
+}
+
+_recipient_invalid_postal = {
+    **_recipient_se,
+    "postal_code": "99999",
+}
+
 _parcel = {
     "weight": 5.0,
     "width": 20.0,
@@ -505,6 +705,18 @@ def _payload(service: str, recipient: dict, options: typing.Optional[dict] = Non
 
 # Domestic (Sweden)
 ShipmentPayload102 = _payload("dhl_freight_sweden_paket", _recipient_se)
+ShipmentPayload118 = _payload(
+    "dhl_freight_sweden_hemleverans_paket_b2c", _recipient_se
+)
+ShipmentPayload118Kiruna = _payload(
+    "dhl_freight_sweden_hemleverans_paket_b2c", _recipient_kiruna
+)
+ShipmentPayload118Invalid = _payload(
+    "dhl_freight_sweden_hemleverans_paket_b2c", _recipient_invalid_postal
+)
+ShipmentPayload118De = _payload(
+    "dhl_freight_sweden_hemleverans_paket_b2c", _recipient_de
+)
 ShipmentPayload401 = _payload(
     "dhl_freight_sweden_home_delivery_b2c",
     _recipient_se,
@@ -835,6 +1047,51 @@ ShipmentRequest232 = {
 
 BookingResponse102 = _booking("TI-102-0001", 102)
 BookingResponse232 = _booking("TI-232-0001", 232)
+BookingResponse118 = _booking("TI-118-0001", 118)
+
+# Route fixtures captured live from the sandbox PostalCodes API on
+# 2026-09-17 (GET /postalcodes/SE/{pc}/route); values are verbatim.
+# Göteborg 41103 is servable for product 118; Kiruna 98138 is generally
+# bookable without home delivery (homeDeliveryParcel false).
+RouteResponseGoteborg = """{
+  "countryCode": "SE",
+  "postalCode": "41103",
+  "city": "GÖTEBORG",
+  "lineHaul": "400",
+  "terminalId": "2210",
+  "deviating": "0",
+  "updatedDate": "1999-11-29T00:00:00",
+  "bookable": true,
+  "homeDeliveryParcel": true
+}"""
+
+RouteResponseKiruna = """{
+  "countryCode": "SE",
+  "postalCode": "98138",
+  "city": "KIRUNA",
+  "lineHaul": "950",
+  "terminalId": "4850",
+  "deviating": "0",
+  "updatedDate": "2026-07-02T22:00:03",
+  "bookable": true,
+  "homeDeliveryParcel": false
+}"""
+
+# The 400 body captured for postal code 99999, in the form
+# ``lib.error_decoder`` hands to the caller: the live wire body plus the
+# HTTP metadata the decoder adds (the mocked ``lib.request`` stands in for
+# the whole request-and-decode step).
+RouteLookupInvalidCode = dict(
+    Status=400,
+    ErrorCode=16010,
+    UserMessage="Post code '99999' not found.",
+    http_status=400,
+    http_message="Bad Request",
+)
+
+# A 5xx body with the decoder's metadata is an infrastructure failure
+# rather than a definitive rejection, so bookings fail open.
+RouteApiUnavailable = dict(http_status=503, http_message="Service Unavailable")
 
 PrintResponse = lib.to_json(
     {

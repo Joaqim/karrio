@@ -9,7 +9,8 @@ guard the zone invariants the rating mixin depends on.
 import unittest
 
 from karrio.providers.dhl_freight_sweden import units
-from karrio.references import get_carrier_capabilities
+from karrio.mappers.dhl_freight_sweden.proxy import Proxy
+from karrio.references import detect_proxy_methods, get_carrier_capabilities
 
 
 class TestDHLFreightServiceLevels(unittest.TestCase):
@@ -122,11 +123,16 @@ class TestDHLFreightServiceLevels(unittest.TestCase):
     def test_capabilities_unchanged_by_lookup_methods(self):
         # The connector-local lookups are duck-typed proxy methods: they must
         # not register capabilities (the server derives connection
-        # capabilities from this same detection path).
+        # capabilities from this same detection path). ``validate_address``
+        # maps onto the existing "shipping" capability (units.map_capability
+        # routes any *address* method there), so the set is stable.
         self.assertEqual(
             set(get_carrier_capabilities("dhl_freight_sweden")),
             {"shipping", "rating"},
         )
+
+    def test_validate_address_registered_on_proxy(self):
+        self.assertIn("validate_address", detect_proxy_methods(Proxy))
 
 
 # Catalog mirrors (deliberately not imported from ``units`` so a typo in
