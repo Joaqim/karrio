@@ -13,7 +13,14 @@ strings on the wire (e.g. "102", "SPI").
 import typing
 import unittest
 from unittest.mock import patch
-from .fixture import gateway, warn_gateway, enforce_gateway, zpl_gateway
+from .fixture import (
+    gateway,
+    warn_gateway,
+    warn_case_gateway,
+    enforce_gateway,
+    unrecognized_gateway,
+    zpl_gateway,
+)
 
 import karrio.sdk as karrio
 import karrio.lib as lib
@@ -420,6 +427,41 @@ class TestDHLFreightShipment(unittest.TestCase):
             details, messages = (
                 karrio.Shipment.create(models.ShipmentRequest(**ShipmentPayload118))
                 .from_(gateway)
+                .parse()
+            )
+
+        self.assertEqual(messages, [])
+        self.assertEqual(details.tracking_number, "TI-118-0001")
+        self.assertEqual(
+            self._called_urls(mock),
+            [
+                f"{gateway.settings.transport_instruction_url}"
+                "/transportinstruction/sendtransportinstruction",
+                f"{gateway.settings.print_url}/print/printdocumentsbyid",
+            ],
+        )
+
+    def test_preflight_case_insensitive_mode_resolves(self):
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            mock.side_effect = [RouteResponseGoteborg, BookingResponse118, PrintResponse]
+            details, messages = (
+                karrio.Shipment.create(models.ShipmentRequest(**ShipmentPayload118))
+                .from_(warn_case_gateway)
+                .parse()
+            )
+
+        self.assertEqual(messages, [])
+        self.assertEqual(details.tracking_number, "TI-118-0001")
+        self.assertTrue(
+            self._called_urls(mock)[0].endswith("/postalcodes/SE/41103/route")
+        )
+
+    def test_preflight_unrecognized_mode_skips_check(self):
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            mock.side_effect = [BookingResponse118, PrintResponse]
+            details, messages = (
+                karrio.Shipment.create(models.ShipmentRequest(**ShipmentPayload118))
+                .from_(unrecognized_gateway)
                 .parse()
             )
 

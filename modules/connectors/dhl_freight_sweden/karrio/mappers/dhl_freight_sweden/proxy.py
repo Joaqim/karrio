@@ -111,7 +111,14 @@ class Proxy(proxy.Proxy):
         call; the mode branch and fail-open semantics live in the provider's
         ``check_booking_route``.
         """
-        mode = self.settings.connection_config.address_validation.state or "off"
+        # Config values are stored free-form: resolve case-insensitively and
+        # treat anything that names no mode as off, so an unrecognized value
+        # never silently enables the check.
+        mode = str(
+            self.settings.connection_config.address_validation.state or ""
+        ).lower()
+        if mode not in ("warn", "enforce"):
+            mode = "off"
         destination = _booking_destination(lib.to_dict(request.serialize()))
 
         if mode == "off" or destination is None:

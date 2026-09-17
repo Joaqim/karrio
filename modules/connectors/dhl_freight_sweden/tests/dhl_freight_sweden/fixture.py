@@ -24,5 +24,8 @@ zpl_gateway = _gateway({"label_type": "ZPL"})
 
 # Booking pre-flight mode variants: the address_validation config gates the
 # create_shipment route check only, never the unified validate_address.
+# Mode values resolve case-insensitively; values naming no mode resolve to off.
 warn_gateway = _gateway({"address_validation": "warn"})
 enforce_gateway = _gateway({"address_validation": "enforce"})
+warn_case_gateway = _gateway({"address_validation": "Warn"})
+unrecognized_gateway = _gateway({"address_validation": "strict"})
