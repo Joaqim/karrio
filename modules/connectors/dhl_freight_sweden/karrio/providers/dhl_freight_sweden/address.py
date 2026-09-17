@@ -9,6 +9,7 @@ method and the booking pre-flight share this evaluation.
 import typing
 import karrio.lib as lib
 import karrio.core.models as models
+import karrio.core.errors as errors
 import karrio.providers.dhl_freight_sweden.error as error
 import karrio.providers.dhl_freight_sweden.utils as provider_utils
 import karrio.providers.dhl_freight_sweden.units as provider_units
@@ -19,10 +20,93 @@ import karrio.providers.dhl_freight_sweden.units as provider_units
 PRODUCT_SERVICABILITY_FLAGS = {"118": "homeDeliveryParcel"}
 
 
+class PostalCodeNotServableError(errors.ShippingSDKDetailedError):
+    """Raised when the destination postal code is not servable for the product."""
+
+    code = "SHIPPING_SDK_FIELD_ERROR"
+
+
 def evaluate_route(route: dict, product: str = None) -> bool:
     """Return the servability of a product on a postal-code route response."""
     flag = PRODUCT_SERVICABILITY_FLAGS.get(product or "")
     return bool(route.get(flag or "bookable"))
+
+
+def check_booking_route(
+    response: typing.Optional[lib.Deserializable[dict]],
+    settings: provider_utils.Settings,
+    mode: str,
+) -> typing.List[models.Message]:
+    """Apply the booking pre-flight verdict to a route lookup.
+
+    ``warn`` returns the verdict as shipment messages; ``enforce`` raises
+    ``PostalCodeNotServableError`` on a definitive negative (an unservable
+    product flag or a DHL 4xx error body) so the transport instruction is
+    never sent. A lookup that could not produce a verdict — no response, a
+    5xx, or an unrecognized body — yields a warning in both modes, so an
+    API outage cannot block bookable shipments.
+    """
+    route = lib.identity(response.deserialize() if response else {})
+    product = str((response.ctx.get("service") if response else None) or "")
+
+    if _is_route(route):
+        if evaluate_route(route, product):
+            return []
+        messages = [_servability_warning(route, product, settings)]
+    else:
+        messages = error.parse_error_response(route, settings) or [
+            _unverified_warning(settings)
+        ]
+        if not _is_rejection(route):
+            return messages
+
+    if mode == provider_units.AddressValidationMode.enforce:
+        raise PostalCodeNotServableError(
+            messages[0].message,
+            details={
+                "recipient.postal_code": dict(
+                    code="not_servable", message=messages[0].message
+                )
+            },
+        )
+
+    return messages
+
+
+def _is_rejection(route: dict) -> bool:
+    # ``lib.error_decoder`` enriches error bodies with the HTTP status; only
+    # a 4xx from the postalcodeapi is a definitive negative.
+    status = route.get("http_status")
+    return isinstance(status, int) and 400 <= status < 500
+
+
+def _servability_warning(
+    route: dict, product: str, settings: provider_utils.Settings
+) -> models.Message:
+    flag = PRODUCT_SERVICABILITY_FLAGS.get(product) or "bookable"
+
+    return models.Message(
+        carrier_name=settings.carrier_name,
+        carrier_id=settings.carrier_id,
+        code="postal_code_not_servable",
+        message=(
+            f"Destination postal code {route.get('postalCode')} is not "
+            f"servable for product {product} ({flag} is false)"
+        ),
+        details=dict(postal_code=route.get("postalCode"), product=product),
+    )
+
+
+def _unverified_warning(settings: provider_utils.Settings) -> models.Message:
+    return models.Message(
+        carrier_name=settings.carrier_name,
+        carrier_id=settings.carrier_id,
+        code="address_validation_unavailable",
+        message=(
+            "Destination servability could not be verified (address "
+            "validation API error); the booking proceeded without the check"
+        ),
+    )
 
 
 def address_validation_request(

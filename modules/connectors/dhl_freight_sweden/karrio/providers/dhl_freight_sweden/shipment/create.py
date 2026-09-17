@@ -31,8 +31,13 @@ def parse_shipment_response(
     _response: lib.Deserializable[typing.List[dict]],
     settings: provider_utils.Settings,
 ) -> typing.Tuple[models.ShipmentDetails, typing.List[models.Message]]:
-    booking, printed = _response.deserialize()
-    messages = error.parse_error_response([booking, printed], settings)
+    # The proxy appends address-validation warning messages as optional
+    # trailing elements after the booking and print bodies.
+    booking, printed, *warnings = _response.deserialize()
+    messages = [
+        *error.parse_error_response([booking, printed], settings),
+        *(lib.to_object(models.Message, warning) for warning in warnings),
+    ]
 
     instruction = (booking or {}).get("transportInstruction") or {}
     details = lib.identity(
