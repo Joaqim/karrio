@@ -177,7 +177,7 @@ The linehaul/terminal routing internals that B would expose are label-rendering 
 | Official validate_address protocol (proxy slot, mapper pair) | `modules/sdk/karrio/api/proxy.py:160-174`, `modules/sdk/karrio/api/mapper.py:18-35,281-297` | Implement the overridable defaults; no SDK changes |
 | Protocol trio precedent | `modules/connectors/dhl_express/.../{proxy.py:18,mapper.py:14,50}`, `.../dhl_express/address.py`; mydhl `proxy.py:134-149` (JSON GET analog) | Copy the structure: mapper delegates, provider builds/parses, proxy GETs |
 | Unified models | `modules/sdk/karrio/core/models.py:237-242` (`AddressValidationRequest` with `options`), `:337-344` (`AddressValidationDetails`) | Use as-is; `options.service` carries product scoping |
-| Connection config enums | `dhl_express units.py:288-293` (`label_type` enum option), postnord `units.py:68` (bool gate) | New `AddressValidationMode` enum option in this connector's `ConnectionConfig` |
+| Connection config enums | `dhl_express units.py:288-293` (`label_type` enum option), postnord `units.py:68` (bool gate) | New `ServabilityMode` enum option in this connector's `ConnectionConfig` |
 | URL properties | `providers/.../utils.py:28-42` (four sibling URL properties off `server_url`) | Add `postal_code_api_url = {server_url}/postalcodeapi/v1` |
 | Duck-typed lookup + inline HTTP pattern | `mappers/.../proxy.py:79-125` (`lib.request`, `client-key` header, `on_error=lib.error_decoder`) | Same call shape for route GET and pre-flight |
 | Client-side guard errors | `product_matches.py:19-22` (`ProductMatchPartiesError`, `SHIPPING_SDK_FIELD_ERROR`) | Same pattern for `PostalCodeNotServableError` |
@@ -287,7 +287,10 @@ Caller        mapper               proxy                  DHL API
 
 ```python
 # providers/.../units.py — validation mode + connection config
-class AddressValidationMode(lib.StrEnum):
+# (named ServabilityMode, not AddressValidationMode: a class name containing
+# "Address" makes the references parse_type heuristic classify the option as
+# the Address model type, which the dashboard config renderer drops)
+class ServabilityMode(lib.StrEnum):
     off = "off"
     warn = "warn"
     enforce = "enforce"
@@ -295,7 +298,7 @@ class AddressValidationMode(lib.StrEnum):
 class ConnectionConfig(lib.Enum):
     # ... existing entries ...
     address_validation = lib.OptionEnum(
-        "address_validation", AddressValidationMode, "off"
+        "address_validation", ServabilityMode, "off"
     )
 
 # providers/.../address.py — shared evaluation
@@ -392,7 +395,7 @@ Hosts: `postal_code_api_url = {server_url}/postalcodeapi/v1` where `server_url` 
 
 | Task | Files | Status | Effort |
 |------|-------|--------|--------|
-| `AddressValidationMode` enum + `ConnectionConfig.address_validation` option | `providers/.../units.py` | Pending | S |
+| `ServabilityMode` enum + `ConnectionConfig.address_validation` option | `providers/.../units.py` | Pending | S |
 | `postal_code_api_url` property | `providers/.../utils.py` | Pending | S |
 | `ErrorResult` shape remap | `providers/.../error.py` | Pending | S |
 

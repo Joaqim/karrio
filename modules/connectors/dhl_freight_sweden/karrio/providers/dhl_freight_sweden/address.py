@@ -60,7 +60,7 @@ def check_booking_route(
         if not _is_rejection(route):
             return messages
 
-    if mode == provider_units.AddressValidationMode.enforce:
+    if mode == provider_units.ServabilityMode.enforce:
         raise PostalCodeNotServableError(
             messages[0].message,
             details={
