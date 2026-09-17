@@ -374,6 +374,60 @@ The error table above and the fallback loop apply unchanged: on
 AccessPoint-related DHL validation errors, reject the candidate and retry the
 booking leg with the next acceptable point.
 
+## Postal-code servability check (address validation)
+
+Home-delivery shipments (product 118, Hemleverans Paket B2C) are only servable
+to postal codes with home-delivery coverage, and the transport API does not
+fully validate postal codes at booking time.
+The PostalCodes API closes that gap: `GET /postalcodeapi/v1/postalcodes/{cc}/{pc}/route`
+resolves a postal code to its delivery route, and the product manual (§10.14.8)
+ties the route's `homeDeliveryParcel` flag to product 118 availability.
+
+The connector exposes this as the unified `validate_address` capability, so
+external tooling needs no backend — the same gateway as the PUDO legs:
+
+```python
+import karrio.sdk as karrio
+from karrio.mappers.dhl_freight_sweden.settings import Settings
+
+gateway = karrio.gateway["dhl_freight_sweden"].create(
+    Settings(client_key=CLIENT_KEY, account_number=ACCOUNT_NUMBER, test_mode=True)
+)
+
+details, messages = karrio.Address.validate(
+    {
+        "address": {"postal_code": "11120", "country_code": "SE"},
+        "options": {"service": "dhl_freight_sweden_hemleverans_paket_b2c"},
+    }
+).from_(gateway).parse()
+
+# details.success is True iff route.homeDeliveryParcel is True (product 118);
+# without options.service it reports the route's general bookable flag.
+# details.complete_address carries DHL's canonical city for the code.
+```
+
+The service scope accepts either the karrio service code or the carrier product
+code (`"118"`), resolved the same way as booking.
+A failed lookup returns the DHL `ErrorResult` as messages (live bodies are
+PascalCase: `Status`, `ErrorCode`, `UserMessage`; error code 16010 is
+"post code not found", 16012 "not supported").
+
+Booking-time enforcement is separate and connection-configured: the
+`address_validation` config (`off` | `warn` | `enforce`, default `off`) makes
+`create_shipment` look up the consignee's route before booking when the product
+has a documented per-product flag (118 today) and the consignee is Swedish.
+`warn` annotates the shipment with a message and books anyway; `enforce` blocks
+the transport instruction on a definitive negative; a lookup that cannot produce
+a verdict (network error, timeout, 5xx) warns and proceeds in both modes, so a
+PostalCodes API outage cannot take down bookings.
+Roll per connection with no redeploy: set the config, then flip `off` → `warn`
+→ `enforce` as trust builds.
+
+Route facts above were live-verified against the sandbox on 2026-09-17; the
+captured bodies (Stockholm 11120 and Göteborg 41103 servable, Kiruna 98138
+bookable without home delivery, the 99999 error result) are pinned verbatim in
+`tests/dhl_freight_sweden/test_address.py` and `test_shipment.py`.
+
 ## Operational notes
 
 - The locator and product matches are live carrier calls; cache per address pair
@@ -389,7 +443,7 @@ booking leg with the next acceptable point.
 
 - Hermetic: the connector suite pins all three legs against captured fixtures
   (`tests/dhl_freight_sweden/test_product_matches.py`,
-  `test_service_points.py`, `test_shipment.py`); run
+  `test_service_points.py`, `test_shipment.py`, `test_address.py`); run
   `python -m unittest discover -v -f modules/connectors/dhl_freight_sweden/tests`.
   The REST-only variant has no hermetic coverage; its lookup bodies and
   normalization duties are specified against the same fixtures and evidence.
