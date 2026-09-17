@@ -10,5 +10,5 @@
 
 ## 3. Verification
 
-- [ ] 3.1 Run the full dhl_freight_sweden connector suite with `source bin/activate-env && python -m unittest discover -v -f modules/connectors/dhl_freight_sweden/tests` and confirm all tests pass
-- [ ] 3.2 After deployment: restart the API on `prime`, confirm the constance `DHL_FREIGHT_SWEDEN_ENABLED` gate, and verify `/v1/references` lists `address_validation` with `type: string` and the dashboard Connection configuration renders the mode dropdown
+- [x] 3.1 Run the full dhl_freight_sweden connector suite with `source bin/activate-env && python -m unittest discover -v -f modules/connectors/dhl_freight_sweden/tests` and confirm all tests pass
+- [x] 3.2 After deployment: restart the API on `prime`, confirm the constance `DHL_FREIGHT_SWEDEN_ENABLED` gate, and verify `/v1/references` lists `address_validation` with `type: string` and the dashboard Connection configuration renders the mode dropdown
