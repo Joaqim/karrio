@@ -144,8 +144,9 @@ def parse_address_validation_response(
 
     An unscoped lookup reports the general ``bookable`` flag; a lookup scoped
     through ``options.service`` reports the product's flag. A body without
-    route fields is an error payload, so it yields no details and only
-    messages.
+    route fields yields no details; messages appear only when the body
+    matches a known error shape, so a failure body outside those shapes
+    (e.g. a 5xx) returns empty lists — detect it via ``details is None``.
     """
     response = _response.deserialize()
     route = response if _is_route(response) else {}
