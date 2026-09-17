@@ -27,6 +27,25 @@ def parse_error_response(
     ]
 
 
+def error_result_fields(response: dict) -> dict:
+    """Pick the postalcodeapi ErrorResult fields in either casing.
+
+    The vendored spec declares camelCase (errorCode/userMessage); the live
+    API returns PascalCase (ErrorCode/UserMessage), so keys are matched
+    case-insensitively.
+    """
+    return dict(
+        error_code=next(
+            (value for key, value in response.items() if key.lower() == "errorcode"),
+            None,
+        ),
+        user_message=next(
+            (value for key, value in response.items() if key.lower() == "usermessage"),
+            None,
+        ),
+    )
+
+
 def _extract_errors(response: dict) -> typing.List[dict]:
     """Normalize an ErrorResponse into a flat list of error dicts.
 
@@ -44,8 +63,27 @@ def _extract_errors(response: dict) -> typing.List[dict]:
                 errorMessage=response.get("error"),
                 validationErrors=response.get("errors"),
             )
+        # The postalcodeapi signals failures as an ErrorResult
+        # ({status, errorCode, userMessage}) in either casing; remap it onto
+        # the shared ErrorResponse as a single validation error.
         else:
-            return []
+            fields = error_result_fields(response)
+            if fields["user_message"] or fields["error_code"] is not None:
+                response = dict(
+                    errorMessage=fields["user_message"],
+                    validationErrors=[
+                        dict(
+                            errorCode=(
+                                fields["error_code"]
+                                if fields["error_code"] is not None
+                                else response.get("status", response.get("Status"))
+                            ),
+                            message=fields["user_message"],
+                        )
+                    ],
+                )
+            else:
+                return []
 
     error = lib.to_object(dhl_freight.ErrorResponseType, response)
     validation_errors = error.validationErrors or []

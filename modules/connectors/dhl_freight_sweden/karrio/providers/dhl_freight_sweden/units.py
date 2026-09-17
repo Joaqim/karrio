@@ -5,6 +5,14 @@ import karrio.core.models as models
 import karrio.core.units as units
 
 
+class AddressValidationMode(lib.StrEnum):
+    """Postal-code servability check modes for the booking pre-flight."""
+
+    off = "off"
+    warn = "warn"
+    enforce = "enforce"
+
+
 class ConnectionConfig(lib.Enum):
     """DHL Freight connection configuration options."""
 
@@ -14,6 +22,12 @@ class ConnectionConfig(lib.Enum):
     label_type = lib.OptionEnum("label_type", str, "PDF")
     # Print page layout, mapped to the Print API PageTypeEnum.
     label_page_type = lib.OptionEnum("label_page_type", str, "Label")
+    # Booking pre-flight against the PostalCodes API route: off skips the
+    # check, warn annotates the shipment with a message, enforce blocks the
+    # transport instruction on a definitive negative.
+    address_validation = lib.OptionEnum(
+        "address_validation", AddressValidationMode, "off"
+    )
     shipping_options = lib.OptionEnum("shipping_options", list)
     shipping_services = lib.OptionEnum("shipping_services", list)
 
