@@ -2,7 +2,7 @@
 
 - [x] 1.1 Add a references-payload regression test asserting the `address_validation` connection-config entry is classified as `{"type": "string", "enum": ["off", "warn", "enforce"]}` (built on the SDK's `collect_references`, mirroring how the defect was reproduced), and verify the test fails against current `develop`
 - [x] 1.2 Rename `AddressValidationMode` to `ServabilityMode` in `modules/connectors/dhl_freight_sweden/karrio/providers/dhl_freight_sweden/units.py` and every reference site (`proxy.py`, tests, metadata comments), and verify the 1.1 regression test passes and `rg -n 'AddressValidationMode' modules/ PRDs/ docs/` returns no remaining hits
-- [ ] 1.3 Harden mode resolution at the pre-flight call site in `proxy.py` (`_destination_route_messages`): resolve the stored value case-insensitively against the mode members, with unresolved values resolving to `off`, and verify new unit tests for `Warn` → warn and `strict`/`true` → off pass
+- [x] 1.3 Harden mode resolution at the pre-flight call site in `proxy.py` (`_destination_route_messages`): resolve the stored value case-insensitively against the mode members, with unresolved values resolving to `off`, and verify new unit tests for `Warn` → warn and `strict`/`true` → off pass
 
 ## 2. Documentation
 
