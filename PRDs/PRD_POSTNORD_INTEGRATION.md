@@ -32,6 +32,12 @@
 
 > **v1.10 revision note:** D7 is **resolved** — tracking is now event-based. PostNord supplied the Track & Trace v7 *findByIdentifier* spec (`GET /rest/shipment/v7/trackandtrace/id/{id}/public`), whose `id` path param accepts the allocated itemId, i.e. karrio's `tracking_number` — so it fits the tracking model directly (the *findByReference* surface, which keys on customerNumber+reference, was the wrong fit). `get_tracking` parses `shipments[].items[].events[]` into timestamped events with a normalized status (13 `ItemStatus` values → `TrackerStatus`), delivered flag, `signed_by`, and estimated delivery. Per-product authorization still applies, so when the key is not subscribed to the T&T product the call degrades gracefully to the prior link-only result (tracking URL + generic status). See `PRD_POSTNORD_TRACKING_EVENTS.md`.
 
+> **v1.11 revision note:** Live drafting with an authorized Transit Time key surfaced a second errorMessage class in D11's `isBookable=false` filtering: PostNord's transit system replies "Requested service 'SE-37' not found." (with `isSupported=false`) for services absent from its depot catalog — Tompallsdistribution (37), InNight (48/49), and Företagspaket Comeback (51) — which are real, bookable products, not serviceability verdicts.
+> This differs from the route-level rejection ("Service SE-17 is not offered from postal code …", `isSupported=true`, `isBookable=false`) that v1.8 handles by dropping the rate with a `service_not_bookable` message.
+> The connector now distinguishes the two classes: the proxy flags a not-found entry with `no_transit_data` (structural signal `isSupported=false`, plus the "Requested service …" message prefix as a defensive fallback because the spec documents no not-found example payload), and `rate()` treats a `no_transit_data` entry exactly like a missing one — the static rate is kept unchanged, with no transit enrichment, no drop, and no message.
+> Route-level behavior is unchanged.
+> Covered by the `NotFoundTransitResponse` fixture on the `gateway_transit_not_found` gateway and `test_parse_rate_response_transit_service_not_found`.
+
 ## Table of Contents
 
 1. [Executive Summary](#executive-summary)
