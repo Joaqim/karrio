@@ -21,10 +21,12 @@ from unittest.mock import patch
 from .fixture import (
     gateway,
     gateway_default_catalog,
+    gateway_transit_not_found,
     gateway_with_transit,
     gateway_letters_off,
     gateway_letters_on,
     gateway_letters_z11,
+    NotFoundTransitResponse,
 )
 
 import karrio.sdk as karrio
@@ -144,6 +146,24 @@ class TestPostNordRating(unittest.TestCase):
         self.assertNotIn(
             "service_not_bookable", [m.code for m in messages]
         )
+
+    def test_parse_rate_response_transit_service_not_found(self):
+        # Opt-in gateway: a service unknown to PostNord's transit system
+        # (isSupported=false, "Requested service 'SE-37' not found.") is not a
+        # route-level rejection. The static rate is kept unchanged (no transit
+        # enrichment, no drop) and no service_not_bookable message is emitted.
+        request = models.RateRequest(**AllServicesRatePayload)
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = NotFoundTransitResponse
+            rates, messages = (
+                karrio.Rating.fetch(request).from_(gateway_transit_not_found).parse()
+            )
+
+        tompall = next(r for r in rates if r.service == "postnord_tompallsdistribution")
+        self.assertEqual(tompall.transit_days, 3)
+        self.assertNotIn("estimated_delivery", tompall.meta)
+        self.assertNotIn("service_not_bookable", [m.code for m in messages])
+        self.assertFalse(any("not found" in (m.message or "") for m in messages))
 
     def test_parse_rate_response_transit_degraded(self):
         # Opt-in gateway: when the transit call fails, prices are still returned

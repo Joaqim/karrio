@@ -49,9 +49,10 @@ def parse_rate_response(
     rates pass through unchanged with their static ``transit_days``. For each
     rate we override ``transit_days`` from the matching transit result, record
     the estimated delivery date in ``meta["estimated_delivery"]``, and drop any
-    rate whose matching transit result is ``isBookable == false``. When the
-    transit lookup degraded, no filtering or overriding occurs and a warning is
-    surfaced.
+    rate whose matching transit result is ``isBookable == false`` — except
+    services the transit system does not know at all (``no_transit_data``),
+    which keep their static rate unchanged. When the transit lookup degraded,
+    no filtering or overriding occurs and a warning is surfaced.
     """
     rates, messages = universal_parse_rate_response(_response, settings)
 
@@ -100,7 +101,7 @@ def parse_rate_response(
         code = (rate.meta or {}).get("carrier_service_code")
         transit = transit_by_code.get(code) if code is not None else None
 
-        if transit is None:
+        if transit is None or transit.get("no_transit_data"):
             enriched.append(rate)
             continue
 
@@ -125,9 +126,11 @@ def parse_rate_response(
             )
         )
 
-    # Inform why a service was dropped rather than removing it silently:
-    # PostNord reports per-route bookability and usually a reason (e.g. "Service
-    # SE-18-Q1 is not offered from postal code ...").
+    # Inform why a service was dropped rather than removing it silently.
+    # PostNord's transit errorMessage has two classes: a route-level rejection
+    # ("Service SE-17 is not offered from postal code ...") drops the rate
+    # here, while a service unknown to the transit system ("Requested service
+    # 'SE-37' not found.") keeps its static rate via no_transit_data above.
     dropped_messages = [
         models.Message(
             carrier_id=settings.carrier_id,

@@ -1,6 +1,7 @@
 """PostNord carrier tests fixtures."""
 
 import karrio.sdk as karrio
+import karrio.lib as lib
 
 
 _settings = dict(
@@ -52,6 +53,46 @@ gateway_default_catalog = karrio.gateway["postnord"].create(
 # Opt-in gateway: transit-time enrichment ON via connection config.
 gateway_with_transit = karrio.gateway["postnord"].create(
     dict(_settings, config=dict(enable_transit_times=True))
+)
+
+# Opt-in transit gateway whose catalog holds a service unknown to PostNord's
+# transit system: the units.py DEFAULT_SERVICES entry for Tompallsdistribution
+# (carrier_service_code 37), which returns "Requested service 'SE-37' not
+# found." instead of transit data.
+gateway_transit_not_found = karrio.gateway["postnord"].create(
+    dict(
+        _settings,
+        services=[
+            dict(
+                service_name="PostNord Tompallsdistribution",
+                service_code="postnord_tompallsdistribution",
+                carrier_service_code="37",
+                currency="SEK",
+                transit_days=3,
+                domicile=True,
+                international=False,
+                zones=[dict(label="Sweden", rate=0.0, country_codes=["SE"])],
+            ),
+        ],
+        config=dict(enable_transit_times=True),
+    )
+)
+
+# Transit Time V2 array body for a service PostNord's transit system does not
+# know: isSupported=false marks it absent from the depot network entirely
+# (route-independent), with PostNord's canonical not-found errorMessage.
+NotFoundTransitResponse = lib.to_json(
+    [
+        {
+            "service": {
+                "basicServiceCode": "37",
+                "name": "PostNord Tompallsdistribution",
+            },
+            "isSupported": False,
+            "isBookable": False,
+            "errorMessage": "Requested service 'SE-37' not found.",
+        }
+    ]
 )
 
 # Letter-service gating fixtures: an international parcel service plus the two

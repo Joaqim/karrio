@@ -48,7 +48,8 @@ class Proxy(proxy.Proxy):
         """Call the Transit Time V2 API and parse it into a service-code map.
 
         Returns ``{"transit_results": {basicServiceCode: {transit_days,
-        estimated_delivery, is_bookable}}}`` on success, or
+        estimated_delivery, is_bookable, is_supported, no_transit_data}}}`` on
+        success, or
         ``{"transit_results": {}, "transit_degraded": True,
         "transit_degrade_reason": ...}`` when the call fails, returns a non-200
         body, or cannot be parsed. ``transit_degrade_reason`` is ``"unauthorized"``
@@ -239,10 +240,17 @@ def _parse_transit_times(response):
     ``dayRangeOfArrival.daysMaximum`` fallback), and an ``isBookable`` flag.
 
     Returns ``{basicServiceCode: {transit_days, estimated_delivery,
-    is_bookable, error_message}}`` on an array body (an empty array yields an
-    empty map, a successful "no transit info" result, not a degrade), or
-    ``None`` to signal degrade when the body is missing, not a list (e.g. an
-    error object), or unparseable.
+    is_bookable, is_supported, error_message, no_transit_data}}`` on an array
+    body (an empty array yields an empty map, a successful "no transit info"
+    result, not a degrade), or ``None`` to signal degrade when the body is
+    missing, not a list (e.g. an error object), or unparseable.
+
+    ``no_transit_data`` marks a service the transit system does not know at
+    all (``isSupported=false``, e.g. "Requested service 'SE-37' not found.") —
+    distinct from a route-level rejection (``isSupported=true``,
+    ``isBookable=false``), where a real service is merely not serviceable for
+    the requested route. The message-pattern check is a defensive fallback
+    because the spec documents no not-found example payload.
 
     The response returns one entry per service *variant*: the bare service plus
     one per additional-service combination (e.g. ``18``, ``18+D6``, ``18+Q1``),
@@ -271,11 +279,18 @@ def _parse_transit_times(response):
             continue
 
         eta = entry.get("estimatedTimeOfArrival") or {}
+        error_message = entry.get("errorMessage")
+        is_supported = entry.get("isSupported")
         results[code] = dict(
             transit_days=_compute_transit_days(eta),
             estimated_delivery=_estimated_delivery(eta),
             is_bookable=entry.get("isBookable"),
-            error_message=entry.get("errorMessage"),
+            is_supported=is_supported,
+            error_message=error_message,
+            no_transit_data=(
+                is_supported is False
+                or (error_message or "").startswith("Requested service")
+            ),
         )
 
     return results
