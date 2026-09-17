@@ -10,6 +10,17 @@ import karrio.mappers.dhl_freight_sweden.settings as provider_settings
 
 class Mapper(mapper.Mapper):
     settings: provider_settings.Settings
+    def create_address_validation_request(
+        self, payload: models.AddressValidationRequest
+    ) -> lib.Serializable:
+        return provider.address_validation_request(payload, self.settings)
+
+
+    def parse_address_validation_response(
+        self, response: lib.Deserializable
+    ) -> typing.Tuple[models.AddressValidationDetails, typing.List[models.Message]]:
+        return provider.parse_address_validation_response(response, self.settings)
+
     def create_rate_request(
         self, payload: models.RateRequest
     ) -> lib.Serializable:

@@ -86,7 +86,9 @@ def _extract_errors(response: dict) -> typing.List[dict]:
                 return []
 
     error = lib.to_object(dhl_freight.ErrorResponseType, response)
-    validation_errors = error.validationErrors or []
+    # JList renders an explicit ``validationErrors=None`` as [None] (a missing
+    # key defaults to []), so null entries are dropped before field access.
+    validation_errors = [item for item in (error.validationErrors or []) if item]
 
     field_errors = [
         dict(

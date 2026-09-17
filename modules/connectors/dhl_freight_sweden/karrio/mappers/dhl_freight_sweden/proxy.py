@@ -10,6 +10,26 @@ from karrio.universal.mappers.rating_proxy import RatingMixinProxy
 class Proxy(proxy.Proxy):
     settings: provider_settings.Settings
 
+    def validate_address(self, request: lib.Serializable) -> lib.Deserializable[dict]:
+        """Look up the postal-code route for an address (PostalCodes API).
+
+        GETs ``/postalcodes/{countryCode}/{postalCode}/route`` with the
+        standard client-key header; the route body feeds the unified
+        ``AddressValidationDetails`` through the shared evaluation helpers.
+        """
+        params = request.serialize()
+        response = lib.request(
+            url=f"{self.settings.postal_code_api_url}/postalcodes/"
+            f"{str(params.get('country_code') or '').upper()}/"
+            f"{params.get('postal_code')}/route",
+            trace=self.trace_as("json"),
+            method="GET",
+            headers={"client-key": self.settings.client_key},
+            on_error=lib.error_decoder,
+        )
+
+        return lib.Deserializable(response, lib.to_dict, request.ctx)
+
     def get_rates(self, request: lib.Serializable) -> lib.Deserializable:
         """Resolve static prices from the server-side rate sheet.
 

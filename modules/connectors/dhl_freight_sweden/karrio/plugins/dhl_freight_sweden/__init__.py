@@ -10,10 +10,10 @@ import karrio.providers.dhl_freight_sweden.utils as utils
 # when loaded through Python entrypoints or local plugin directories.
 # The entrypoint is defined in pyproject.toml under [project.entry-points."karrio.plugins"]
 #
-# Phase 0 scope: shipping only (book -> print). The API Farm exposes tracking
-# via a public URL rather than a Karrio tracking feature, so no tracking
-# capability is advertised. Capabilities are derived from the Proxy's public
-# methods (create_shipment only).
+# Capabilities are derived from the Proxy's public methods (shipping via
+# create_shipment/validate_address, rating via get_rates). The API Farm
+# exposes tracking via a public URL rather than a Karrio tracking feature, so
+# no tracking capability is advertised.
 METADATA = PluginMetadata(
     status="in-development",
     id="dhl_freight_sweden",
