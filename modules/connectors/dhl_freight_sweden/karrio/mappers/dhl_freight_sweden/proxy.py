@@ -1,6 +1,7 @@
 """Karrio DHL Freight client proxy."""
 
 import typing
+import urllib.parse
 
 import karrio.lib as lib
 import karrio.api.proxy as proxy
@@ -24,8 +25,8 @@ class Proxy(proxy.Proxy):
         params = request.serialize()
         response = lib.request(
             url=f"{self.settings.postal_code_api_url}/postalcodes/"
-            f"{str(params.get('country_code') or '').upper()}/"
-            f"{params.get('postal_code')}/route",
+            f"{urllib.parse.quote(str(params.get('country_code') or '').upper(), safe='')}/"
+            f"{urllib.parse.quote(str(params.get('postal_code') or ''), safe='')}/route",
             trace=self.trace_as("json"),
             method="GET",
             headers={"client-key": self.settings.client_key},
