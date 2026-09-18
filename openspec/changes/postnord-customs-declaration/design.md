@@ -96,6 +96,8 @@ Booking-embedded and declaration-module branch classes are structurally identica
 
 A module-level constant (`CUSTOMS_DECLARATION_MAX_LINES = 13`, source: PostNord's Booking Customs Information documentation) is enforced wherever a declaration is built — booking embedding and both proxy methods — producing a field error before any HTTP call.
 The local swagger expresses no `maxItems` on `detailedDescription`, so the constant carries the documented value and a live verification task backs it.
+When the proxy path (D3) adds its own enforcement, the check must be extracted into one shared guard beside the constant rather than duplicated at a second call site, so booking and proxy enforcement cannot drift.
+The guard message names the limit; on the booking path it names the customs field (no PostNord item id exists before allocation), while the proxy path can additionally name the caller-supplied item id.
 
 ## Risks / Trade-offs
 
