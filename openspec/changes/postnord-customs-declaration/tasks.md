@@ -5,9 +5,9 @@
 
 ## 2. Booking-time customs carriage (design D1, D5)
 
-- [ ] 2.1 Implement the unified-customs → `customsDeclarationCN22` mapping (field table in design.md) in the shipment request builder, and verify a new unit test asserting the full booking request body for a payload with customs matches an expected `RequestData` fixture
-- [ ] 2.2 Verify bookings without customs keep the exact pre-change request shape by leaving all existing `test_shipment.py` request assertions unmodified and green
-- [ ] 2.3 Add the `CUSTOMS_DECLARATION_MAX_LINES = 13` pre-submission guard to the booking path, and verify a unit test asserting a 14-line payload fails with a field error naming the limit and `lib.request` is never called
+- [x] 2.1 Implement the unified-customs → `customsDeclarationCN22` mapping (field table in design.md) in the shipment request builder, and verify a new unit test asserting the full booking request body for a payload with customs matches an expected `RequestData` fixture
+- [x] 2.2 Verify bookings without customs keep the exact pre-change request shape by leaving all existing `test_shipment.py` request assertions unmodified and green
+- [x] 2.3 Add the `CUSTOMS_DECLARATION_MAX_LINES = 13` pre-submission guard to the booking path, and verify a unit test asserting a 14-line payload fails with a field error naming the limit and `lib.request` is never called
 
 ## 3. Implicit standalone customs document for UX (design D2)
 
