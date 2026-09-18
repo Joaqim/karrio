@@ -210,6 +210,30 @@ ENTRY_CODE_MAX_LENGTH = 50
 CUSTOMS_DECLARATION_MAX_LINES = 13
 
 
+def enforce_customs_declaration_lines(
+    lines: int, field: str, item_id: typing.Optional[str] = None
+) -> None:
+    """Raise a FieldError when a declaration exceeds the customs line limit.
+
+    One guard shared by the booking embedding and the post-booking
+    declaration proxy so the two enforcement points cannot drift. The
+    booking path names the customs field (no PostNord item id exists
+    before allocation); the proxy path additionally names the
+    caller-supplied item id.
+    """
+    if lines <= CUSTOMS_DECLARATION_MAX_LINES:
+        return
+
+    explanation = (
+        f"{field} exceeds the {CUSTOMS_DECLARATION_MAX_LINES}-line "
+        "customs declaration limit"
+    )
+    if item_id is not None:
+        explanation = f"{explanation} for item {item_id}"
+
+    raise lib.exceptions.FieldError({field: explanation})
+
+
 def shipping_options_initializer(
     options: dict,
     package_options: units.ShippingOptions = None,

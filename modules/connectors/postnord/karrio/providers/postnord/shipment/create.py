@@ -255,16 +255,9 @@ def _customs_declaration(
     unified customs model; ``categoryType`` is a free string per the
     swagger, so ``content_type`` passes through as the sole category.
     """
-    if len(customs.commodities) > provider_units.CUSTOMS_DECLARATION_MAX_LINES:
-        raise lib.exceptions.FieldError(
-            {
-                "customs.commodities": (
-                    "customs.commodities exceeds the "
-                    f"{provider_units.CUSTOMS_DECLARATION_MAX_LINES}-line "
-                    "customs declaration limit"
-                )
-            }
-        )
+    provider_units.enforce_customs_declaration_lines(
+        len(customs.commodities), field="customs.commodities"
+    )
 
     currency = next(
         (c.value_currency for c in customs.commodities if c.value_currency), None
