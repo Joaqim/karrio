@@ -125,6 +125,86 @@ def _printout_base64(printout: postnord_res.PrintoutType) -> str:
     return base64.b64encode(printout.data.encode("utf-8")).decode("utf-8")
 
 
+def _customs_declaration(
+    customs: models.Customs,
+    total_gross_weight: typing.Optional[float],
+    country_of_origin: str,
+) -> postnord_req.CustomsDeclarationCN22Type:
+    """Map unified customs data onto the booking's CN22 declaration branch.
+
+    CN22 is the declaration branch whose required fields
+    (``detailedDescription``, ``totalValue``) are fully derivable from the
+    unified customs model; ``categoryOfItem`` is a free string per the
+    swagger, so ``content_type`` passes through unmapped.
+    """
+    if len(customs.commodities) > provider_units.CUSTOMS_DECLARATION_MAX_LINES:
+        raise lib.exceptions.FieldError(
+            {
+                "customs.commodities": (
+                    "customs.commodities exceeds the "
+                    f"{provider_units.CUSTOMS_DECLARATION_MAX_LINES}-line "
+                    "customs declaration limit"
+                )
+            }
+        )
+
+    currency = next(
+        (c.value_currency for c in customs.commodities if c.value_currency), None
+    )
+
+    return postnord_req.CustomsDeclarationCN22Type(
+        countryOfOrigin=country_of_origin,
+        categoryOfItem=lib.identity(
+            postnord_req.CategoryOfItemType(categoryType=[customs.content_type])
+            if customs.content_type
+            else None
+        ),
+        detailedDescription=[
+            postnord_req.CustomsDeclarationCN22DetailedDescriptionType(
+                content=commodity.title or commodity.description,
+                quantity=lib.identity(
+                    postnord_req.NumberOfPackagesType(value=commodity.quantity)
+                    if commodity.quantity
+                    else None
+                ),
+                grossWeight=lib.identity(
+                    postnord_req.TotalGrossWeightType(
+                        value=units.Weight(commodity.weight, commodity.weight_unit).KG,
+                        unit="KGM",
+                    )
+                    if commodity.weight
+                    else None
+                ),
+                value=lib.identity(
+                    postnord_req.GoodsValueType(
+                        amount=commodity.value_amount,
+                        currency=commodity.value_currency,
+                    )
+                    if any([commodity.value_amount, commodity.value_currency])
+                    else None
+                ),
+                hsTariffNumber=commodity.hs_code,
+                countryCode=commodity.origin_country,
+                rowNo=index + 1,
+            )
+            for index, commodity in enumerate(customs.commodities)
+        ],
+        totalGrossWeight=lib.identity(
+            postnord_req.TotalGrossWeightType(value=total_gross_weight, unit="KGM")
+            if total_gross_weight
+            else None
+        ),
+        totalValue=lib.identity(
+            postnord_req.GoodsValueType(
+                amount=sum(c.value_amount or 0 for c in customs.commodities),
+                currency=currency,
+            )
+            if any(c.value_amount for c in customs.commodities)
+            else None
+        ),
+    )
+
+
 def shipment_request(
     payload: models.ShipmentRequest,
     settings: provider_utils.Settings,
@@ -191,6 +271,19 @@ def shipment_request(
     # generated id (unit tests always set a reference). Cancellation is not
     # performed via this id (see shipment/cancel.py).
     shipment_id = payload.reference or uuid.uuid4().hex[:12].upper()
+
+    # The customs declaration rides the booking EDI as the CN22 branch of the
+    # shipment entry; without customs data the branch is absent so the request
+    # shape is unchanged.
+    customs_declaration = lib.identity(
+        _customs_declaration(
+            payload.customs,
+            total_gross_weight=packages.weight.KG,
+            country_of_origin=shipper.country_code,
+        )
+        if payload.customs and payload.customs.commodities
+        else None
+    )
 
     def _party(address, *, with_consignor_id: bool) -> postnord_req.ConsignType:
         return postnord_req.ConsignType(
@@ -302,6 +395,7 @@ def shipment_request(
                     )
                     for package in packages
                 ],
+                customsDeclarationCN22=customs_declaration,
             )
         ],
     )

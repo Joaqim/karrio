@@ -222,6 +222,45 @@ class TestPostNordShipment(unittest.TestCase):
         service = lib.to_dict(request.serialize())["shipment"][0]["service"]
         self.assertNotIn("A7", service.get("additionalServiceCode") or [])
 
+    def test_create_shipment_customs_request(self):
+        # payload.customs rides the booking EDI as the shipment entry's
+        # customsDeclarationCN22 branch: LB commodity weight converts to
+        # KGM, title falls back to description, rowNo is 1-based, and
+        # totalValue sums the lines with the first line's currency.
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**CustomsShipmentPayload)
+        )
+        self.assertEqual(lib.to_dict(request.serialize()), CustomsShipmentRequest)
+
+    def test_create_shipment_customs_lines_at_limit(self):
+        # 13 lines is the inclusive boundary and is sent in full.
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**_customs_payload(13))
+        )
+        declaration = lib.to_dict(request.serialize())["shipment"][0][
+            "customsDeclarationCN22"
+        ]
+        self.assertEqual(len(declaration["detailedDescription"]), 13)
+        self.assertEqual(declaration["detailedDescription"][-1]["rowNo"], 13)
+
+    def test_create_shipment_customs_lines_over_limit(self):
+        # 14 lines reject the booking before submission: a field error
+        # naming the 13-line limit, and no HTTP call.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            shipment, messages = (
+                karrio.Shipment.create(models.ShipmentRequest(**_customs_payload(14)))
+                .from_(gateway)
+                .parse()
+            )
+            mock.assert_not_called()
+        self.assertIsNone(shipment)
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0].code, "SHIPPING_SDK_FIELD_ERROR")
+        self.assertEqual(
+            messages[0].details["customs.commodities"],
+            "customs.commodities exceeds the 13-line customs declaration limit",
+        )
+
     def test_parse_shipment_response(self):
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
             mock.return_value = ShipmentResponse
@@ -635,6 +674,91 @@ ShipmentRequest = {
         }
     ],
 }
+
+CustomsShipmentPayload = {
+    **ShipmentPayload,
+    "customs": {
+        "content_type": "merchandise",
+        "commodities": [
+            {
+                "title": "Wool socks",
+                "quantity": 2,
+                "weight": 0.4,
+                "weight_unit": "KG",
+                "value_amount": 25.0,
+                "value_currency": "SEK",
+                "hs_code": "6115950000",
+                "origin_country": "SE",
+            },
+            {
+                # description-only line: covers the title fallback
+                "description": "Baseball cap",
+                "quantity": 1,
+                "weight": 2.205,
+                "weight_unit": "LB",
+                "value_amount": 15.0,
+                "value_currency": "SEK",
+                "hs_code": "6505003000",
+                "origin_country": "CN",
+            },
+        ],
+    },
+}
+
+CustomsShipmentRequest = {
+    **ShipmentRequest,
+    "shipment": [
+        {
+            **ShipmentRequest["shipment"][0],
+            "customsDeclarationCN22": {
+                "countryOfOrigin": "SE",
+                "categoryOfItem": {"categoryType": ["merchandise"]},
+                "detailedDescription": [
+                    {
+                        "content": "Wool socks",
+                        "quantity": {"value": 2},
+                        "grossWeight": {"value": 0.4, "unit": "KGM"},
+                        "value": {"amount": 25.0, "currency": "SEK"},
+                        "hsTariffNumber": "6115950000",
+                        "countryCode": "SE",
+                        "rowNo": 1,
+                    },
+                    {
+                        "content": "Baseball cap",
+                        "quantity": {"value": 1},
+                        # 2.205 LB converts to exactly 1.0 KGM
+                        "grossWeight": {"value": 1.0, "unit": "KGM"},
+                        "value": {"amount": 15.0, "currency": "SEK"},
+                        "hsTariffNumber": "6505003000",
+                        "countryCode": "CN",
+                        "rowNo": 2,
+                    },
+                ],
+                "totalGrossWeight": {"value": 1.5, "unit": "KGM"},
+                "totalValue": {"amount": 40.0, "currency": "SEK"},
+            },
+        }
+    ],
+}
+
+
+def _customs_payload(lines: int) -> dict:
+    return {
+        **ShipmentPayload,
+        "customs": {
+            "content_type": "merchandise",
+            "commodities": [
+                {
+                    "title": f"Item {index}",
+                    "quantity": 1,
+                    "weight": 0.1,
+                    "value_amount": 1.0,
+                    "value_currency": "SEK",
+                }
+                for index in range(1, lines + 1)
+            ],
+        },
+    }
 
 ShipmentCancelRequest = {
     "ids": [{"id": "SHIP-0001"}],

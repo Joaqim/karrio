@@ -203,6 +203,12 @@ ENTRY_CODE_USAGE_CODE = "ZDC"
 # full-name limits; longer values reject the booking before it is sent.
 ENTRY_CODE_MAX_LENGTH = 50
 
+# PostNord customs declarations accept at most 13 detailedDescription
+# lines per item id (Booking Customs Information documentation). The
+# swagger expresses no maxItems, so the documented limit is carried here
+# and enforced before submission.
+CUSTOMS_DECLARATION_MAX_LINES = 13
+
 
 def shipping_options_initializer(
     options: dict,
