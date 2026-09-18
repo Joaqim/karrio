@@ -125,6 +125,45 @@ def _printout_base64(printout: postnord_res.PrintoutType) -> str:
     return base64.b64encode(printout.data.encode("utf-8")).decode("utf-8")
 
 
+def _customs_line(
+    index: int, commodity: models.Commodity
+) -> postnord_req.CustomsDeclarationCN22DetailedDescriptionType:
+    """Map one unified commodity onto a CN22 detailedDescription row.
+
+    Underivable elements are omitted rather than emitted as empty or
+    partial structs: a commodity without ``weight_unit`` has no KGM value
+    (``Commodity.weight_unit`` has no default, unlike ``Parcel``'s), and a
+    line without ``value_amount`` carries no value. PostNord then rejects
+    with a diagnosable fault instead of receiving a unitless weight.
+    """
+    weight = units.Weight(commodity.weight, commodity.weight_unit).KG
+
+    return postnord_req.CustomsDeclarationCN22DetailedDescriptionType(
+        content=commodity.title or commodity.description,
+        quantity=lib.identity(
+            postnord_req.NumberOfPackagesType(value=commodity.quantity)
+            if commodity.quantity
+            else None
+        ),
+        grossWeight=lib.identity(
+            postnord_req.TotalGrossWeightType(value=weight, unit="KGM")
+            if weight
+            else None
+        ),
+        value=lib.identity(
+            postnord_req.GoodsValueType(
+                amount=commodity.value_amount,
+                currency=commodity.value_currency,
+            )
+            if commodity.value_amount
+            else None
+        ),
+        hsTariffNumber=commodity.hs_code,
+        countryCode=commodity.origin_country,
+        rowNo=index + 1,
+    )
+
+
 def _customs_declaration(
     customs: models.Customs,
     total_gross_weight: typing.Optional[float],
@@ -134,8 +173,8 @@ def _customs_declaration(
 
     CN22 is the declaration branch whose required fields
     (``detailedDescription``, ``totalValue``) are fully derivable from the
-    unified customs model; ``categoryOfItem`` is a free string per the
-    swagger, so ``content_type`` passes through unmapped.
+    unified customs model; ``categoryType`` is a free string per the
+    swagger, so ``content_type`` passes through as the sole category.
     """
     if len(customs.commodities) > provider_units.CUSTOMS_DECLARATION_MAX_LINES:
         raise lib.exceptions.FieldError(
@@ -160,33 +199,7 @@ def _customs_declaration(
             else None
         ),
         detailedDescription=[
-            postnord_req.CustomsDeclarationCN22DetailedDescriptionType(
-                content=commodity.title or commodity.description,
-                quantity=lib.identity(
-                    postnord_req.NumberOfPackagesType(value=commodity.quantity)
-                    if commodity.quantity
-                    else None
-                ),
-                grossWeight=lib.identity(
-                    postnord_req.TotalGrossWeightType(
-                        value=units.Weight(commodity.weight, commodity.weight_unit).KG,
-                        unit="KGM",
-                    )
-                    if commodity.weight
-                    else None
-                ),
-                value=lib.identity(
-                    postnord_req.GoodsValueType(
-                        amount=commodity.value_amount,
-                        currency=commodity.value_currency,
-                    )
-                    if any([commodity.value_amount, commodity.value_currency])
-                    else None
-                ),
-                hsTariffNumber=commodity.hs_code,
-                countryCode=commodity.origin_country,
-                rowNo=index + 1,
-            )
+            _customs_line(index, commodity)
             for index, commodity in enumerate(customs.commodities)
         ],
         totalGrossWeight=lib.identity(
@@ -196,7 +209,9 @@ def _customs_declaration(
         ),
         totalValue=lib.identity(
             postnord_req.GoodsValueType(
-                amount=sum(c.value_amount or 0 for c in customs.commodities),
+                amount=lib.to_money(
+                    sum(c.value_amount or 0 for c in customs.commodities)
+                ),
                 currency=currency,
             )
             if any(c.value_amount for c in customs.commodities)

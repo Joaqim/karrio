@@ -261,6 +261,77 @@ class TestPostNordShipment(unittest.TestCase):
             "customs.commodities exceeds the 13-line customs declaration limit",
         )
 
+    def test_create_shipment_customs_total_value_rounding(self):
+        # Line values sum as money: 0.1 + 0.2 is 0.3, not the float
+        # artifact 0.30000000000000004, and the currency is the first
+        # line's (SEK), not the second line's (EUR).
+        payload = {
+            **ShipmentPayload,
+            "customs": {
+                "content_type": "merchandise",
+                "commodities": [
+                    {
+                        "title": "Sticker sheet",
+                        "quantity": 1,
+                        "value_amount": 0.1,
+                        "value_currency": "SEK",
+                    },
+                    {
+                        "title": "Postcard",
+                        "quantity": 1,
+                        "value_amount": 0.2,
+                        "value_currency": "EUR",
+                    },
+                ],
+            },
+        }
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        declaration = lib.to_dict(request.serialize())["shipment"][0][
+            "customsDeclarationCN22"
+        ]
+        self.assertEqual(
+            declaration["totalValue"], {"amount": 0.3, "currency": "SEK"}
+        )
+
+    def test_create_shipment_customs_underivable_line_fields_omitted(self):
+        # A commodity without weight_unit has no KGM value and a line
+        # without value_amount carries no value: the elements are omitted
+        # entirely rather than emitted as unitless/amountless structs.
+        payload = {
+            **ShipmentPayload,
+            "customs": {
+                "content_type": "merchandise",
+                "commodities": [
+                    {
+                        "title": "Undeclared weight item",
+                        "quantity": 1,
+                        "weight": 0.4,
+                        "value_amount": 10.0,
+                        "value_currency": "SEK",
+                    },
+                    {
+                        "title": "Currency-only item",
+                        "quantity": 1,
+                        "weight": 0.2,
+                        "weight_unit": "KG",
+                        "value_currency": "SEK",
+                    },
+                ],
+            },
+        }
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        rows = lib.to_dict(request.serialize())["shipment"][0][
+            "customsDeclarationCN22"
+        ]["detailedDescription"]
+        self.assertEqual(rows[0]["content"], "Undeclared weight item")
+        self.assertNotIn("grossWeight", rows[0])
+        self.assertEqual(rows[1]["grossWeight"], {"value": 0.2, "unit": "KGM"})
+        self.assertNotIn("value", rows[1])
+
     def test_parse_shipment_response(self):
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
             mock.return_value = ShipmentResponse
@@ -691,13 +762,15 @@ CustomsShipmentPayload = {
                 "origin_country": "SE",
             },
             {
-                # description-only line: covers the title fallback
+                # description-only line: covers the title fallback; the
+                # non-SEK currency pins totalValue to the FIRST line's
+                # currency rather than the last line's.
                 "description": "Baseball cap",
                 "quantity": 1,
                 "weight": 2.205,
                 "weight_unit": "LB",
                 "value_amount": 15.0,
-                "value_currency": "SEK",
+                "value_currency": "EUR",
                 "hs_code": "6505003000",
                 "origin_country": "CN",
             },
@@ -728,7 +801,7 @@ CustomsShipmentRequest = {
                         "quantity": {"value": 1},
                         # 2.205 LB converts to exactly 1.0 KGM
                         "grossWeight": {"value": 1.0, "unit": "KGM"},
-                        "value": {"amount": 15.0, "currency": "SEK"},
+                        "value": {"amount": 15.0, "currency": "EUR"},
                         "hsTariffNumber": "6505003000",
                         "countryCode": "CN",
                         "rowNo": 2,
@@ -752,6 +825,7 @@ def _customs_payload(lines: int) -> dict:
                     "title": f"Item {index}",
                     "quantity": 1,
                     "weight": 0.1,
+                    "weight_unit": "KG",
                     "value_amount": 1.0,
                     "value_currency": "SEK",
                 }
