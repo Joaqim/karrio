@@ -283,7 +283,7 @@ class Proxy(proxy.Proxy):
 
         return lib.Deserializable(response, lib.to_dict)
 
-    def create_customs_declaration(self, request: lib.Serializable) -> lib.Deserializable:
+    def create_customs_declaration(self, request: lib.Serializable) -> lib.Deserializable[dict]:
         # Customs declaration for an already-booked item id (POST /v3/customs/
         # declaration, apikey). The body is the [declaration] array the provider
         # request builder produced; an explicit consumer call, so rejections
@@ -300,7 +300,7 @@ class Proxy(proxy.Proxy):
 
         return lib.Deserializable(response, lib.to_dict)
 
-    def create_customs_declaration_pdf(self, request: lib.Serializable) -> lib.Deserializable:
+    def create_customs_declaration_pdf(self, request: lib.Serializable) -> lib.Deserializable[dict]:
         # PDF variant of the customs declaration (POST /v3/customs/declaration/
         # pdf): same declaration array, with the caller's rendering params
         # (paperSize/rotate/multiPDF/alignment) carried on the request ctx as

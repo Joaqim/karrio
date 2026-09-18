@@ -52,9 +52,11 @@ def customs_declaration_request(
     maxItems 1) and one declaration branch; the builder enforces those
     envelope constraints plus the 13-line limit, then carries the PDF
     variant's rendering params as query-string entries on the ctx for
-    ``proxy.create_customs_declaration_pdf``. Everything else — branch
-    content, ``updateIndicator``, envelope header fields — passes through
-    exactly as the caller built it.
+    ``proxy.create_customs_declaration_pdf``; submitting the same request
+    through the digital ``create_customs_declaration`` leaves the ctx
+    unused, as that endpoint takes no rendering params. Everything
+    else — branch content, ``updateIndicator``, envelope header fields —
+    passes through exactly as the caller built it.
     """
     ids = request.ids or []
     if len(ids) > 1:

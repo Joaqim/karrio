@@ -161,9 +161,10 @@ def _customs_documents(
 ) -> typing.List[models.ShippingDocument]:
     """Map by-id customs printout entries onto unified shipping documents.
 
-    The entries are the ``labelPrintout`` array of the implicit
+    The entries are ``labelPrintout`` arrays: the implicit
     ``POST /v3/labels/ids/{pdf,zpl}`` fetch threaded through the ctx by
-    ``proxy.create_shipment``. The category is what PostNord's
+    ``proxy.create_shipment``, and the customs-declaration pdf
+    endpoint's response. The category is what PostNord's
     ``printoutComposition`` says was composed — never assumed from the
     service — falling back to the standardized customs-declaration category
     when PostNord sends no composition. ZPL data re-encodes through the same
