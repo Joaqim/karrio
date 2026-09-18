@@ -87,6 +87,11 @@ Extend `schemas/shipment_request.json` with the customs branches (definitions li
 Alternative considered: the plain-dict style of `service_points.py`.
 Rejected: the declaration bodies are deeply structured and benefit from generated types; the booking embedding needs schema changes regardless.
 
+Generation conventions forced by the pipeline (from the group-1 review):
+quicktype coerces digit-only swagger string fields to `int` annotations (postalCode, basicServiceCode, partyIdType, reasonForExportation, transportModeBorder) — provider code MUST pass these through as strings and never `int()`-coerce, so leading-zero and alphanumeric values survive intact.
+Booking-embedded and declaration-module branch classes are structurally identical but distinct classes; any construction shared between the two flows happens at dict level via `lib.to_dict`, never by passing one module's classes into the other's model.
+`BuyerType` is the pipeline's union of seller/buyer/shipTo — variant-specific fields are caller-owned and not validated client-side.
+
 ### D5: Line-limit guard is a pre-submission field error
 
 A module-level constant (`CUSTOMS_DECLARATION_MAX_LINES = 13`, source: PostNord's Booking Customs Information documentation) is enforced wherever a declaration is built — booking embedding and both proxy methods — producing a field error before any HTTP call.

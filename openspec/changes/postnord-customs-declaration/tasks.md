@@ -1,7 +1,7 @@
 ## 1. Schema generation
 
-- [ ] 1.1 Extend `modules/connectors/postnord/schemas/shipment_request.json` with the customs branches (`customsDeclarationCN22`, `customsDeclarationCN23`, `customsInvoice` and their nested definitions, lifted from `vendor/booking.swagger.json` SW:5176+, 5320+, 5411+, 5461+, 5942-6036) on the shipment entries, and verify `./bin/run-generate-on modules/connectors/postnord` regenerates with the customs types present on the shipment request model
-- [ ] 1.2 Add `schemas/customs_declaration_request.json` (declaration envelope: `ids[]` with `idType`, one-of CN22/CN23/customsInvoice branches, `updateIndicator`) and `schemas/customs_declaration_response.json` (`bookingResponseCN` with per-id `OK|FAIL` status, `labelPrintout`), plus the `ids_label` request fragment for `/v3/labels/ids/{pdf,zpl}`, and verify the regenerated modules import cleanly and round-trip a sample declaration payload via `lib.to_dict`
+- [x] 1.1 Extend `modules/connectors/postnord/schemas/shipment_request.json` with the customs branches (`customsDeclarationCN22`, `customsDeclarationCN23`, `customsInvoice` and their nested definitions, lifted from `vendor/booking.swagger.json` SW:5176+, 5320+, 5411+, 5461+, 5942-6036) on the shipment entries, and verify `./bin/run-generate-on modules/connectors/postnord` regenerates with the customs types present on the shipment request model
+- [x] 1.2 Add `schemas/customs_declaration_request.json` (declaration envelope: `ids[]` with `idType`, one-of CN22/CN23/customsInvoice branches, `updateIndicator`) and `schemas/customs_declaration_response.json` (`bookingResponseCN` with per-id `OK|FAIL` status, `labelPrintout`), plus the `ids_label` request fragment for `/v3/labels/ids/{pdf,zpl}`, and verify the regenerated modules import cleanly and round-trip a sample declaration payload via `lib.to_dict`
 
 ## 2. Booking-time customs carriage (design D1, D5)
 
@@ -21,7 +21,7 @@
 - [ ] 4.1 Create `karrio/providers/postnord/customs.py` with the declaration request builder (enforcing `ids[]` maxItems 1, exactly one branch, and the 13-line guard) and parsers for the digital and PDF-variant responses (`bookingResponseCN` statuses; PDF variant additionally maps `labelPrintout` → `ShippingDocument` list with caller-supplied `paperSize`/`rotate`/`multiPDF` params), and verify unit tests for request building and both response parsings
 - [ ] 4.2 Add proxy methods `create_customs_declaration` and `create_customs_declaration_pdf` following the `find_service_points` precedent, and verify unit tests (patched `lib.request`) assert endpoint URLs, methods, bodies, and parsed results, including an upstream rejection surfaced as unified error messages
 - [ ] 4.3 Verify the 13-line guard applies to the proxy path with a unit test asserting the field error and no HTTP call for an over-limit declaration
-- [ ] 4.4 Document consumer usage (invocation via `gateway.proxy.create_customs_declaration(...)`, branch choice, consumer-owned correctness) in `docs/notes/` following the service-points PRD pattern, and verify the note exists with a runnable example
+- [ ] 4.4 Document consumer usage (invocation via `gateway.proxy.create_customs_declaration(...)`, branch choice, consumer-owned correctness) in `docs/notes/` following the service-points PRD pattern, including the string-passing convention for digit-coerced schema fields (never `int()`-coerce; leading-zero and alphanumeric values must pass through) and the `BuyerType`-union caveat for party construction, and verify the note exists with a runnable example
 
 ## 5. Verification and release prep
 
