@@ -133,8 +133,8 @@ def _customs_line(
     Underivable elements are omitted rather than emitted as empty or
     partial structs: a commodity without ``weight_unit`` has no KGM value
     (``Commodity.weight_unit`` has no default, unlike ``Parcel``'s), and a
-    line without ``value_amount`` carries no value. PostNord then rejects
-    with a diagnosable fault instead of receiving a unitless weight.
+    line without ``value_amount`` carries no value; the swagger marks both
+    elements optional on ``detailedDescription``.
     """
     weight = units.Weight(commodity.weight, commodity.weight_unit).KG
 
