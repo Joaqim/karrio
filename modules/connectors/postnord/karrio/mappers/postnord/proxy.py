@@ -283,6 +283,39 @@ class Proxy(proxy.Proxy):
 
         return lib.Deserializable(response, lib.to_dict)
 
+    def create_customs_declaration(self, request: lib.Serializable) -> lib.Deserializable:
+        # Customs declaration for an already-booked item id (POST /v3/customs/
+        # declaration, apikey). The body is the [declaration] array the provider
+        # request builder produced; an explicit consumer call, so rejections
+        # (e.g. "EDI must have been sent earlier") flow through the regular
+        # error parser instead of the fail-open pattern used for the implicit
+        # booking fetch.
+        response = lib.request(
+            url=self._url("/rest/shipment/v3/customs/declaration"),
+            data=lib.to_json(request.serialize()),
+            trace=self.trace_as("json"),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+
+        return lib.Deserializable(response, lib.to_dict)
+
+    def create_customs_declaration_pdf(self, request: lib.Serializable) -> lib.Deserializable:
+        # PDF variant of the customs declaration (POST /v3/customs/declaration/
+        # pdf): same declaration array, with the caller's rendering params
+        # (paperSize/rotate/multiPDF/alignment) carried on the request ctx as
+        # query parameters by the provider request builder. The response adds
+        # the rendered labelPrintout documents.
+        response = lib.request(
+            url=self._url("/rest/shipment/v3/customs/declaration/pdf", **request.ctx),
+            data=lib.to_json(request.serialize()),
+            trace=self.trace_as("json"),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+
+        return lib.Deserializable(response, lib.to_dict)
+
     def get_tracking(self, request: lib.Serializable) -> lib.Deserializable[str]:
         # Track & Trace v7 (findByIdentifier): GET
         # /rest/shipment/v7/trackandtrace/id/{id}/public?apikey=…&locale=…
