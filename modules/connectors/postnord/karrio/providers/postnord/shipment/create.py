@@ -74,9 +74,7 @@ def _extract_details(
     ids = [_id for info in informations for _id in (info.ids or [])]
     urls = [url for info in informations for url in (info.urls or [])]
 
-    tracking_number = next(
-        (_id.value for _id in ids if _id.idType == "itemId"), None
-    )
+    tracking_number = _first_item_id(booking)
     shipment_identifier = lib.identity(
         ctx.get("shipment_id")
         or next((_id.value for _id in ids if _id.idType == "shipmentId"), None)
@@ -134,6 +132,22 @@ def _extract_details(
     )
 
 
+def _first_item_id(
+    booking: typing.Optional[postnord_res.BookingResponseType],
+) -> typing.Optional[str]:
+    """Return the booking's first assigned item id.
+
+    One rule shared by the parser (the tracking number) and the proxy (the
+    id the by-id customs document fetch targets), so both resolve the same
+    id even if the idInformation layout changes.
+    """
+    if booking is None:
+        return None
+
+    ids = [_id for info in (booking.idInformation or []) for _id in (info.ids or [])]
+    return next((_id.value for _id in ids if _id.idType == "itemId"), None)
+
+
 def _composed_kinds(printout: postnord_res.LabelPrintoutType) -> typing.List[str]:
     """Return the document kinds PostNord composed into a label printout."""
     return [
@@ -164,8 +178,8 @@ def _customs_documents(
     return [
         models.ShippingDocument(
             category=(
-                ",".join(_composed_kinds(entry))
-                or units.ShippingDocumentCategory.customs_declaration.value
+                ",".join(sorted(_composed_kinds(entry)))
+                or units.ShippingDocumentCategory.customs_declaration.name
             ),
             format=entry.printout.labelFormat or fallback_format,
             base64=_printout_base64(entry.printout),
@@ -178,12 +192,13 @@ def _customs_documents(
 def _printout_base64(printout: postnord_res.PrintoutType) -> str:
     """Return the printout data as base64 regardless of transport encoding.
 
-    PDF printouts are base64 already. ZPL printouts carry raw UTF-8 ZPL
-    text with ``encoding`` ``"none"`` (undocumented in the swagger), so
-    any non-base64 encoding is treated as raw text and encoded here; the
-    downstream bundling helpers expect base64 inputs.
+    The swagger documents only ``encoding`` ``"base64"``, so an absent
+    encoding defaults to base64 passthrough. ZPL printouts carry raw UTF-8
+    ZPL text with ``encoding`` ``"none"`` (observed on the live endpoint,
+    undocumented); any non-base64 encoding is treated as raw text and
+    encoded here. The downstream bundling helpers expect base64 inputs.
     """
-    if (printout.encoding or "").lower() == "base64":
+    if (printout.encoding or "base64").lower() == "base64":
         return printout.data
 
     return base64.b64encode(printout.data.encode("utf-8")).decode("utf-8")

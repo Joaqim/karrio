@@ -556,6 +556,18 @@ class TestPostNordShipment(unittest.TestCase):
             # bundle_zpls appends NEW_LINE after every label, incl. the last.
             self.assertEqual(decoded, f"{RawZPL}\n{RawZPL2}\n")
 
+    def test_parse_shipment_response_absent_encoding_defaults_base64(self):
+        # The swagger documents encoding "base64" only, so a printout without
+        # the element passes its data through unchanged rather than
+        # re-encoding it as raw text.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = ShipmentNoEncodingResponse
+            parsed_response = (
+                karrio.Shipment.create(self.ShipmentRequest).from_(gateway).parse()
+            )
+        details, _ = parsed_response
+        self.assertEqual(details.docs.label, "JVBERi0xLjQK")
+
 
 class TestPostNordLabel(unittest.TestCase):
     def setUp(self):
@@ -721,6 +733,51 @@ class TestPostNordCustomsDocument(unittest.TestCase):
             ],
         )
 
+    def test_create_shipment_customs_document_multi_kind_category_sorted(self):
+        # The joined category is deterministic regardless of the composition
+        # key order PostNord serializes: sorted, like meta.printout_composition.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.side_effect = [
+                CustomsBookingResponse,
+                CustomsPrintoutsMultiKindResponse,
+            ]
+            parsed_response = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(**ExportLetterCustomsPayload)
+                )
+                .from_(gateway)
+                .parse()
+            )
+            self.assertEqual(mock.call_count, 2)
+        details, messages = parsed_response
+        self.assertEqual(messages, [])
+        self.assertEqual(
+            details.docs.extra_documents[0].category, "cn22,customsInvoice"
+        )
+
+    def test_create_shipment_customs_document_category_fallback(self):
+        # A by-id printout without printoutComposition falls back to the
+        # standardized customs-declaration category name (snake_case, the
+        # same output family as the composed kind keys).
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.side_effect = [
+                CustomsBookingResponse,
+                CustomsPrintoutsNoCompositionResponse,
+            ]
+            parsed_response = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(**ExportLetterCustomsPayload)
+                )
+                .from_(gateway)
+                .parse()
+            )
+            self.assertEqual(mock.call_count, 2)
+        details, messages = parsed_response
+        self.assertEqual(messages, [])
+        self.assertEqual(
+            details.docs.extra_documents[0].category, "customs_declaration"
+        )
+
     def test_create_shipment_customs_document_error_body_fails_open(self):
         # An error body from the by-id fetch leaves the booking successful;
         # the fault surfaces as a message alongside the shipment details.
@@ -794,6 +851,48 @@ class TestPostNordCustomsDocument(unittest.TestCase):
         self.assertIsNone(messages[0].code)
         self.assertIn("customs document retrieval failed", messages[0].message)
         self.assertIn("IncompleteRead(6 bytes read)", messages[0].message)
+
+    def test_create_shipment_customs_document_unreadable_body_fails_open(self):
+        # A non-JSON body from the by-id fetch (e.g. an intermediary's HTML
+        # error page) is also fail-open: the booking stands and a synthesized
+        # message reports the unreadable body.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.side_effect = [CustomsBookingResponse, UnreadableBodyResponse]
+            parsed_response = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(**ExportLetterCustomsPayload)
+                )
+                .from_(gateway)
+                .parse()
+            )
+            self.assertEqual(mock.call_count, 2)
+        details, messages = parsed_response
+        self.assertIsNotNone(details)
+        self.assertEqual(details.docs.label, "JVBERi0xLjQK")
+        self.assertEqual(details.docs.extra_documents, [])
+        self.assertEqual(len(messages), 1)
+        self.assertIsNone(messages[0].code)
+        self.assertIn("unreadable body", messages[0].message)
+        self.assertIn("<html>502 Bad Gateway</html>", messages[0].message)
+
+    def test_create_shipment_customs_document_no_item_id_skips_fetch(self):
+        # A failed booking that allocated no item ids has no target for the
+        # by-id fetch: exactly one HTTP call, and the booking fault surfaces.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = CustomsBookingNoIdsResponse
+            parsed_response = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(**ExportLetterCustomsPayload)
+                )
+                .from_(gateway)
+                .parse()
+            )
+            mock.assert_called_once()
+        details, messages = parsed_response
+        self.assertIsNone(details)
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0].code, "CUSTOMS_VALIDATION")
+        self.assertIn("totalValue is mandatory", messages[0].message)
 
     def test_create_shipment_export_letter_without_customs_skips_fetch(self):
         # The fetch is gated on customs data being present: an export letter
@@ -1320,6 +1419,12 @@ ShipmentZPLMultiResponse = """{
   ]
 }""" % (_zpl_json(RawZPL), _zpl_json(RawZPL2))
 
+# Base64 data with the encoding element absent (the swagger documents only
+# "base64", so the element can be omitted): the data passes through as is.
+ShipmentNoEncodingResponse = ShipmentResponse.replace(
+    '"labelFormat": "PDF", "encoding": "base64", ', '"labelFormat": "PDF", '
+)
+
 # Booking response whose label printout also carries a composed CN22
 # (printoutComposition), the shape an export-letter booking with an embedded
 # declaration returns.
@@ -1362,6 +1467,29 @@ CustomsBookingZPLResponse = """{
   }]
 }""" % _zpl_json(RawZPL)
 
+# A booking that allocated no item ids (inline fault, no label): the by-id
+# customs fetch has no target and is skipped.
+CustomsBookingNoIdsResponse = """{
+  "bookingResponse": {
+    "bookingId": "BOOK-UX3",
+    "idInformation": [{
+      "status": "ERROR",
+      "ids": null,
+      "urls": null,
+      "errorResponse": {
+        "compositeFault": {
+          "faults": [
+            {
+              "explanationText": "customs declaration totalValue is mandatory",
+              "faultCode": "CUSTOMS_VALIDATION"
+            }
+          ]
+        }
+      }
+    }]
+  }
+}"""
+
 # By-id onlyCustomsDeclarations responses: a top-level labelPrintout array
 # (per the /v3/labels/ids swagger) whose entries carry the composed kind.
 CustomsPDFData = "Q04yMiBQREYgREFUQQ=="
@@ -1382,6 +1510,21 @@ CustomsPrintoutsZPLResponse = """[{
   "printout": {"encoding": "none", "data": "%s"}
 }]""" % _zpl_json(CustomsRawZPL)
 
+# Composition keys in non-alphabetical serialization order: the joined
+# document category must not depend on that order.
+CustomsPrintoutsMultiKindResponse = """[{
+  "itemIds": ["00373500454541020957"],
+  "printoutComposition": {"customsInvoice": 1, "cn22": 1},
+  "printout": {"labelFormat": "PDF", "encoding": "base64", "data": "%s"}
+}]""" % CustomsPDFData
+
+# No printoutComposition: the standardized customs-declaration category
+# fallback applies.
+CustomsPrintoutsNoCompositionResponse = """[{
+  "itemIds": ["00373500454541020957"],
+  "printout": {"labelFormat": "PDF", "encoding": "base64", "data": "%s"}
+}]""" % CustomsPDFData
+
 CustomsRetrievalErrorResponse = """{
   "message": "Unable to print labels for the requested IDs",
   "compositeFault": {
@@ -1393,3 +1536,6 @@ CustomsRetrievalErrorResponse = """{
     ]
   }
 }"""
+
+# Non-JSON body (an intermediary's HTML error page) from the by-id fetch.
+UnreadableBodyResponse = "<html>502 Bad Gateway</html>"

@@ -5,7 +5,9 @@ import http.client
 import karrio.lib as lib
 import karrio.api.proxy as proxy
 import karrio.schemas.postnord.labels_ids_request as postnord_labels
+import karrio.schemas.postnord.shipment_response as postnord_res
 import karrio.mappers.postnord.settings as provider_settings
+import karrio.providers.postnord.shipment.create as provider_shipment
 import karrio.providers.postnord.units as provider_units
 from karrio.universal.mappers.rating_proxy import RatingMixinProxy
 
@@ -169,23 +171,20 @@ class Proxy(proxy.Proxy):
 
         Issues ``POST /rest/shipment/v3/labels/ids/{pdf,zpl}`` (matching the
         booking's label format) with the booking response's first assigned
-        item id and ``definePrintout=onlyCustomsDeclarations``. Returns ctx
-        additions for the parser: ``customs_printouts`` (the response's
+        item id (``shipment.create._first_item_id`` — the same rule that
+        yields the parsed tracking number) and
+        ``definePrintout=onlyCustomsDeclarations``. Returns ctx additions
+        for the parser: ``customs_printouts`` (the response's
         ``labelPrintout`` entries) on success, or ``customs_printout_error``
         (the error body, or a synthesized one on transport failure) on
         failure — the booking itself is unaffected either way (fail-open).
         """
-        body = lib.failsafe(lambda: lib.to_dict(response)) or {}
-        item_id = next(
-            (
-                _id.get("value")
-                for info in (body.get("bookingResponse") or {}).get("idInformation")
-                or []
-                for _id in info.get("ids") or []
-                if _id.get("idType") == "itemId"
-            ),
-            None,
+        booking = lib.failsafe(
+            lambda: lib.to_object(
+                postnord_res.ShipmentResponseType, lib.to_dict(response)
+            ).bookingResponse
         )
+        item_id = provider_shipment._first_item_id(booking)
         if not item_id:
             return {}
 
