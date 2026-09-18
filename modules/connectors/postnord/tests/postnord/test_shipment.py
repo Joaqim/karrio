@@ -1,6 +1,7 @@
 """PostNord carrier shipment tests."""
 
 import base64
+import http.client
 import json
 import unittest
 from unittest.mock import patch, ANY
@@ -766,6 +767,33 @@ class TestPostNordCustomsDocument(unittest.TestCase):
         self.assertIsNone(messages[0].code)
         self.assertIn("customs document retrieval failed", messages[0].message)
         self.assertIn("connection refused", messages[0].message)
+
+    def test_create_shipment_customs_document_protocol_failure_fails_open(self):
+        # A protocol-level transport failure (an http.client.HTTPException
+        # such as IncompleteRead, re-raised by lib.request since it is not
+        # an OSError) is also fail-open: the booking stands and the failure
+        # surfaces as a message.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.side_effect = [
+                CustomsBookingResponse,
+                http.client.IncompleteRead(partial=b"<trunc"),
+            ]
+            parsed_response = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(**ExportLetterCustomsPayload)
+                )
+                .from_(gateway)
+                .parse()
+            )
+            self.assertEqual(mock.call_count, 2)
+        details, messages = parsed_response
+        self.assertIsNotNone(details)
+        self.assertEqual(details.docs.label, "JVBERi0xLjQK")
+        self.assertEqual(details.docs.extra_documents, [])
+        self.assertEqual(len(messages), 1)
+        self.assertIsNone(messages[0].code)
+        self.assertIn("customs document retrieval failed", messages[0].message)
+        self.assertIn("IncompleteRead(6 bytes read)", messages[0].message)
 
     def test_create_shipment_export_letter_without_customs_skips_fetch(self):
         # The fetch is gated on customs data being present: an export letter

@@ -1,6 +1,7 @@
 """Karrio PostNord client proxy."""
 
 import datetime
+import http.client
 import karrio.lib as lib
 import karrio.api.proxy as proxy
 import karrio.schemas.postnord.labels_ids_request as postnord_labels
@@ -201,10 +202,12 @@ class Proxy(proxy.Proxy):
                 method="POST",
                 headers={"Content-Type": "application/json"},
             )
-        except OSError as error:
-            # lib.request raises only for transport failures (URLError,
-            # ConnectionError and TimeoutError are all OSError subclasses);
-            # HTTP error bodies are returned as strings instead.
+        except (OSError, http.client.HTTPException) as error:
+            # lib.request returns HTTP error bodies as strings; what it raises
+            # instead are transport failures — socket-level errors (URLError,
+            # ConnectionError, TimeoutError) are OSError subclasses, while
+            # http.client protocol faults (BadStatusLine, IncompleteRead) are
+            # HTTPException subclasses.
             return dict(
                 customs_printout_error=dict(
                     message=f"customs document retrieval failed: {error}"
