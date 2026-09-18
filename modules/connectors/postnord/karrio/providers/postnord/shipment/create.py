@@ -265,7 +265,7 @@ def shipment_request(
                         packageTypeCode=provider_units.PackagingType.map(
                             package.packaging_type or "your_packaging"
                         ).value,
-                        numberOfPackageTypeCodeItems=postnord_req.NumberOfPackageType(
+                        numberOfPackageTypeCodeItems=postnord_req.NumberOfPackagesType(
                             value=1,
                         ),
                         items=[
