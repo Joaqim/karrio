@@ -11,10 +11,10 @@
 
 ## 3. Implicit standalone customs document for UX (design D2)
 
-- [ ] 3.1 Parse `printoutComposition` in `_extract_details` and carry the non-zero document kinds into the parsed result, and verify a unit test against the existing response fixture asserts the composed kinds (cn22 etc.) are extracted
-- [ ] 3.2 Add the post-booking by-id fetch to `create_shipment` in `karrio/mappers/postnord/proxy.py`: when the booked service is `postnord_export_letter` and customs data was present, call `POST /v3/labels/ids/pdf` with the first assigned item id and `definePrintout=onlyCustomsDeclarations`, and attach returned printouts as `docs.extra_documents` entries with category from `printoutComposition` and format PDF, and verify a unit test with two mocked `lib.request` calls asserts the second call's URL/query and the populated `extra_documents`
-- [ ] 3.3 Reuse `_printout_base64` raw-UTF-8 re-encoding for the ZPL variant and verify a unit test booking with `label_type=ZPL` asserts the `/v3/labels/ids/zpl` path and a ZPL-format `ShippingDocument`
-- [ ] 3.4 Make the by-id fetch fail-open: booking stays successful and the retrieval failure is reported as messages, and verify a unit test with a failing second mocked call asserts the shipment result plus error messages and no exception
+- [x] 3.1 Parse `printoutComposition` in `_extract_details` and carry the non-zero document kinds into the parsed result, and verify a unit test against the existing response fixture asserts the composed kinds (cn22 etc.) are extracted
+- [x] 3.2 Add the post-booking by-id fetch to `create_shipment` in `karrio/mappers/postnord/proxy.py`: when the booked service is `postnord_export_letter` and customs data was present, call `POST /v3/labels/ids/pdf` with the first assigned item id and `definePrintout=onlyCustomsDeclarations`, and attach returned printouts as `docs.extra_documents` entries with category from `printoutComposition` and format PDF, and verify a unit test with two mocked `lib.request` calls asserts the second call's URL/query and the populated `extra_documents`
+- [x] 3.3 Reuse `_printout_base64` raw-UTF-8 re-encoding for the ZPL variant and verify a unit test booking with `label_type=ZPL` asserts the `/v3/labels/ids/zpl` path and a ZPL-format `ShippingDocument`
+- [x] 3.4 Make the by-id fetch fail-open: booking stays successful and the retrieval failure is reported as messages, and verify a unit test with a failing second mocked call asserts the shipment result plus error messages and no exception
 
 ## 4. Post-booking declaration proxy (design D3)
 
