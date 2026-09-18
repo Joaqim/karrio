@@ -1,6 +1,7 @@
 """PostNord carrier shipment tests."""
 
 import base64
+import json
 import unittest
 from unittest.mock import patch, ANY
 
@@ -615,6 +616,174 @@ class TestPostNordLabel(unittest.TestCase):
             self.assertNotIn("labelType", mock.call_args[1]["url"])
 
 
+class TestPostNordCustomsDocument(unittest.TestCase):
+    def setUp(self):
+        self.maxDiff = None
+
+    def test_parse_shipment_response_printout_composition(self):
+        # Non-zero printoutComposition kinds are carried into meta as the
+        # composed document kinds. The parcel service keeps the by-id fetch
+        # gated off, so exactly one HTTP call is made.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = CustomsBookingResponse
+            parsed_response = (
+                karrio.Shipment.create(models.ShipmentRequest(**CustomsShipmentPayload))
+                .from_(gateway)
+                .parse()
+            )
+            mock.assert_called_once()
+        details, messages = parsed_response
+        self.assertEqual(messages, [])
+        self.assertEqual(details.meta["printout_composition"], ["cn22", "label"])
+
+    def test_create_shipment_customs_document_fetch(self):
+        # Export letter + customs: after the booking, a second POST fetches
+        # the standalone customs document by the first assigned item id with
+        # definePrintout=onlyCustomsDeclarations, and the printouts attach as
+        # extra_documents categorized by what PostNord composed.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.side_effect = [CustomsBookingResponse, CustomsPrintoutsResponse]
+            parsed_response = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(**ExportLetterCustomsPayload)
+                )
+                .from_(gateway)
+                .parse()
+            )
+            self.assertEqual(mock.call_count, 2)
+            booking_call, customs_call = mock.call_args_list
+            self.assertEqual(
+                booking_call[1]["url"],
+                f"{gateway.settings.server_url}/rest/shipment/v3/edi/labels/pdf"
+                "?apikey=TEST_API_KEY&locale=en",
+            )
+            self.assertEqual(
+                customs_call[1]["url"],
+                f"{gateway.settings.server_url}/rest/shipment/v3/labels/ids/pdf"
+                "?apikey=TEST_API_KEY&definePrintout=onlyCustomsDeclarations",
+            )
+            self.assertEqual(customs_call[1]["method"], "POST")
+            self.assertEqual(
+                json.loads(customs_call[1]["data"]),
+                [{"id": "00373500454541020957"}],
+            )
+        details, messages = parsed_response
+        self.assertEqual(messages, [])
+        self.assertEqual(
+            lib.to_dict(details.docs),
+            {
+                "label": "JVBERi0xLjQK",
+                "extra_documents": [
+                    {
+                        "category": "cn22",
+                        "format": "PDF",
+                        "base64": CustomsPDFData,
+                    }
+                ],
+            },
+        )
+
+    def test_create_shipment_customs_document_zpl_fetch(self):
+        # ZPL bookings fetch through /labels/ids/zpl; the printout carries
+        # raw UTF-8 ZPL (encoding "none") without labelFormat, so the
+        # document format falls back to the requested label type and the
+        # data re-encodes to base64 like the booking label.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.side_effect = [CustomsBookingZPLResponse, CustomsPrintoutsZPLResponse]
+            parsed_response = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(
+                        **{**ExportLetterCustomsPayload, "label_type": "ZPL"}
+                    )
+                )
+                .from_(gateway)
+                .parse()
+            )
+            self.assertEqual(mock.call_count, 2)
+            self.assertEqual(
+                mock.call_args_list[1][1]["url"],
+                f"{gateway.settings.server_url}/rest/shipment/v3/labels/ids/zpl"
+                "?apikey=TEST_API_KEY&definePrintout=onlyCustomsDeclarations",
+            )
+        details, _ = parsed_response
+        self.assertEqual(details.label_type, "ZPL")
+        self.assertEqual(
+            lib.to_dict(details.docs.extra_documents),
+            [
+                {
+                    "category": "cn22",
+                    "format": "ZPL",
+                    "base64": base64.b64encode(CustomsRawZPL.encode("utf-8")).decode(
+                        "utf-8"
+                    ),
+                }
+            ],
+        )
+
+    def test_create_shipment_customs_document_error_body_fails_open(self):
+        # An error body from the by-id fetch leaves the booking successful;
+        # the fault surfaces as a message alongside the shipment details.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.side_effect = [CustomsBookingResponse, CustomsRetrievalErrorResponse]
+            parsed_response = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(**ExportLetterCustomsPayload)
+                )
+                .from_(gateway)
+                .parse()
+            )
+            self.assertEqual(mock.call_count, 2)
+        details, messages = parsed_response
+        self.assertIsNotNone(details)
+        self.assertEqual(details.docs.label, "JVBERi0xLjQK")
+        self.assertEqual(details.docs.extra_documents, [])
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0].code, "EDI_NOT_FOUND")
+        self.assertIn("No EDI found", messages[0].message)
+
+    def test_create_shipment_customs_document_transport_failure_fails_open(self):
+        # A transport-level failure of the by-id fetch is also fail-open: no
+        # exception escapes, the booking stands, and a synthesized message
+        # reports the retrieval failure.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.side_effect = [
+                CustomsBookingResponse,
+                ConnectionError("connection refused"),
+            ]
+            parsed_response = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(**ExportLetterCustomsPayload)
+                )
+                .from_(gateway)
+                .parse()
+            )
+            self.assertEqual(mock.call_count, 2)
+        details, messages = parsed_response
+        self.assertIsNotNone(details)
+        self.assertEqual(details.tracking_number, "00373500454541020957")
+        self.assertEqual(details.docs.extra_documents, [])
+        self.assertEqual(len(messages), 1)
+        self.assertIsNone(messages[0].code)
+        self.assertIn("customs document retrieval failed", messages[0].message)
+        self.assertIn("connection refused", messages[0].message)
+
+    def test_create_shipment_export_letter_without_customs_skips_fetch(self):
+        # The fetch is gated on customs data being present: an export letter
+        # without customs books exactly as before (one call, no documents).
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = CustomsBookingResponse
+            payload = {**ShipmentPayload, "service": "postnord_export_letter"}
+            parsed_response = (
+                karrio.Shipment.create(models.ShipmentRequest(**payload))
+                .from_(gateway)
+                .parse()
+            )
+            mock.assert_called_once()
+        details, messages = parsed_response
+        self.assertEqual(messages, [])
+        self.assertEqual(details.docs.extra_documents, [])
+
+
 if __name__ == "__main__":
     unittest.main()
 
@@ -833,6 +1002,16 @@ def _customs_payload(lines: int) -> dict:
             ],
         },
     }
+
+
+# Export letter (UX) to an international recipient with the customs block:
+# the payload shape that triggers the implicit by-id customs document fetch.
+ExportLetterCustomsPayload = {
+    **ShipmentPayload,
+    "recipient": {**ShipmentPayload["recipient"], "country_code": "US"},
+    "service": "postnord_export_letter",
+    "customs": CustomsShipmentPayload["customs"],
+}
 
 ShipmentCancelRequest = {
     "ids": [{"id": "SHIP-0001"}],
@@ -1112,3 +1291,77 @@ ShipmentZPLMultiResponse = """{
     {"printout": {"type": "LABEL", "labelFormat": "ZPL", "encoding": "none", "data": "%s"}}
   ]
 }""" % (_zpl_json(RawZPL), _zpl_json(RawZPL2))
+
+# Booking response whose label printout also carries a composed CN22
+# (printoutComposition), the shape an export-letter booking with an embedded
+# declaration returns.
+CustomsBookingResponse = """{
+  "bookingResponse": {
+    "bookingId": "BOOK-UX1",
+    "idInformation": [{
+      "status": "OK",
+      "ids": [
+        {"idType": "itemId", "value": "00373500454541020957", "printId": "P1"},
+        {"idType": "shipmentId", "value": "ORDER-7788", "printId": "P2"}
+      ],
+      "urls": [
+        {"type": "TRACKING", "url": "https://tracking.postnord.com/se/?id=00373500454541020957"}
+      ],
+      "errorResponse": null
+    }]
+  },
+  "labelPrintout": [{
+    "printout": {"type": "LABEL", "labelFormat": "PDF", "encoding": "base64", "data": "JVBERi0xLjQK"},
+    "printoutComposition": {"label": 1, "cn22": 1}
+  }]
+}"""
+
+CustomsBookingZPLResponse = """{
+  "bookingResponse": {
+    "bookingId": "BOOK-UX2",
+    "idInformation": [{
+      "status": "OK",
+      "ids": [
+        {"idType": "itemId", "value": "00373500454541020957", "printId": "P1"}
+      ],
+      "urls": [],
+      "errorResponse": null
+    }]
+  },
+  "labelPrintout": [{
+    "printout": {"type": "LABEL", "labelFormat": "ZPL", "encoding": "none", "data": "%s"},
+    "printoutComposition": {"label": 1, "cn22": 1}
+  }]
+}""" % _zpl_json(RawZPL)
+
+# By-id onlyCustomsDeclarations responses: a top-level labelPrintout array
+# (per the /v3/labels/ids swagger) whose entries carry the composed kind.
+CustomsPDFData = "Q04yMiBQREYgREFUQQ=="
+
+CustomsPrintoutsResponse = """[{
+  "itemIds": ["00373500454541020957"],
+  "printoutComposition": {"cn22": 1},
+  "printout": {"labelFormat": "PDF", "encoding": "base64", "data": "%s"}
+}]""" % CustomsPDFData
+
+CustomsRawZPL = "^XA\n^FO50,50\n^FDCN22\n^FS\n^XZ"
+
+# No labelFormat: the document format falls back to the requested label
+# type, mirroring the observed /labels/zpl booking behavior.
+CustomsPrintoutsZPLResponse = """[{
+  "itemIds": ["00373500454541020957"],
+  "printoutComposition": {"cn22": 1},
+  "printout": {"encoding": "none", "data": "%s"}
+}]""" % _zpl_json(CustomsRawZPL)
+
+CustomsRetrievalErrorResponse = """{
+  "message": "Unable to print labels for the requested IDs",
+  "compositeFault": {
+    "faults": [
+      {
+        "explanationText": "No EDI found for item id 00373500454541020957",
+        "faultCode": "EDI_NOT_FOUND"
+      }
+    ]
+  }
+}"""

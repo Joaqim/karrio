@@ -3,7 +3,9 @@
 import datetime
 import karrio.lib as lib
 import karrio.api.proxy as proxy
+import karrio.schemas.postnord.labels_ids_request as postnord_labels
 import karrio.mappers.postnord.settings as provider_settings
+import karrio.providers.postnord.units as provider_units
 from karrio.universal.mappers.rating_proxy import RatingMixinProxy
 
 
@@ -146,7 +148,83 @@ class Proxy(proxy.Proxy):
             headers={"Content-Type": "application/json"},
         )
 
-        return lib.Deserializable(response, lib.to_dict, request.ctx)
+        # Export-letter bookings with an embedded customs declaration fetch a
+        # standalone customs document by item id so the parser can attach it
+        # next to the label (the booking's own printout is left unchanged).
+        customs_ctx = lib.identity(
+            self._get_customs_printouts(response, label_type)
+            if request.ctx.get("basic_service_code")
+            == provider_units.ShippingService.postnord_export_letter
+            and request.ctx.get("customs_declared")
+            else {}
+        )
+
+        return lib.Deserializable(
+            response, lib.to_dict, dict(request.ctx, **customs_ctx)
+        )
+
+    def _get_customs_printouts(self, response: str, label_type: str) -> dict:
+        """Fetch the standalone customs printouts for an export-letter booking.
+
+        Issues ``POST /rest/shipment/v3/labels/ids/{pdf,zpl}`` (matching the
+        booking's label format) with the booking response's first assigned
+        item id and ``definePrintout=onlyCustomsDeclarations``. Returns ctx
+        additions for the parser: ``customs_printouts`` (the response's
+        ``labelPrintout`` entries) on success, or ``customs_printout_error``
+        (the error body, or a synthesized one on transport failure) on
+        failure — the booking itself is unaffected either way (fail-open).
+        """
+        body = lib.failsafe(lambda: lib.to_dict(response)) or {}
+        item_id = next(
+            (
+                _id.get("value")
+                for info in (body.get("bookingResponse") or {}).get("idInformation")
+                or []
+                for _id in info.get("ids") or []
+                if _id.get("idType") == "itemId"
+            ),
+            None,
+        )
+        if not item_id:
+            return {}
+
+        ids = [postnord_labels.LabelsIDSRequestElementType(id=item_id)]
+
+        try:
+            customs_response = lib.request(
+                url=self._url(
+                    f"/rest/shipment/v3/labels/ids/{label_type.lower()}",
+                    definePrintout="onlyCustomsDeclarations",
+                ),
+                data=lib.to_json(lib.to_dict(ids)),
+                trace=self.trace_as("json"),
+                method="POST",
+                headers={"Content-Type": "application/json"},
+            )
+        except OSError as error:
+            # lib.request raises only for transport failures (URLError,
+            # ConnectionError and TimeoutError are all OSError subclasses);
+            # HTTP error bodies are returned as strings instead.
+            return dict(
+                customs_printout_error=dict(
+                    message=f"customs document retrieval failed: {error}"
+                )
+            )
+
+        printouts = lib.failsafe(lambda: lib.to_dict(customs_response))
+        if isinstance(printouts, list):
+            return dict(customs_printouts=printouts)
+        if isinstance(printouts, dict):
+            return dict(customs_printout_error=printouts)
+
+        return dict(
+            customs_printout_error=dict(
+                message=(
+                    "customs document retrieval returned an unreadable body: "
+                    f"{customs_response}"
+                )
+            )
+        )
 
     def cancel_shipment(self, request: lib.Serializable) -> lib.Deserializable[str]:
         # Placeholder endpoint: the id-based deleteEdiRequest delete route is

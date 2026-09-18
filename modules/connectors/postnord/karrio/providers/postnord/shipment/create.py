@@ -9,6 +9,11 @@ tracking urls, per-item errors) and one or more ``labelPrintout`` entries.
 PDF printouts carry base64 data; ZPL printouts carry raw UTF-8 ZPL text
 with ``printout.encoding`` set to ``"none"`` (observed on the live
 endpoint; the swagger documents base64 only).
+
+Export-letter bookings that embed a customs declaration additionally fetch
+a standalone customs document by item id (``POST /v3/labels/ids/{pdf,zpl}``
+with ``definePrintout=onlyCustomsDeclarations``, issued by the proxy after
+the booking) and attach it under ``docs.extra_documents``.
 """
 
 import base64
@@ -45,6 +50,14 @@ def parse_shipment_response(
         if has_shipment
         else None
     )
+
+    # The implicit by-id customs fetch is fail-open (see proxy.create_shipment):
+    # its failure arrives as an error body on the ctx and surfaces here as
+    # messages without suppressing the booking result.
+    if _response.ctx.get("customs_printout_error"):
+        messages += error.parse_error_response(
+            _response.ctx["customs_printout_error"], settings
+        )
 
     return shipment, messages
 
@@ -96,19 +109,70 @@ def _extract_details(
         else lib.bundle_base64(label_data, label_format) if label_data else None
     )
 
+    composed_kinds = sorted({kind for p in printouts for kind in _composed_kinds(p)})
+    customs_documents = _customs_documents(
+        ctx.get("customs_printouts") or [],
+        label_format,
+    )
+
     return models.ShipmentDetails(
         carrier_id=settings.carrier_id,
         carrier_name=settings.carrier_name,
         tracking_number=tracking_number,
         shipment_identifier=shipment_identifier,
         label_type=label_format,
-        docs=models.Documents(label=label),
+        docs=models.Documents(
+            label=label,
+            **({"extra_documents": customs_documents} if customs_documents else {}),
+        ),
         meta=dict(
             booking_id=booking.bookingId,
             tracking_url=tracking_url,
             carrier_tracking_link=tracking_url,
+            **({"printout_composition": composed_kinds} if composed_kinds else {}),
         ),
     )
+
+
+def _composed_kinds(printout: postnord_res.LabelPrintoutType) -> typing.List[str]:
+    """Return the document kinds PostNord composed into a label printout."""
+    return [
+        kind for kind, count in (printout.printoutComposition or {}).items() if count
+    ]
+
+
+def _customs_documents(
+    printouts: typing.List[dict],
+    fallback_format: str,
+) -> typing.List[models.ShippingDocument]:
+    """Map by-id customs printout entries onto unified shipping documents.
+
+    The entries are the ``labelPrintout`` array of the implicit
+    ``POST /v3/labels/ids/{pdf,zpl}`` fetch threaded through the ctx by
+    ``proxy.create_shipment``. The category is what PostNord's
+    ``printoutComposition`` says was composed — never assumed from the
+    service — falling back to the standardized customs-declaration category
+    when PostNord sends no composition. ZPL data re-encodes through the same
+    raw-UTF-8 path as the booking label.
+    """
+    entries = [
+        lib.to_object(postnord_res.LabelPrintoutType, entry)
+        for entry in printouts
+        if isinstance(entry, dict)
+    ]
+
+    return [
+        models.ShippingDocument(
+            category=(
+                ",".join(_composed_kinds(entry))
+                or units.ShippingDocumentCategory.customs_declaration.value
+            ),
+            format=entry.printout.labelFormat or fallback_format,
+            base64=_printout_base64(entry.printout),
+        )
+        for entry in entries
+        if entry.printout and entry.printout.data
+    ]
 
 
 def _printout_base64(printout: postnord_res.PrintoutType) -> str:
@@ -423,5 +487,9 @@ def shipment_request(
             label_type=label_type,
             locale=locale,
             entry_code_error=entry_code_error,
+            # The proxy gates the implicit by-id customs document fetch on the
+            # resolved service code and on the declaration having been embedded.
+            basic_service_code=service,
+            customs_declared=customs_declaration is not None,
         ),
     )
