@@ -18,7 +18,7 @@
 
 ## 4. Follow-up (P1) — optional registry seeds
 
-- [ ] 4.1 Add the registry structure with `ShippingDocumentCategory` normalization and a per-seed revision field; verify key hit, miss, and category-normalization resolution tests
+- [ ] 4.1 Extend the shipped three-part registry key (carrier, category, format) with the paper-variant segment and add the registry structure with `ShippingDocumentCategory` normalization and a per-seed revision field; verify key hit, miss, and category-normalization resolution tests
 - [ ] 4.2 Measure and add the PostNord CN22 (PDF, A4) seed against a live printout; verify a fixture stamps at the seeded anchor
 - [ ] 4.3 Add the FedEx commercial invoice (PDF, letter) seed; verify a fixture stamps at the seeded anchor
 
