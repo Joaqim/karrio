@@ -41,7 +41,9 @@ The backend therefore composites the RGBA image onto an opaque white background 
 
 Anchors are millimetres from the top-left of a one-based page.
 Millimetres convert cleanly to PDF points (bottom-left origin flip) and, for the follow-up backend, ZPL dots at printer density.
-The optional registry key is (carrier, `ShippingDocumentCategory` name, format, paper variant); category resolution goes through `ShippingDocumentCategory.map(...).name_or_key` so PostNord `printoutComposition` strings and normalized names converge on one key.
+The optional registry key shipped at launch is three-part — (carrier, document category, detected format) — joined into a single string with `*` standing in for a missing segment.
+Category resolution goes through `ShippingDocumentCategory.map(...).name_or_key` so PostNord `printoutComposition` strings and normalized names converge on one key.
+A paper-variant segment (the PostNord `rotate` / A4-vs-letter case) is deliberately deferred to the group-4 seed work, where it first becomes load-bearing; the launch registry ships empty, so key arity is behaviorally inert until seeds exist.
 Alternative rejected: PDF points or ZPL dots as the public unit — leaks a coordinate system and origin convention into consumer code.
 
 ### Letterhead is an underlay via merge order
