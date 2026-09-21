@@ -234,6 +234,51 @@ class TestPostNordShipment(unittest.TestCase):
         )
         self.assertEqual(lib.to_dict(request.serialize()), CustomsShipmentRequest)
 
+    def test_create_shipment_customs_registration_numbers(self):
+        # customs.options registration numbers pass through onto the CN22
+        # branch: PostNord rejects a declaration carrying none of them
+        # (SACUS-BR-24062502 "should have either EORI, VOEC, IOSS").
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**CustomsRegistrationShipmentPayload)
+        )
+        self.assertEqual(
+            lib.to_dict(request.serialize()), CustomsRegistrationShipmentRequest
+        )
+
+    def test_create_shipment_customs_registration_numbers_partial(self):
+        # Any subset maps; the absent numbers are not cross-defaulted.
+        payload = {
+            **CustomsShipmentPayload,
+            "customs": {
+                **CustomsShipmentPayload["customs"],
+                "options": {"voec_number": "1234567"},
+            },
+        }
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        declaration = lib.to_dict(request.serialize())["shipment"][0][
+            "customsDeclarationCN22"
+        ]
+        self.assertEqual(declaration["voec"], "1234567")
+        self.assertNotIn("EORIorPersonalIdNumber", declaration)
+        self.assertNotIn("ioss", declaration)
+
+    def test_create_shipment_customs_registration_numbers_empty_send_nothing(self):
+        # Option-state truthiness: an empty-string or None option emits no
+        # element, so the request is identical to one without options.
+        payload = {
+            **CustomsShipmentPayload,
+            "customs": {
+                **CustomsShipmentPayload["customs"],
+                "options": {"eori_number": "", "voec_number": None},
+            },
+        }
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        self.assertEqual(lib.to_dict(request.serialize()), CustomsShipmentRequest)
+
     def test_create_shipment_customs_lines_at_limit(self):
         # 13 lines is the inclusive boundary and is sent in full.
         request = gateway.mapper.create_shipment_request(
@@ -1105,6 +1150,34 @@ CustomsShipmentRequest = {
                 ],
                 "totalGrossWeight": {"value": 1.5, "unit": "KGM"},
                 "totalValue": {"amount": 40.0, "currency": "SEK"},
+            },
+        }
+    ],
+}
+
+
+CustomsRegistrationShipmentPayload = {
+    **CustomsShipmentPayload,
+    "customs": {
+        **CustomsShipmentPayload["customs"],
+        "options": {
+            "eori_number": "SE556000123401",
+            "voec_number": "1234567",
+            "ioss_number": "IM1234567890",
+        },
+    },
+}
+
+CustomsRegistrationShipmentRequest = {
+    **CustomsShipmentRequest,
+    "shipment": [
+        {
+            **CustomsShipmentRequest["shipment"][0],
+            "customsDeclarationCN22": {
+                **CustomsShipmentRequest["shipment"][0]["customsDeclarationCN22"],
+                "EORIorPersonalIdNumber": "SE556000123401",
+                "voec": "1234567",
+                "ioss": "IM1234567890",
             },
         }
     ],
