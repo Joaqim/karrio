@@ -210,6 +210,20 @@ When constructing `customsInvoice.seller`, `buyer`, or `shipTo`, populate the
 fields the specific party needs and leave the others unset; field correctness
 is caller-owned, same as the declaration content.
 
+## Live findings (2026-09-21)
+
+Live verification on a production booking recorded three behaviors the caller
+should expect beyond what the swagger states.
+The declaration endpoint requires a registration number (EORI, VOEC, or IOSS)
+on the CN22 — `SACUS-BR-24062502`, the same rejection as booking-time
+carriage, so `customsDeclarationCN22` should carry
+`EORIorPersonalIdNumber` (or `voec`/`ioss`) on every Original.
+Intra-EU declarations are accepted on the tested account — an SE→PL item was
+not rejected as not-applicable.
+The digital endpoint's success response is the bare `bookingResponseCN`
+(`bookingId` plus per-id `status` and assigned ids), not a wrapped envelope.
+Full evidence: `docs/notes/postnord/customs-declaration-live-verification.md`.
+
 ## Open questions
 
 - Handling when the declared value exceeds the CN22 ceiling (300 SDR): field
