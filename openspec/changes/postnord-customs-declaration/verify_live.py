@@ -184,6 +184,8 @@ def scenario_0(gateway):
 
 def scenario_a(gateway):
     print("\n=== Scenario A: UX booking with customs, PDF label ===")
+    registration = _registration_options()
+    print(f"[registration] threaded: {sorted(registration) or 'none'}")
     shipment, messages = _book(gateway)
     for message in messages:
         print(f"[message] {message.code}: {message.message} details={getattr(message, 'details', None)}")
