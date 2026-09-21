@@ -192,6 +192,22 @@ class ShippingOption(lib.Enum):
     email_notification = postnord_notify_by_email
 
 
+class CustomsOption(lib.Enum):
+    """Unified ``customs.options`` registration identifiers.
+
+    PostNord rejects a CN22 declaration carrying none of EORI/VOEC/IOSS
+    (SACUS-BR-24062502), so these per-request values must reach the booking.
+    ``voec_number`` and ``ioss_number`` are not members of the core
+    ``karrio.core.units.CustomsOption`` enum, and the options helper drops
+    keys unknown to both enums, so the booking converts customs options with
+    this enum as the ``option_type`` (the seko pattern) to keep them visible.
+    """
+
+    eori_number = lib.OptionEnum("eori_number")
+    voec_number = lib.OptionEnum("voec_number")
+    ioss_number = lib.OptionEnum("ioss_number")
+
+
 # Booking freeText usage code carrying the recipient's door/access code;
 # PostNord prints it as "Ref 2" on the label (general-descriptions.pdf:
 # "ZDC ... Door code", "Used in RFF for Consignee"). No PostNord source

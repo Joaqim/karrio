@@ -246,6 +246,7 @@ def _customs_line(
 
 def _customs_declaration(
     customs: models.Customs,
+    options: units.CustomsOptions,
     total_gross_weight: typing.Optional[float],
     country_of_origin: str,
 ) -> postnord_req.CustomsDeclarationCN22Type:
@@ -255,6 +256,10 @@ def _customs_declaration(
     (``detailedDescription``, ``totalValue``) are fully derivable from the
     unified customs model; ``categoryType`` is a free string per the
     swagger, so ``content_type`` passes through as the sole category.
+    Registration numbers are per-request passthrough from ``customs.options``
+    converted with the provider ``CustomsOption`` enum: absent options send
+    nothing and PostNord's own completeness rule (SACUS-BR-24062502 wants
+    EORI, VOEC, or IOSS) remains the authority.
     """
     provider_units.enforce_customs_declaration_lines(
         len(customs.commodities), field="customs.commodities"
@@ -265,6 +270,9 @@ def _customs_declaration(
     )
 
     return postnord_req.CustomsDeclarationCN22Type(
+        EORIorPersonalIdNumber=options.eori_number.state or None,
+        voec=options.voec_number.state or None,
+        ioss=options.ioss_number.state or None,
         countryOfOrigin=country_of_origin,
         categoryOfItem=lib.identity(
             postnord_req.CategoryOfItemType(categoryType=[customs.content_type])
@@ -362,10 +370,18 @@ def shipment_request(
 
     # The customs declaration rides the booking EDI as the CN22 branch of the
     # shipment entry; without customs data the branch is absent so the request
-    # shape is unchanged.
+    # shape is unchanged. Registration options convert through the provider
+    # CustomsOption enum so voec_number/ioss_number survive the typed-options
+    # filtering (see units.CustomsOption); commodity lines keep flowing from
+    # the raw customs model because the Products wrapper normalizes missing
+    # quantity/weight_unit and would change line emission.
+    customs_options = lib.to_customs_info(
+        payload.customs, option_type=provider_units.CustomsOption
+    ).options
     customs_declaration = lib.identity(
         _customs_declaration(
             payload.customs,
+            options=customs_options,
             total_gross_weight=packages.weight.KG,
             country_of_origin=shipper.country_code,
         )
