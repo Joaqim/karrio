@@ -71,6 +71,16 @@ class BookingResponseType:
 
 
 @attr.s(auto_attribs=True)
+class ItemIDType:
+    itemIds: typing.Optional[str] = None
+    printId: typing.Optional[str] = None
+    basicServiceCode: typing.Optional[str] = None
+    reference: typing.Optional[str] = None
+    status: typing.Optional[str] = None
+    errorResponse: typing.Optional[ResponseType] = jstruct.JStruct[ResponseType]
+
+
+@attr.s(auto_attribs=True)
 class PrintoutType:
     id: typing.Optional[int] = None
     type: typing.Optional[str] = None
@@ -82,7 +92,7 @@ class PrintoutType:
 
 @attr.s(auto_attribs=True)
 class LabelPrintoutType:
-    itemIds: typing.Optional[typing.List[str]] = None
+    itemIds: typing.Optional[typing.List[ItemIDType]] = jstruct.JList[ItemIDType]
     printout: typing.Optional[PrintoutType] = jstruct.JStruct[PrintoutType]
     printoutComposition: typing.Optional[typing.Dict[str, int]] = None
 

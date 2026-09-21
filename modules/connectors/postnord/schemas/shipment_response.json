@@ -83,7 +83,32 @@
   },
   "labelPrintout": [
     {
-      "itemIds": ["00373500454541020957"],
+      "itemIds": [
+        {
+          "itemIds": "00373500454541020957",
+          "printId": "373500454541020957",
+          "basicServiceCode": "UX",
+          "reference": "st:ColliId:00373500454541020957",
+          "status": "OK",
+          "errorResponse": {
+            "message": "High level error message.",
+            "compositeFault": {
+              "faults": [
+                {
+                  "explanationText": "Explanation of the fault",
+                  "faultCode": "FAULT_CODE",
+                  "paramValues": [
+                    {
+                      "param": "field",
+                      "value": "value"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ],
       "printout": {
         "id": "1",
         "type": "LABEL",
