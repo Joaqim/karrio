@@ -8,7 +8,7 @@
 - [x] 2.1 Implement the unified-customs → `customsDeclarationCN22` mapping (field table in design.md) in the shipment request builder, and verify a new unit test asserting the full booking request body for a payload with customs matches an expected `RequestData` fixture
 - [x] 2.2 Verify bookings without customs keep the exact pre-change request shape by leaving all existing `test_shipment.py` request assertions unmodified and green
 - [x] 2.3 Add the `CUSTOMS_DECLARATION_MAX_LINES = 13` pre-submission guard to the booking path, and verify a unit test asserting a 14-line payload fails with a field error naming the limit and `lib.request` is never called
-- [ ] 2.4 Map sender registration numbers from `customs.options` (`eori_number` → `EORIorPersonalIdNumber`, `voec_number` → `voec`, `ioss_number` → `ioss`; absent options send nothing — live finding `SACUS-BR-24062502`), and verify unit tests covering presence, absence-keeps-shape, and the live script threading (`POSTNORD_EORI`/`POSTNORD_VOEC`/`POSTNORD_IOSS` env → `customs.options`)
+- [x] 2.4 Map sender registration numbers from `customs.options` (`eori_number` → `EORIorPersonalIdNumber`, `voec_number` → `voec`, `ioss_number` → `ioss`; absent options send nothing — live finding `SACUS-BR-24062502`), and verify unit tests covering presence, absence-keeps-shape, and the live script threading (`POSTNORD_EORI`/`POSTNORD_VOEC`/`POSTNORD_IOSS` env → `customs.options`)
 
 ## 3. Implicit standalone customs document for UX (design D2)
 
