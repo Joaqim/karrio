@@ -80,6 +80,8 @@ def main():
 
     print_id = os.environ.get("POSTNORD_PRINT_ID")
     if print_id:
+        print("\n=== Probe 1b: by-id PDF fetch, unrestricted, printId key ===")
+        print(_post(key, "/rest/shipment/v3/labels/ids/pdf", [{"id": print_id}])[:200])
         print("\n=== Probe 2b: by-id PDF fetch, onlyCustomsDeclarations, printId key ===")
         print(
             _post(
@@ -90,7 +92,7 @@ def main():
             )[:600]
         )
     else:
-        print("\n[probe 2b skipped] set POSTNORD_PRINT_ID to also probe the printId key")
+        print("\n[probe 1b/2b skipped] set POSTNORD_PRINT_ID to also probe the printId key")
 
     if os.environ.get("POSTNORD_SUBMIT") != "1":
         print("\n[probe 3 skipped] set POSTNORD_SUBMIT=1 to POST the declaration")
