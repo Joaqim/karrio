@@ -65,6 +65,8 @@ Bookings without customs data keep the exact pre-change request shape (no empty 
 
 After a successful `UX` booking with customs, issue `POST /v3/labels/ids/{pdf|zpl}` (matching the booking's label format path) with the booking response's first assigned item id and `definePrintout=onlyCustomsDeclarations`, and attach each returned printout as `ShippingDocument(category=..., format=PDF|ZPL, base64=...)` in `docs.extra_documents`.
 
+Amendment (2026-09-21, live finding): the by-id fetch is keyed by the booking response's `printId` (the `assignedIds` entry carrying `idType: "itemId"` also carries the `printId`), not the item id — production returns per-id `FAIL "id not found"` for the item id on a real booking and `OK` for the printId, confirming the swagger's `assignedIds.printId` description over its item-id-shaped request examples. An `OK` response bearing no data-bearing printout (all-zero `printoutComposition`) is surfaced as a message rather than silence.
+
 Alternative considered: book with `definePrintout=ALL` and route the booking response's `labelPrintout` entries between label and customs docs in one call.
 Rejected: `printoutComposition` is per printout (`labelPrintout[].printoutComposition`), but a single printout may compose several document kinds at once (label plus CN22 pages in one file), and the counts carry no page ranges — so a standalone customs document cannot be guaranteed from a merged printout; the by-id endpoint with `definePrintout=onlyCustomsDeclarations` can.
 
