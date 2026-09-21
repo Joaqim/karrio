@@ -10,6 +10,12 @@ Environment:
     POSTNORD_APIKEY            required; sandbox apikey (atapi2 host is used)
     POSTNORD_CUSTOMER_NUMBER   optional; real party id for the booking parties
     POSTNORD_ISSUER_CODE       optional; defaults to Z12 (Sweden)
+    POSTNORD_EORI              optional; sent as customs.options.eori_number
+                                 (CN22 EORIorPersonalIdNumber) when set
+    POSTNORD_VOEC              optional; sent as customs.options.voec_number
+                                 (CN22 voec) when set
+    POSTNORD_IOSS              optional; sent as customs.options.ioss_number
+                                 (CN22 ioss) when set
     POSTNORD_PROBE_SERVER_LIMIT  set to 1 to additionally POST a hand-built
                                  14-line declaration directly, bypassing the
                                  connector guard, to observe PostNord's own
@@ -75,7 +81,27 @@ def _commodities(count):
     return [dict(COMMODITY, title=f"Wool socks batch {n}") for n in range(count)]
 
 
+def _registration_options():
+    return {
+        key: os.environ[env]
+        for key, env in [
+            ("eori_number", "POSTNORD_EORI"),
+            ("voec_number", "POSTNORD_VOEC"),
+            ("ioss_number", "POSTNORD_IOSS"),
+        ]
+        if os.environ.get(env)
+    }
+
+
 def _payload(label_type=None, commodities=None):
+    customs = {
+        "content_type": "merchandise",
+        "commodities": commodities or _commodities(2),
+    }
+    registration = _registration_options()
+    if registration:
+        customs["options"] = registration
+
     payload = {
         "shipper": SHIPPER,
         "recipient": RECIPIENT,
@@ -92,10 +118,7 @@ def _payload(label_type=None, commodities=None):
         ],
         "service": "postnord_export_letter",
         "reference": f"CUSTOMS-VERIFY-{os.getpid()}",
-        "customs": {
-            "content_type": "merchandise",
-            "commodities": commodities or _commodities(2),
-        },
+        "customs": customs,
         "options": {"currency": "USD"},
     }
     if label_type:
