@@ -4,7 +4,7 @@
 - [x] 1.2 Add a shared magic-byte sniff helper generalizing DHL Freight Sweden `LABEL_MAGICS` in `modules/sdk/karrio/core/utils/helpers.py`, with content-type and config fallbacks; verify unit tests cover PDF, ZPL, PNG, and adversarial bytes
 - [x] 1.3 Add `StampPlacement` and `StampRequest` models in a new `modules/sdk/karrio/core/utils/stamping.py`; verify millimetre-to-points conversion (bottom-left flip) with a unit test
 - [x] 1.4 Implement the PDF backend (Pillow single-page image PDF → pypdf `merge_transformed_page` with scale/translate `Transformation`), honoring the Q6 flattening outcome and the overlay/underlay layer; verify a round-trip test asserts preserved format, page count, and AcroForm survival
-- [ ] 1.5 Implement `lib.stamp_document` dispatch (sniff → backend, consumer-placement precedence, registry-miss error, explicit PNG rejection) and re-export from `modules/sdk/karrio/lib.py`; verify the spec scenarios pass, including PNG rejection and registry-miss error
+- [x] 1.5 Implement `lib.stamp_document` dispatch (sniff → backend, consumer-placement precedence, registry-miss error, explicit PNG rejection) and re-export from `modules/sdk/karrio/lib.py`; verify the spec scenarios pass, including PNG rejection and registry-miss error
 - [ ] 1.6 Run the SDK suite to confirm no regression: `python -m unittest discover -v -f modules/sdk/tests`
 
 ## 2. Launch — documentation
