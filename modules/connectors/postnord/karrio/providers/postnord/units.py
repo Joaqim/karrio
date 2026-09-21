@@ -208,6 +208,43 @@ class CustomsOption(lib.Enum):
     ioss_number = lib.OptionEnum("ioss_number")
 
 
+class CN22CategoryType:
+    """Resolve unified ``customs.content_type`` to a CN22 ``categoryType``.
+
+    PostNord documents six ``categoryOfItem.categoryType`` values
+    (booking.swagger.json): GIFT, DOCUMENT, RETURNED GOODS, COMMERCIAL
+    SAMPLE, OTHER, and SALE OF GOODS — the same six categories as karrio's
+    ``CustomsContentType`` under different names. Both vocabularies are
+    accepted, so ``merchandise`` and ``sale of goods`` both resolve to
+    ``SALE OF GOODS``; resolution ignores case and whitespace. The swagger
+    types categoryType as a free string validated server-side, so a value
+    outside both vocabularies is returned verbatim rather than rejected or
+    coerced.
+    """
+
+    # (CustomsContentType value, PostNord categoryType) pairs.
+    VOCABULARY = (
+        ("DOCUMENTS", "DOCUMENT"),
+        ("GIFT", "GIFT"),
+        ("SAMPLE", "COMMERCIAL SAMPLE"),
+        ("MERCHANDISE", "SALE OF GOODS"),
+        ("RETURN_MERCHANDISE", "RETURNED GOODS"),
+        ("OTHER", "OTHER"),
+    )
+
+    MAPPING = {
+        key: postnord_value
+        for karrio_value, postnord_value in VOCABULARY
+        for key in {karrio_value.casefold(), postnord_value.casefold()}
+    }
+
+    @classmethod
+    def lookup(cls, content_type: typing.Optional[str]) -> typing.Optional[str]:
+        return cls.MAPPING.get(
+            " ".join((content_type or "").casefold().split()), content_type
+        )
+
+
 # Booking freeText usage code carrying the recipient's door/access code;
 # PostNord prints it as "Ref 2" on the label (general-descriptions.pdf:
 # "ZDC ... Door code", "Used in RFF for Consignee"). No PostNord source

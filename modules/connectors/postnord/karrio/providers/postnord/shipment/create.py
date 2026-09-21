@@ -287,8 +287,10 @@ def _customs_declaration(
 
     CN22 is the declaration branch whose required fields
     (``detailedDescription``, ``totalValue``) are fully derivable from the
-    unified customs model; ``categoryType`` is a free string per the
-    swagger, so ``content_type`` passes through as the sole category.
+    unified customs model; ``content_type`` resolves to the sole
+    ``categoryType`` entry through the provider CN22 vocabulary
+    (``CN22CategoryType.lookup``), with unknown values passing through
+    verbatim.
     Registration numbers are per-request passthrough from ``customs.options``
     converted with the provider ``CustomsOption`` enum: absent options send
     nothing and PostNord's own completeness rule (SACUS-BR-24062502 wants
@@ -301,6 +303,11 @@ def _customs_declaration(
     currency = next(
         (c.value_currency for c in customs.commodities if c.value_currency), None
     )
+    category = (
+        provider_units.CN22CategoryType.lookup(customs.content_type)
+        if customs.content_type
+        else None
+    )
 
     return postnord_req.CustomsDeclarationCN22Type(
         EORIorPersonalIdNumber=options.eori_number.state or None,
@@ -308,8 +315,8 @@ def _customs_declaration(
         ioss=options.ioss_number.state or None,
         countryOfOrigin=country_of_origin,
         categoryOfItem=lib.identity(
-            postnord_req.CategoryOfItemType(categoryType=[customs.content_type])
-            if customs.content_type
+            postnord_req.CategoryOfItemType(categoryType=[category])
+            if category
             else None
         ),
         detailedDescription=[

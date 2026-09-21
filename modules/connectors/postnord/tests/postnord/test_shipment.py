@@ -235,6 +235,99 @@ class TestPostNordShipment(unittest.TestCase):
         )
         self.assertEqual(lib.to_dict(request.serialize()), CustomsShipmentRequest)
 
+    def test_create_shipment_customs_category_vocabulary(self):
+        # Each karrio-canonical content_type resolves to its PostNord CN22
+        # category: karrio's vocabulary names the same six categories under
+        # different values (MERCHANDISE is PostNord's SALE OF GOODS).
+        for content_type, category in [
+            ("documents", "DOCUMENT"),
+            ("gift", "GIFT"),
+            ("sample", "COMMERCIAL SAMPLE"),
+            ("merchandise", "SALE OF GOODS"),
+            ("return_merchandise", "RETURNED GOODS"),
+            ("other", "OTHER"),
+        ]:
+            with self.subTest(content_type=content_type):
+                payload = {
+                    **CustomsShipmentPayload,
+                    "customs": {
+                        **CustomsShipmentPayload["customs"],
+                        "content_type": content_type,
+                    },
+                }
+                request = gateway.mapper.create_shipment_request(
+                    models.ShipmentRequest(**payload)
+                )
+                declaration = lib.to_dict(request.serialize())["shipment"][0][
+                    "customsDeclarationCN22"
+                ]
+                self.assertEqual(
+                    declaration["categoryOfItem"], {"categoryType": [category]}
+                )
+
+    def test_create_shipment_customs_category_postnord_native_form(self):
+        # A caller already speaking PostNord's vocabulary canonicalizes to
+        # the uppercase form; resolution ignores case and extra whitespace.
+        for content_type in ["sale of goods", "  SALE   OF GOODS "]:
+            with self.subTest(content_type=content_type):
+                payload = {
+                    **CustomsShipmentPayload,
+                    "customs": {
+                        **CustomsShipmentPayload["customs"],
+                        "content_type": content_type,
+                    },
+                }
+                request = gateway.mapper.create_shipment_request(
+                    models.ShipmentRequest(**payload)
+                )
+                declaration = lib.to_dict(request.serialize())["shipment"][0][
+                    "customsDeclarationCN22"
+                ]
+                self.assertEqual(
+                    declaration["categoryOfItem"],
+                    {"categoryType": ["SALE OF GOODS"]},
+                )
+
+    def test_create_shipment_customs_category_unknown_passthrough(self):
+        # categoryType is a free string validated server-side, so a value
+        # outside both vocabularies is sent verbatim, not rejected or coerced.
+        payload = {
+            **CustomsShipmentPayload,
+            "customs": {
+                **CustomsShipmentPayload["customs"],
+                "content_type": "intercompany transfer",
+            },
+        }
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        declaration = lib.to_dict(request.serialize())["shipment"][0][
+            "customsDeclarationCN22"
+        ]
+        self.assertEqual(
+            declaration["categoryOfItem"],
+            {"categoryType": ["intercompany transfer"]},
+        )
+
+    def test_create_shipment_customs_category_absent(self):
+        # Without a content_type the request carries no categoryOfItem
+        # element at all.
+        payload = {
+            **CustomsShipmentPayload,
+            "customs": {
+                key: value
+                for key, value in CustomsShipmentPayload["customs"].items()
+                if key != "content_type"
+            },
+        }
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        declaration = lib.to_dict(request.serialize())["shipment"][0][
+            "customsDeclarationCN22"
+        ]
+        self.assertNotIn("categoryOfItem", declaration)
+
     def test_create_shipment_customs_registration_numbers(self):
         # customs.options registration numbers pass through onto the CN22
         # branch: PostNord rejects a declaration carrying none of them
@@ -1272,7 +1365,7 @@ CustomsShipmentRequest = {
             **ShipmentRequest["shipment"][0],
             "customsDeclarationCN22": {
                 "countryOfOrigin": "SE",
-                "categoryOfItem": {"categoryType": ["merchandise"]},
+                "categoryOfItem": {"categoryType": ["SALE OF GOODS"]},
                 "detailedDescription": [
                     {
                         "content": "Wool socks",
