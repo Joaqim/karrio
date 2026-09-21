@@ -1,6 +1,6 @@
 ## 1. Launch — SDK core utility (PDF)
 
-- [ ] 1.1 Run the Q6 alpha spike: save a real CN22 signature PNG as a Pillow image PDF and inspect whether RGBA alpha survives as an SMask; record the outcome (true alpha vs. white-flatten fallback) in design.md before finalizing the backend
+- [x] 1.1 Run the Q6 alpha spike: save a real CN22 signature PNG as a Pillow image PDF and inspect whether RGBA alpha survives as an SMask; record the outcome (true alpha vs. white-flatten fallback) in design.md before finalizing the backend
 - [ ] 1.2 Add a shared magic-byte sniff helper generalizing DHL Freight Sweden `LABEL_MAGICS` in `modules/sdk/karrio/core/utils/helpers.py`, with content-type and config fallbacks; verify unit tests cover PDF, ZPL, PNG, and adversarial bytes
 - [ ] 1.3 Add `StampPlacement` and `StampRequest` models in a new `modules/sdk/karrio/core/utils/stamping.py`; verify millimetre-to-points conversion (bottom-left flip) with a unit test
 - [ ] 1.4 Implement the PDF backend (Pillow single-page image PDF → pypdf `merge_transformed_page` with scale/translate `Transformation`), honoring the Q6 flattening outcome and the overlay/underlay layer; verify a round-trip test asserts preserved format, page count, and AcroForm survival
