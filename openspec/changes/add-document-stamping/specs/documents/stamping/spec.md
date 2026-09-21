@@ -93,3 +93,37 @@ It SHALL NOT store the returned document, and SHALL NOT verify or assert the leg
 - **WHEN** a document is stamped
 - **THEN** the utility returns the stamped document to the caller and retains no copy of it
 - **AND** the utility makes no assertion about whether the stamped image constitutes a valid signature
+
+### Requirement: Placement rotation
+
+The utility SHALL composite the image rotated by a caller-specified angle in degrees about the placement, so a caller can align a normally-drawn image with a rotated document layout.
+The rotation SHALL default to no rotation, leaving the composited image upright and unchanged from prior behavior when the caller specifies no angle.
+
+#### Scenario: A rotation aligns the image with a sideways form
+
+- **WHEN** a consumer supplies a placement with a 90-degree rotation onto a document whose target field runs sideways
+- **THEN** the composited image is rotated by 90 degrees at the anchor so it aligns with the sideways field
+
+#### Scenario: The default rotation composites upright
+
+- **WHEN** a consumer supplies a placement without a rotation angle
+- **THEN** the utility composites the image upright at the anchor
+- **AND** the result is unchanged from the behavior before rotation was available
+
+### Requirement: Consumer-supplied date stamp
+
+When the caller supplies a date value, the utility SHALL render it as text and composite it preceding the signature image within the placement, at the same rotation as the signature.
+The caller SHALL supply the date as a pre-formatted string; the utility SHALL NOT format the date or impose a locale.
+
+#### Scenario: A supplied date is composited preceding the signature
+
+- **WHEN** a consumer supplies a date value together with the signature image and a placement
+- **THEN** both the rendered date text and the signature appear on the page at the anchor
+- **AND** the date precedes the signature
+- **AND** the date text shares the signature's rotation
+
+#### Scenario: An omitted date composites the signature alone
+
+- **WHEN** a consumer omits the date value
+- **THEN** the utility composites only the signature image at the anchor
+- **AND** the result is unchanged from the behavior before the date stamp was available
