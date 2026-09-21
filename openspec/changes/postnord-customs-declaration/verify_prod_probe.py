@@ -39,6 +39,7 @@ The apikey is never printed. Paste the output back into the session for
 recording under docs/notes/.
 """
 
+import base64
 import json
 import os
 import sys
@@ -47,6 +48,54 @@ import karrio.lib as lib
 
 HOST = "https://api2.postnord.com"
 ITEM_ID = os.environ.get("POSTNORD_ITEM_ID", "UX478114854SE")
+
+
+def _summarize(body):
+    """Per-entry summary of a by-id labelPrintout response.
+
+    The raw body interleaves a large base64 printout.data BEFORE
+    printoutComposition, so any fixed-length slice hides the composition;
+    print the decision-relevant fields instead of the payload.
+    """
+    try:
+        entries = json.loads(body)
+    except (TypeError, ValueError):
+        return str(body)[:300]
+    if not isinstance(entries, list):
+        return str(body)[:600]
+
+    lines = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            lines.append(repr(entry)[:200])
+            continue
+        for member in entry.get("itemIds") or []:
+            if not isinstance(member, dict):
+                lines.append(f"  id-member: {member!r}")
+                continue
+            line = (
+                f"  id={member.get('itemIds')} status={member.get('status')}"
+                f" printId={member.get('printId')}"
+            )
+            error = (member.get("errorResponse") or {}).get("message")
+            if error:
+                line += f" error={error!r}"
+            lines.append(line)
+        printout = entry.get("printout") or {}
+        data = printout.get("data")
+        if data:
+            magic = base64.b64decode(data)[:5]
+            lines.append(
+                f"  printout: type={printout.get('type')}"
+                f" format={printout.get('labelFormat')}"
+                f" data_len={len(data)} magic={magic!r}"
+            )
+        else:
+            lines.append(f"  printout: {printout or 'absent (no data)'}")
+        composition = entry.get("printoutComposition") or {}
+        nonzero = {k: v for k, v in composition.items() if v}
+        lines.append(f"  composition (nonzero): {nonzero or 'ALL ZERO'}")
+    return "\n".join(lines)
 
 
 def _post(key, path, body, extra_query=""):
@@ -66,30 +115,34 @@ def main():
     key = os.environ["POSTNORD_LIVE_APIKEY"]
 
     print(f"=== Probe 1: by-id PDF fetch, unrestricted (item {ITEM_ID}) ===")
-    print(_post(key, "/rest/shipment/v3/labels/ids/pdf", [{"id": ITEM_ID}])[:600])
+    print(_summarize(_post(key, "/rest/shipment/v3/labels/ids/pdf", [{"id": ITEM_ID}])))
 
     print("\n=== Probe 2: by-id PDF fetch, onlyCustomsDeclarations ===")
     print(
-        _post(
-            key,
-            "/rest/shipment/v3/labels/ids/pdf",
-            [{"id": ITEM_ID}],
-            extra_query="&definePrintout=onlyCustomsDeclarations",
-        )[:600]
+        _summarize(
+            _post(
+                key,
+                "/rest/shipment/v3/labels/ids/pdf",
+                [{"id": ITEM_ID}],
+                extra_query="&definePrintout=onlyCustomsDeclarations",
+            )
+        )
     )
 
     print_id = os.environ.get("POSTNORD_PRINT_ID")
     if print_id:
         print("\n=== Probe 1b: by-id PDF fetch, unrestricted, printId key ===")
-        print(_post(key, "/rest/shipment/v3/labels/ids/pdf", [{"id": print_id}])[:200])
+        print(_summarize(_post(key, "/rest/shipment/v3/labels/ids/pdf", [{"id": print_id}])))
         print("\n=== Probe 2b: by-id PDF fetch, onlyCustomsDeclarations, printId key ===")
         print(
-            _post(
-                key,
-                "/rest/shipment/v3/labels/ids/pdf",
-                [{"id": print_id}],
-                extra_query="&definePrintout=onlyCustomsDeclarations",
-            )[:600]
+            _summarize(
+                _post(
+                    key,
+                    "/rest/shipment/v3/labels/ids/pdf",
+                    [{"id": print_id}],
+                    extra_query="&definePrintout=onlyCustomsDeclarations",
+                )
+            )
         )
     else:
         print("\n[probe 1b/2b skipped] set POSTNORD_PRINT_ID to also probe the printId key")
