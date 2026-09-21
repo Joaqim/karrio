@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import karrio.lib as lib
 import karrio.schemas.postnord.customs_declaration_request as postnord_req
+import karrio.schemas.postnord.customs_declaration_response as postnord_cdr
 import karrio.providers.postnord.customs as customs
 
 from .fixture import gateway
@@ -206,6 +207,17 @@ class TestPostNordCustomsDeclaration(unittest.TestCase):
             )
         self.assertEqual(messages, [])
         self.assertEqual(lib.to_dict(result), ParsedPdfDeclaration)
+        # The itemIds members are the swagger itemIds_inner objects (one per
+        # declared id), not a bare string array: pin the typed
+        # deserialization of the member fields.
+        printout_entry = lib.to_object(
+            postnord_cdr.LabelPrintoutType,
+            json.loads(DeclarationPdfResponse)["labelPrintout"][0],
+        )
+        member = printout_entry.itemIds[0]
+        self.assertEqual(member.itemIds, ItemId)
+        self.assertEqual(member.printId, "31eed2dad84b48a2ba92a26590a0a69f")
+        self.assertEqual(member.status, "OK")
 
     def test_parse_customs_declaration_rejection(self):
         # An upstream rejection (no prior EDI for the id) surfaces as
@@ -337,6 +349,9 @@ ParsedDeclaration = {
     ],
 }
 
+# The PDF variant's labelPrintout.itemIds members follow the same
+# itemIds_inner object shape as the booking/by-id responses (swagger
+# addCustomsDeclarationPdfResponse -> labelPrintout -> itemIds_inner).
 DeclarationPdfResponse = """{
   "bookingResponse": {
     "bookingId": "3YSFH8NG0LNREZO38UIN68B3RRWL4X",
@@ -348,7 +363,13 @@ DeclarationPdfResponse = """{
     }]
   },
   "labelPrintout": [{
-    "itemIds": ["00373500454541020957"],
+    "itemIds": [
+      {
+        "itemIds": "00373500454541020957",
+        "printId": "31eed2dad84b48a2ba92a26590a0a69f",
+        "status": "OK"
+      }
+    ],
     "printout": {"type": "LABEL", "labelFormat": "PDF", "encoding": "base64", "data": "JVBERi0xLjQK"},
     "printoutComposition": {"label": 0, "cn22": 2, "cn23": 0, "customsInvoice": 0}
   }]

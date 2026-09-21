@@ -32,7 +32,47 @@
   },
   "labelPrintout": [
     {
-      "itemIds": ["00373500454541020957"],
+      "itemIds": [
+        {
+          "itemIds": "00373500454541020957",
+          "printId": "31eed2dad84b48a2ba92a26590a0a69f",
+          "basicServiceCode": "UX",
+          "reference": {
+            "item": [
+              {
+                "referenceNo": "ITEM-1",
+                "referenceType": "ON",
+                "referenceDesc": "Item reference"
+              }
+            ],
+            "shipment": [
+              {
+                "referenceNo": "ORDER-7788",
+                "referenceType": "CU",
+                "referenceDesc": "Customer order number"
+              }
+            ]
+          },
+          "status": "OK",
+          "errorResponse": {
+            "message": "High level error message.",
+            "compositeFault": {
+              "faults": [
+                {
+                  "explanationText": "Explanation of the fault",
+                  "faultCode": "FAULT_CODE",
+                  "paramValues": [
+                    {
+                      "param": "field",
+                      "value": "value"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ],
       "printout": {
         "id": "1",
         "type": "LABEL",
