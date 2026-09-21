@@ -19,18 +19,28 @@ Environment:
                            (default itemId; the swagger prose lists ITEMID
                            uppercase — retry with ITEMID if production
                            rejects the camelCase form)
-    POSTNORD_SUBMIT        set to 1 to additionally POST the digital
-                           declaration (mutating: attaches a 2-line CN22 to
-                           the item — only run against a sacrificial booking)
+    POSTNORD_SUBMIT        set to 1 to additionally POST the declaration
+                           update (mutating: probe 3 digital, probe 4
+                           PDF-variant — only run against a sacrificial
+                           booking)
 
 Probes:
     1  by-id PDF fetch, unrestricted — read-only render; captures the
        authoritative labelPrintout success envelope for a real booking
     2  by-id PDF fetch restricted to customs declarations — read-only;
        shows whether a standalone customs printout exists for the item
-    3  opt-in digital declaration POST — captures the declaration success
-       envelope (bare bookingResponseCN vs wrapped), settling the envelope
-       question left open by the sandbox runs
+    1b/2b  the same pair keyed by printId, the live-verified key
+    2c  by-id ZPL fetch restricted to customs declarations, printId key —
+        read-only; answers whether a thermal-printer customs printout is
+        offered for the declared item
+    3  opt-in digital declaration POST — re-declares the item with a
+       one-line merchandise CN22 (updateIndicator=Update over the existing
+       Original) and captures the success envelope
+    4  opt-in PDF-variant declaration POST — same declaration against
+       /customs/declaration/pdf with A4 rendering params; saves the
+       rendered, pre-filled CN22 for eye verification
+    5  post-update by-id ZPL fetch — read-only after probes 3-4; saves
+       the updated CN22 as ZPL for thermal-printer verification
 
 Note: an intra-EU item may be rejected by the customs rules engine as not
 applicable — a rejection is itself recorded evidence.
@@ -63,7 +73,10 @@ def _summarize(body):
         return str(body)[:300]
     if not isinstance(entries, list):
         return str(body)[:600]
+    return _summarize_entries(entries)
 
+
+def _summarize_entries(entries):
     lines = []
     for entry in entries:
         if not isinstance(entry, dict):
@@ -119,12 +132,8 @@ PDF_DIR = os.environ.get(
 )
 
 
-def _save_pdf(body, name):
+def _save_entries(entries, name, ext="pdf"):
     """Write the first data-bearing printout to a file for eye verification."""
-    try:
-        entries = json.loads(body)
-    except (TypeError, ValueError):
-        return None
     for entry in entries if isinstance(entries, list) else []:
         if not isinstance(entry, dict):
             continue
@@ -132,19 +141,27 @@ def _save_pdf(body, name):
         if not data:
             continue
         os.makedirs(PDF_DIR, exist_ok=True)
-        path = os.path.join(PDF_DIR, f"{name}.pdf")
+        path = os.path.join(PDF_DIR, f"{name}.{ext}")
         with open(path, "wb") as handle:
             handle.write(base64.b64decode(data))
         return path
     return None
 
 
-def _run_probe(key, ids, name, extra_query=""):
-    body = _post(key, "/rest/shipment/v3/labels/ids/pdf", ids, extra_query=extra_query)
+def _save_printout(body, name, ext="pdf"):
+    try:
+        entries = json.loads(body)
+    except (TypeError, ValueError):
+        return None
+    return _save_entries(entries, name, ext=ext)
+
+
+def _run_probe(key, ids, name, extra_query="", endpoint="pdf", ext="pdf"):
+    body = _post(key, f"/rest/shipment/v3/labels/ids/{endpoint}", ids, extra_query=extra_query)
     print(_summarize(body))
-    saved = _save_pdf(body, name)
+    saved = _save_printout(body, name, ext=ext)
     if saved:
-        print(f"  saved pdf: {saved}")
+        print(f"  saved {ext}: {saved}")
 
 
 def main():
@@ -175,14 +192,24 @@ def main():
             "probe2b_printid_onlyCustomsDeclarations",
             extra_query="&definePrintout=onlyCustomsDeclarations",
         )
+        print("\n=== Probe 2c: by-id ZPL fetch, onlyCustomsDeclarations, printId key ===")
+        _run_probe(
+            key,
+            [{"id": print_id}],
+            "probe2c_printid_onlyCustomsDeclarations_zpl",
+            extra_query="&definePrintout=onlyCustomsDeclarations",
+            endpoint="zpl",
+            ext="zpl",
+        )
     else:
         print("\n[probe 1b/2b skipped] set POSTNORD_PRINT_ID to also probe the printId key")
 
     if os.environ.get("POSTNORD_SUBMIT") != "1":
-        print("\n[probe 3 skipped] set POSTNORD_SUBMIT=1 to POST the declaration")
+        print("\n[probes 3-5 skipped] set POSTNORD_SUBMIT=1 to POST the declaration update")
         return 0
 
     declaration = {
+        "updateIndicator": "Update",
         "ids": [
             {
                 "id": ITEM_ID,
@@ -191,26 +218,20 @@ def main():
         ],
         "customsDeclarationCN22": {
             "countryOfOrigin": "SE",
-            "categoryOfItem": {"categoryType": ["merchandise"]},
+            "categoryOfItem": {"categoryType": ["SALE OF GOODS"]},
             "detailedDescription": [
                 {
-                    "content": "Wool socks",
-                    "quantity": {"value": 2},
-                    "grossWeight": {"value": 0.4, "unit": "KGM"},
-                    "value": {"amount": 2.5, "currency": "USD"},
+                    "content": "Candy",
+                    "quantity": {"value": 1},
+                    "grossWeight": {"value": 0.38, "unit": "KGM"},
+                    "value": {"amount": 30.0, "currency": "EUR"},
+                    "hsTariffNumber": "1704906500",
                     "countryCode": "SE",
                     "rowNo": 1,
-                },
-                {
-                    "content": "Postcard",
-                    "quantity": {"value": 1},
-                    "grossWeight": {"value": 0.1, "unit": "KGM"},
-                    "value": {"amount": 1.0, "currency": "USD"},
-                    "countryCode": "SE",
-                    "rowNo": 2,
-                },
+                }
             ],
-            "totalValue": {"amount": 3.5, "currency": "USD"},
+            "totalGrossWeight": {"value": 0.51, "unit": "KGM"},
+            "totalValue": {"amount": 30.0, "currency": "EUR"},
             **(
                 {"EORIorPersonalIdNumber": os.environ["POSTNORD_EORI"]}
                 if os.environ.get("POSTNORD_EORI")
@@ -219,8 +240,45 @@ def main():
         },
     }
 
-    print("\n=== Probe 3: digital declaration POST (mutating) ===")
+    print("\n=== Probe 3: digital declaration POST, candy-order Update (mutating) ===")
     print(_post(key, "/rest/shipment/v3/customs/declaration", [declaration])[:800])
+
+    print("\n=== Probe 4: PDF-variant declaration POST, rendered CN22 (mutating) ===")
+    pdf_body = _post(
+        key,
+        "/rest/shipment/v3/customs/declaration/pdf",
+        [declaration],
+        extra_query=(
+            "&paperSize=A4&rotate=0&multiPDF=false&labelsPerPage=100&page=1"
+            "&processOffline=false&storeLabel=false"
+            "&pageHorizontalAlign=JUSTIFY&pageVerticalAlign=JUSTIFY"
+        ),
+    )
+    try:
+        parsed = json.loads(pdf_body)
+    except (TypeError, ValueError):
+        parsed = None
+    if isinstance(parsed, dict):
+        statuses = parsed.get("bookingResponseCN") or parsed
+        print(f"  bookingResponseCN: {str(statuses)[:400]}")
+        printouts = parsed.get("labelPrintout") or []
+        print(_summarize_entries(printouts))
+        saved = _save_entries(printouts, "probe4_declaration_pdf_rendered")
+        if saved:
+            print(f"  saved pdf: {saved}")
+    else:
+        print(pdf_body[:800])
+
+    if print_id:
+        print("\n=== Probe 5: post-update by-id ZPL fetch, onlyCustomsDeclarations ===")
+        _run_probe(
+            key,
+            [{"id": print_id}],
+            "probe5_postupdate_onlyCustomsDeclarations_zpl",
+            extra_query="&definePrintout=onlyCustomsDeclarations",
+            endpoint="zpl",
+            ext="zpl",
+        )
 
     print("\nDone. Paste this output back into the session for recording.")
     return 0
