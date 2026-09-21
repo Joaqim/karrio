@@ -23,7 +23,7 @@ Downstream plumbing already exists: `Documents.extra_documents: List[ShippingDoc
 
 - No SDK or server changes (`extra_documents` plumbing and persistence already exist).
 - No automatic CN23 or customs-invoice embedding at booking; those branches stay reachable through the post-booking proxy where the caller chooses the branch explicitly.
-- No EORI/VAT/IOSS collection beyond what unified customs already carries; no dashboard UI.
+- No new unified EORI/VAT/IOSS fields and no dashboard UI; registration numbers pass through `customs.options` only.
 - No lifecycle management of declarations after creation: karrio does not reconcile, regenerate, verify, or retract.
 - Consolidation and dangerous-goods endpoints are out of scope.
 
@@ -53,6 +53,11 @@ Field mapping (unified → `customsDeclarationCN22`, SW:5176):
 | shipment gross weight | `totalGrossWeight {value, unit=KGM}` |
 | `content_type` | `categoryOfItem` |
 | consignor country | `countryOfOrigin` |
+| `options.eori_number` | `EORIorPersonalIdNumber` |
+| `options.voec_number` | `voec` |
+| `options.ioss_number` | `ioss` |
+
+Amendment (2026-09-21, live finding): the registration-number rows were added after the first live verification round — atapi2 rejects a CN22 booking carrying none of them (`SACUS-BR-24062502: "Customs CN22/CN23 should have either EORI, VOEC, IOSS"`). The unified model already carries these through `customs.options` (the `eori_number` convention dhl_poland uses), so the mapping passes them through and stays inside the non-goal above: absent options send nothing and PostNord's own rule remains the authority.
 
 Bookings without customs data keep the exact pre-change request shape (no empty structures).
 

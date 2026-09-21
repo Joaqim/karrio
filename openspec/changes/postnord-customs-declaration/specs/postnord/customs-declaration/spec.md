@@ -13,6 +13,11 @@ Shipment creation that includes unified customs data SHALL send the customs decl
 - **WHEN** a shipment is created with customs data containing commodities
 - **THEN** the booking request carries customs declaration lines with description, quantity, weight, value, currency, and country of origin derived from those commodities
 
+#### Scenario: Sender registration numbers pass through customs options
+
+- **WHEN** the customs payload carries `options.eori_number`, `options.voec_number`, or `options.ioss_number`
+- **THEN** the booking's declaration carries them on the corresponding CN22 registration fields (`EORIorPersonalIdNumber`, `voec`, `ioss`), and a declaration carrying none of them is sent as-is for PostNord to judge
+
 #### Scenario: Bookings without customs data are unchanged
 
 - **WHEN** a shipment is created without customs data
