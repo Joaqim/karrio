@@ -88,7 +88,22 @@
           "itemIds": "00373500454541020957",
           "printId": "373500454541020957",
           "basicServiceCode": "UX",
-          "reference": "st:ColliId:00373500454541020957",
+          "reference": {
+            "item": [
+              {
+                "referenceNo": "ITEM-1",
+                "referenceType": "ON",
+                "referenceDesc": "Item reference"
+              }
+            ],
+            "shipment": [
+              {
+                "referenceNo": "BOOK-0001",
+                "referenceType": "IL",
+                "referenceDesc": "Booking id reference"
+              }
+            ]
+          },
           "status": "OK",
           "errorResponse": {
             "message": "High level error message.",

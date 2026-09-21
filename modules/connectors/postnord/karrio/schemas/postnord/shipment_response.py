@@ -42,7 +42,7 @@ class ItemType:
 
 
 @attr.s(auto_attribs=True)
-class ReferencesType:
+class ReferenceType:
     shipment: typing.Optional[typing.List[ItemType]] = jstruct.JList[ItemType]
     item: typing.Optional[typing.List[ItemType]] = jstruct.JList[ItemType]
 
@@ -56,7 +56,7 @@ class URLType:
 @attr.s(auto_attribs=True)
 class IDInformationType:
     status: typing.Optional[str] = None
-    references: typing.Optional[ReferencesType] = jstruct.JStruct[ReferencesType]
+    references: typing.Optional[ReferenceType] = jstruct.JStruct[ReferenceType]
     ids: typing.Optional[typing.List[IDType]] = jstruct.JList[IDType]
     urls: typing.Optional[typing.List[URLType]] = jstruct.JList[URLType]
     attributes: typing.Optional[typing.List[AttributeType]] = jstruct.JList[AttributeType]
@@ -75,7 +75,7 @@ class ItemIDType:
     itemIds: typing.Optional[str] = None
     printId: typing.Optional[str] = None
     basicServiceCode: typing.Optional[str] = None
-    reference: typing.Optional[str] = None
+    reference: typing.Optional[ReferenceType] = jstruct.JStruct[ReferenceType]
     status: typing.Optional[str] = None
     errorResponse: typing.Optional[ResponseType] = jstruct.JStruct[ResponseType]
 
