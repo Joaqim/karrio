@@ -152,6 +152,57 @@ def binary_to_base64(binary_str: str) -> str:
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 
+# Magic prefixes for the document formats karrio composites against,
+# generalizing the DHL Freight Sweden ``LABEL_MAGICS`` precedent.
+DOCUMENT_MAGICS: List[tuple] = [
+    (b"%PDF-", "PDF"),
+    (b"^XA", "ZPL"),
+    (b"\x89PNG\r\n\x1a\n", "PNG"),
+]
+CONTENT_TYPE_FORMATS: List[tuple] = [
+    ("pdf", "PDF"),
+    ("zpl", "ZPL"),
+    ("png", "PNG"),
+]
+
+
+def sniff_document_format(
+    content: Union[str, bytes],
+    content_type: str = None,
+    default: str = None,
+) -> Optional[str]:
+    """Detect a document's format by magic-byte inspection with fallbacks.
+
+    Generalizes the DHL Freight Sweden ``LABEL_MAGICS`` classifier into a
+    shared helper over base64 or raw document bytes, recognizing ``PDF``
+    (``%PDF-``), ``ZPL`` (``^XA``), and ``PNG`` (the 8-byte PNG signature).
+    Magic-byte detection is authoritative; a ``content_type`` hint and an
+    explicit ``default`` (the caller's config fallback) are consulted only
+    when the leading bytes match no known signature.
+
+    Returns the format label, or ``default`` when nothing resolves.
+    """
+    raw = (
+        bytes(content)
+        if isinstance(content, (bytes, bytearray))
+        else (failsafe(lambda: base64.b64decode(content or "")) or b"")
+    )
+    prefix = raw[:16].lstrip()
+    keyword = (content_type or "").lower()
+
+    return (
+        next(
+            (label for magic, label in DOCUMENT_MAGICS if prefix.startswith(magic)),
+            None,
+        )
+        or next(
+            (label for kw, label in CONTENT_TYPE_FORMATS if kw in keyword),
+            None,
+        )
+        or default
+    )
+
+
 def decode_bytes(byte):
     return (
         failsafe(lambda: byte.decode("utf-8"))
