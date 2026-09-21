@@ -566,6 +566,11 @@ requires Phase 1 to describe real behavior.
 | Registry resolution (seed phase) | `modules/sdk/tests/` | Key hits, misses, category normalization |
 | Connector fixtures | `modules/connectors/postnord/tests/`, `modules/connectors/fedex/tests/` | Real carrier document bytes |
 
+### Fixture vendoring policy
+
+Real carrier documents used as test fixtures must be human-verified free of address and other personal data before being vendored.
+The vendored `postnord_cn22.pdf` is a customs-declaration-only print with no label section and no address data, carrying only a dummy Swedish org number.
+
 ### Test Cases
 
 ```python
