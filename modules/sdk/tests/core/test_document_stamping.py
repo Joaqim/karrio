@@ -9,6 +9,7 @@ import PIL.ImageDraw
 from pypdf.generic import (
     ArrayObject,
     BooleanObject,
+    DecodedStreamObject,
     DictionaryObject,
     NameObject,
     NumberObject,
@@ -100,6 +101,44 @@ def _fields(b64: str):
 
 def _placement() -> stamping.StampPlacement:
     return stamping.StampPlacement(x=40.0, y=200.0, width=60.0, height=20.0)
+
+
+def _sentinel_pdf_b64() -> str:
+    """A 1-page PDF whose sole content stream paints a uniquely-located mark.
+
+    The carrier content is a 1x1 rectangle at the distinctive coordinate
+    654.321 -- a token no generated stamp-image stream contains -- and the page
+    carries no XObject, so the stamp's image-draw (`Do`) content is
+    unambiguously the other stream. This lets the z-order test identify
+    carrier-vs-stamp content by intrinsic markers rather than by array position.
+    """
+    writer = pypdf.PdfWriter()
+    page = writer.add_blank_page(width=595, height=842)
+    content = DecodedStreamObject()
+    content.set_data(b"q 123.456 654.321 1 1 re f Q")
+    page[NameObject("/Contents")] = writer._add_object(content)
+
+    buffer = io.BytesIO()
+    writer.write(buffer)
+    return _b64(buffer.getvalue())
+
+
+def _ordered_content_streams(b64: str, page_index: int = 0):
+    """Return page 1's content streams as bytes in ``/Contents`` array order.
+
+    Per the PDF spec, when ``/Contents`` is an array of streams they are
+    concatenated in array order to form the page content, so a lower array
+    index is painted first and therefore drawn *beneath* higher indices.
+    Observing this order in the written-out PDF is an oracle independent of the
+    production ``over=(layer != "underlay")`` expression: it reports where the
+    stamp image actually landed in the composited page, not how the caller asked
+    for it, so flipping that expression flips the observed order.
+    """
+    page = pypdf.PdfReader(io.BytesIO(base64.b64decode(b64))).pages[page_index]
+    contents = page["/Contents"].get_object()
+    if isinstance(contents, ArrayObject):
+        return [element.get_object().get_data() for element in contents]
+    return [contents.get_data()]
 
 
 class TestSniffDocumentFormat(unittest.TestCase):
@@ -250,6 +289,49 @@ class TestStampPdfBackend(unittest.TestCase):
         stamped = stamping.stamp_pdf(document, request)
 
         self.assertTrue(base64.b64decode(stamped).startswith(b"%PDF-"))
+        self.assertEqual(_page_count(stamped), _page_count(document))
+
+    def test_layer_determines_image_z_order(self):
+        # Falsifies a wrong `over` value: the stamp image must be composited
+        # ABOVE carrier content for overlay and BENEATH it for underlay. The
+        # oracle reads the output page's /Contents array order (= paint order),
+        # never re-deriving `over=(layer != "underlay")`.
+        document = _sentinel_pdf_b64()
+
+        def carrier_and_image_indices(layer):
+            request = stamping.StampRequest(
+                image=_signature_png_b64(),
+                placement=_placement(),
+                layer=layer,
+            )
+            streams = _ordered_content_streams(stamping.stamp_pdf(document, request))
+            carrier = [i for i, s in enumerate(streams) if b"654.321" in s]
+            image = [i for i, s in enumerate(streams) if b"Do" in s]
+            # Exactly one carrier stream and one distinct stamp-image stream.
+            self.assertEqual(len(carrier), 1)
+            self.assertEqual(len(image), 1)
+            self.assertNotEqual(carrier[0], image[0])
+            return carrier[0], image[0]
+
+        carrier_over, image_over = carrier_and_image_indices("overlay")
+        carrier_under, image_under = carrier_and_image_indices("underlay")
+
+        # overlay paints the stamp after (above) carrier content...
+        self.assertGreater(image_over, carrier_over)
+        # ...underlay paints it before (beneath) carrier content.
+        self.assertLess(image_under, carrier_under)
+
+    def test_underlay_acroform_fields_remain_fillable(self):
+        document = _acroform_pdf_b64()
+        request = stamping.StampRequest(
+            image=_signature_png_b64(),
+            placement=_placement(),
+            layer="underlay",
+        )
+
+        stamped = stamping.stamp_pdf(document, request)
+
+        self.assertIn("signature_field", _fields(stamped))
         self.assertEqual(_page_count(stamped), _page_count(document))
 
 
