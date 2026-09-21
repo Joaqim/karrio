@@ -48,6 +48,9 @@ Karrio's conventional values map onto PostNord's documented vocabulary
 Lookup also accepts PostNord-native forms (`sale of goods` → `SALE OF
 GOODS`), ignoring case and extra whitespace, so a caller already speaking
 PostNord's vocabulary canonicalizes to the uppercase value.
+Karrio's underscore keys keep their canonical spelling, so a space-spelled
+karrio word such as `return merchandise` is outside both vocabularies and
+passes through verbatim.
 `SALE OF GOODS` was accepted by PostNord production on 2026-09-21
 (re-declaration probe).
 A value outside both vocabularies is sent verbatim: the swagger types

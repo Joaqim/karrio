@@ -222,7 +222,6 @@ class CN22CategoryType:
     coerced.
     """
 
-    # (CustomsContentType value, PostNord categoryType) pairs.
     VOCABULARY = (
         ("DOCUMENTS", "DOCUMENT"),
         ("GIFT", "GIFT"),
