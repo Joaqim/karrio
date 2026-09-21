@@ -170,6 +170,16 @@ class TestPostNordCustomsDeclaration(unittest.TestCase):
         self.assertEqual(messages, [])
         self.assertEqual(result, ParsedDeclaration)
 
+    def test_parse_customs_declaration_accepts_wrapped_envelope(self):
+        # The PDF variant's wrapped envelope fed through the digital parse
+        # path yields the same acceptance — the parser is shape-tolerant.
+        result, messages = customs.parse_customs_declaration_response(
+            lib.Deserializable(DeclarationWrappedResponse, lib.to_dict),
+            gateway.settings,
+        )
+        self.assertEqual(messages, [])
+        self.assertEqual(result, ParsedDeclaration)
+
     def test_create_customs_declaration_pdf(self):
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
             mock.return_value = DeclarationPdfResponse
@@ -259,7 +269,29 @@ DeclarationWireBody = [
     }
 ]
 
+# The digital endpoint returns the bare bookingResponseCN (swagger:
+# POST /rest/shipment/v3/customs/declaration 200 -> bookingResponseCN).
 DeclarationResponse = """{
+  "bookingId": "3YSFH8NG0LNREZO38UIN68B3RRWL4X",
+  "idInformation": [{
+    "status": "OK",
+    "references": {
+      "shipment": [
+        {"referenceNo": "ORDER-7788", "referenceType": "CU", "referenceDesc": "Customer order number"}
+      ],
+      "item": [
+        {"referenceNo": "ITEM-1", "referenceType": "ON", "referenceDesc": "Item reference"}
+      ]
+    },
+    "ids": [
+      {"idType": "itemId", "value": "00373500454541020957", "printId": "31eed2dad84b48a2ba92a26590a0a69f"}
+    ]
+  }]
+}"""
+
+# The PDF variant's wrapped envelope; fed to the digital parse path it
+# must yield the same acceptance (parser shape tolerance).
+DeclarationWrappedResponse = """{
   "bookingResponse": {
     "bookingId": "3YSFH8NG0LNREZO38UIN68B3RRWL4X",
     "idInformation": [{
