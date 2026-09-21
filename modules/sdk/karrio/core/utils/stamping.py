@@ -15,7 +15,10 @@ import attr
 import pypdf
 import PIL.Image
 
+import karrio.core.models as models
 import karrio.core.utils.helpers as helpers
+
+RegistryLookup = typing.Callable[[str], typing.Optional["StampPlacement"]]
 
 MM_PER_INCH: float = 25.4
 POINTS_PER_INCH: float = 72.0
@@ -136,3 +139,82 @@ def stamp_pdf(document_b64: str, request: StampRequest) -> str:
     writer.write(result)
 
     return base64.b64encode(result.getvalue()).decode("utf-8")
+
+
+# Per-format compositing backends. Only PDF is active at launch; ZPL is
+# recognized by the sniffer but has no backend yet, so it is rejected.
+_BACKENDS: typing.Dict[str, typing.Callable[[str, StampRequest], str]] = {
+    "PDF": stamp_pdf,
+}
+
+
+def _registry_key(carrier: str, doc_type: str, document_format: str) -> str:
+    """Compose the registry lookup key from the request and document format."""
+    return "/".join(str(part or "*") for part in (carrier, doc_type, document_format))
+
+
+def _empty_registry(key: str) -> typing.Optional[StampPlacement]:
+    """Launch registry: no seeds are measured yet, so every key misses.
+
+    Registry seeds are a follow-up (task group 4); until they land, this hook
+    resolves nothing, forcing the consumer-supplied placement to be the only
+    path that produces a stamp.
+    """
+    return None
+
+
+def stamp_document(
+    document: models.ShippingDocument,
+    image: str = None,
+    placement: StampPlacement = None,
+    layer: str = "overlay",
+    carrier: str = None,
+    doc_type: str = None,
+    registry: RegistryLookup = None,
+) -> models.ShippingDocument:
+    """Composite a base64 PNG onto a returned carrier document.
+
+    The document format is detected from its bytes and dispatched to the
+    matching backend; the returned document preserves the input's format and
+    shape, replacing only its ``base64`` content. A consumer-supplied
+    ``placement`` is used directly with no registry lookup. When ``placement``
+    is omitted, the registry hook is consulted and a miss raises an explicit
+    error naming the missing key rather than guessing an anchor. A document
+    whose format has no active backend (including PNG) is rejected explicitly.
+
+    The utility composites pixels only: it stores nothing and makes no
+    assertion about the legal validity or signature semantics of the result.
+    """
+    lookup = registry if registry is not None else _empty_registry
+    document_format = helpers.sniff_document_format(
+        document.base64,
+        content_type=document.format,
+        default=document.format,
+    )
+
+    if document_format not in _BACKENDS:
+        raise ValueError(
+            f"Document stamping has no active backend for the "
+            f"'{document_format}' format; the document cannot be stamped"
+        )
+
+    resolved = placement
+    if resolved is None:
+        key = _registry_key(carrier, doc_type, document_format)
+        resolved = lookup(key)
+        if resolved is None:
+            raise ValueError(
+                "No stamp placement was supplied and no registry seed "
+                f"resolves for key '{key}'"
+            )
+
+    request = StampRequest(
+        image=image,
+        placement=resolved,
+        carrier=carrier,
+        doc_type=doc_type,
+        layer=layer,
+    )
+    stamped = _BACKENDS[document_format](document.base64, request)
+
+    return attr.evolve(document, base64=stamped)

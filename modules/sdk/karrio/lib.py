@@ -9,6 +9,7 @@ import karrio.core.utils as utils
 import karrio.core.units as units
 import karrio.core.models as models
 import karrio.core.errors as exceptions
+import karrio.core.utils.stamping as stamping
 from karrio.core.utils.logger import logger
 T = typing.TypeVar("T")
 S = typing.TypeVar("S")
@@ -39,6 +40,8 @@ StrEnum = utils.StrEnum
 identity = utils.identity
 typed = utils.typed
 sort_events = utils.sort_events_chronologically
+StampPlacement = stamping.StampPlacement
+StampRequest = stamping.StampRequest
 
 
 # -----------------------------------------------------------
@@ -1044,6 +1047,36 @@ def to_buffer(
     **kwargs,
 ):
     return utils.to_buffer(base64_string, **kwargs)
+
+
+def stamp_document(
+    document: models.ShippingDocument,
+    image: str = None,
+    placement: stamping.StampPlacement = None,
+    layer: str = "overlay",
+    carrier: str = None,
+    doc_type: str = None,
+    registry: stamping.RegistryLookup = None,
+) -> models.ShippingDocument:
+    """Composite a base64 PNG onto a returned carrier document.
+
+    Detects the document format from its bytes and dispatches to the matching
+    backend, returning a document of the same format whose ``base64`` carries
+    the composited image. A consumer-supplied ``placement`` is used directly; an
+    omitted placement triggers a registry lookup that raises an explicit error
+    on a miss. Documents whose format has no backend (including PNG) are
+    rejected. The utility composites pixels only and asserts nothing about the
+    validity of the stamped content.
+    """
+    return stamping.stamp_document(
+        document,
+        image=image,
+        placement=placement,
+        layer=layer,
+        carrier=carrier,
+        doc_type=doc_type,
+        registry=registry,
+    )
 
 
 def decode(byte: bytes):

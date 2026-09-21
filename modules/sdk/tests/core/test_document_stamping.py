@@ -15,6 +15,8 @@ from pypdf.generic import (
     TextStringObject,
 )
 
+import karrio.lib as lib
+import karrio.core.models as models
 import karrio.core.utils.helpers as helpers
 import karrio.core.utils.stamping as stamping
 
@@ -248,6 +250,122 @@ class TestStampPdfBackend(unittest.TestCase):
 
         self.assertTrue(base64.b64decode(stamped).startswith(b"%PDF-"))
         self.assertEqual(_page_count(stamped), _page_count(document))
+
+
+def _pdf_document() -> models.ShippingDocument:
+    return models.ShippingDocument(
+        category="customs_declaration", format="PDF", base64=_cn22_pdf_b64()
+    )
+
+
+def _acroform_document() -> models.ShippingDocument:
+    return models.ShippingDocument(
+        category="customs_declaration", format="PDF", base64=_acroform_pdf_b64()
+    )
+
+
+def _png_document() -> models.ShippingDocument:
+    return models.ShippingDocument(
+        category="customs_declaration", format="PNG", base64=_signature_png_b64()
+    )
+
+
+class TestStampDocument(unittest.TestCase):
+    def setUp(self):
+        self.maxDiff = None
+
+    def test_pdf_preserves_format_page_and_acroform(self):
+        document = _acroform_document()
+
+        stamped = lib.stamp_document(
+            document, image=_signature_png_b64(), placement=_placement()
+        )
+
+        self.assertEqual(stamped.format, "PDF")
+        self.assertEqual(_page_count(stamped.base64), _page_count(document.base64))
+        self.assertIn("signature_field", _fields(stamped.base64))
+
+    def test_returns_new_document_leaving_input_untouched(self):
+        document = _pdf_document()
+        original_b64 = document.base64
+
+        stamped = lib.stamp_document(
+            document, image=_signature_png_b64(), placement=_placement()
+        )
+
+        self.assertNotEqual(stamped.base64, original_b64)
+        self.assertEqual(document.base64, original_b64)
+        self.assertEqual(stamped.category, document.category)
+
+    def test_rejects_png_document(self):
+        with self.assertRaises(ValueError) as ctx:
+            lib.stamp_document(
+                _png_document(), image=_signature_png_b64(), placement=_placement()
+            )
+
+        self.assertIn("PNG", str(ctx.exception))
+
+    def test_rejects_format_without_backend(self):
+        # ZPL is recognized by the sniffer but has no launch backend.
+        document = models.ShippingDocument(
+            category="customs_declaration", format="ZPL", base64=_b64(b"^XA^FO^XZ")
+        )
+
+        with self.assertRaises(ValueError) as ctx:
+            lib.stamp_document(
+                document, image=_signature_png_b64(), placement=_placement()
+            )
+
+        self.assertIn("ZPL", str(ctx.exception))
+
+    def test_supplied_placement_skips_registry(self):
+        def exploding_registry(key):
+            raise AssertionError(
+                f"registry consulted for {key!r} despite supplied placement"
+            )
+
+        stamped = lib.stamp_document(
+            _pdf_document(),
+            image=_signature_png_b64(),
+            placement=_placement(),
+            registry=exploding_registry,
+        )
+
+        self.assertEqual(stamped.format, "PDF")
+
+    def test_registry_consulted_only_on_omission(self):
+        seen = []
+
+        def seed_registry(key):
+            seen.append(key)
+            return _placement()
+
+        stamped = lib.stamp_document(
+            _pdf_document(),
+            image=_signature_png_b64(),
+            carrier="postnord",
+            doc_type="cn22",
+            registry=seed_registry,
+        )
+
+        self.assertEqual(stamped.format, "PDF")
+        self.assertEqual(seen, ["postnord/cn22/PDF"])
+
+    def test_registry_miss_raises_naming_the_key(self):
+        with self.assertRaises(ValueError) as ctx:
+            lib.stamp_document(
+                _pdf_document(),
+                image=_signature_png_b64(),
+                carrier="postnord",
+                doc_type="cn22",
+            )
+
+        message = str(ctx.exception)
+        self.assertIn("postnord/cn22/PDF", message)
+
+    def test_default_registry_always_misses(self):
+        with self.assertRaises(ValueError):
+            lib.stamp_document(_pdf_document(), image=_signature_png_b64())
 
 
 if __name__ == "__main__":
