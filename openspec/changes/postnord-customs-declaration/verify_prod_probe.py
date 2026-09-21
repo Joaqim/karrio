@@ -97,7 +97,7 @@ def _summarize_entries(entries):
         printout = entry.get("printout") or {}
         data = printout.get("data")
         if data:
-            magic = base64.b64decode(data)[:5]
+            magic = _decode_data(data)[:5]
             lines.append(
                 f"  printout: type={printout.get('type')}"
                 f" format={printout.get('labelFormat')}"
@@ -119,6 +119,22 @@ def _post(key, path, body, extra_query=""):
         headers={"Content-Type": "application/json"},
     )
     return str(response)
+
+
+_B64_ALPHABET = set(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="
+)
+
+
+def _decode_data(data):
+    """Decode printout data by transport: PDF printouts arrive base64-encoded,
+    while the ZPL endpoint returns raw ZPL text in printout.data (live finding
+    2026-09-21: b64decode raises 'Incorrect padding' on the ZPL payload).
+    """
+    compact = "".join(data.split())
+    if set(compact) <= _B64_ALPHABET:
+        return base64.b64decode(compact)
+    return data.encode("utf-8")
 
 
 PDF_DIR = os.environ.get(
@@ -143,7 +159,7 @@ def _save_entries(entries, name, ext="pdf"):
         os.makedirs(PDF_DIR, exist_ok=True)
         path = os.path.join(PDF_DIR, f"{name}.{ext}")
         with open(path, "wb") as handle:
-            handle.write(base64.b64decode(data))
+            handle.write(_decode_data(data))
         return path
     return None
 
