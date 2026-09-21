@@ -13,7 +13,7 @@ Mapping code: `modules/connectors/postnord/karrio/providers/postnord/shipment/cr
 
 | Unified input | CN22 member | Derivation |
 |---|---|---|
-| `customs.content_type` | `categoryOfItem.categoryType[0]` | verbatim pass-through, no translation |
+| `customs.content_type` | `categoryOfItem.categoryType[0]` | normalized through the CN22 vocabulary (see below); unknown values pass through verbatim |
 | `customs.commodities[]` | `detailedDescription[]` | see line mapping below |
 | shipment packages | `totalGrossWeight` | total package weight, emitted in KGM |
 | `customs.commodities[]` | `totalValue` | sum of `value_amount`; currency taken from the first commodity that sets one |
@@ -27,28 +27,33 @@ Per commodity line: `title` (or `description`) becomes `content`, plus
 `hsTariffNumber` from `hs_code`, `countryCode` from `origin_country`, and a
 1-based `rowNo` assigned by position.
 
-## content_type vocabulary — the merchandise trap
+## content_type vocabulary
 
-The connector performs no vocabulary translation: whatever string sits in
-`customs.content_type` is sent as the sole `categoryType` entry
-(`create.py:310`).
-PostNord's documented vocabulary (`vendor/booking.swagger.json`, categoryOfItem
-description) is:
+`customs.content_type` is normalized through the connector's CN22 vocabulary
+(`units.py`, `CN22CategoryType`; wired into `_customs_declaration` in
+`create.py`) before it is sent as the sole `categoryOfItem.categoryType`
+entry.
+Karrio's conventional values map onto PostNord's documented vocabulary
+(`vendor/booking.swagger.json`, categoryOfItem description):
 
-- GIFT
-- DOCUMENT
-- RETURNED GOODS
-- COMMERCIAL SAMPLE
-- OTHER
-- SALE OF GOODS
+| `customs.content_type` | CN22 `categoryType` |
+|---|---|
+| `documents` | `DOCUMENT` |
+| `gift` | `GIFT` |
+| `sample` | `COMMERCIAL SAMPLE` |
+| `merchandise` | `SALE OF GOODS` |
+| `return_merchandise` | `RETURNED GOODS` |
+| `other` | `OTHER` |
 
-Karrio's conventional `content_type` value `merchandise` is not in that list.
-The PostNord analogue of merchandise is `SALE OF GOODS` — the value the live
-production re-declaration probe sent and PostNord accepted on 2026-09-21.
-The connector's unit fixtures send `merchandise` as a pass-through string;
-unit tests never validate the vocabulary against the wire, so a
-`merchandise`-valued booking is unverified against PostNord's acceptance
-rules and should not be copied into consumer code.
+Lookup also accepts PostNord-native forms (`sale of goods` → `SALE OF
+GOODS`), ignoring case and extra whitespace, so a caller already speaking
+PostNord's vocabulary canonicalizes to the uppercase value.
+`SALE OF GOODS` was accepted by PostNord production on 2026-09-21
+(re-declaration probe).
+A value outside both vocabularies is sent verbatim: the swagger types
+`categoryType` as a free string and PostNord validates server-side, so
+exotic-but-accepted values keep flowing.
+An absent `content_type` emits no `categoryOfItem` element at all.
 Shipment `metadata` plays no part in the customs path; it is free-form and
 unused by this mapping.
 
@@ -79,9 +84,9 @@ none of EORI/VOEC/IOSS, so supply at least one for goods declarations.
 ## Worked example
 
 Adapted from `CustomsShipmentPayload` in
-`modules/connectors/postnord/tests/postnord/test_shipment.py`, with the two
-consumer-facing corrections applied: PostNord's category vocabulary and a
-registration number.
+`modules/connectors/postnord/tests/postnord/test_shipment.py`, with a
+registration number added; the category is written in PostNord's own
+vocabulary, though `merchandise` now maps to it automatically.
 
 ```python
 import karrio
@@ -94,7 +99,7 @@ shipment = ShipmentRequest(
     recipient=...,
     parcels=[...],                          # package weights feed totalGrossWeight
     customs=Customs(
-        content_type="SALE OF GOODS",       # NOT "merchandise" — see vocabulary above
+        content_type="SALE OF GOODS",       # or "merchandise" — maps automatically (see vocabulary above)
         commodities=[
             Commodity(
                 title="Candy",
