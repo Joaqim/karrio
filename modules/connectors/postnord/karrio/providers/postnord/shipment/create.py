@@ -138,14 +138,31 @@ def _first_item_id(
     """Return the booking's first assigned item id.
 
     One rule shared by the parser (the tracking number) and the proxy (the
-    id the by-id customs document fetch targets), so both resolve the same
-    id even if the idInformation layout changes.
+    fallback id for the by-id customs document fetch), so both resolve the
+    same id even if the idInformation layout changes.
     """
     if booking is None:
         return None
 
     ids = [_id for info in (booking.idInformation or []) for _id in (info.ids or [])]
     return next((_id.value for _id in ids if _id.idType == "itemId"), None)
+
+
+def _first_print_id(
+    booking: typing.Optional[postnord_res.BookingResponseType],
+) -> typing.Optional[str]:
+    """Return the printId accompanying the booking's first assigned item id.
+
+    ``/v3/labels/ids`` resolves a booking's printable artifacts by the
+    ``assignedIds`` printId, not the item id (live 2026-09-21: the same
+    booking fails ``id not found`` keyed by item id and succeeds keyed by
+    printId), so the implicit customs fetch keys its request here.
+    """
+    if booking is None:
+        return None
+
+    ids = [_id for info in (booking.idInformation or []) for _id in (info.ids or [])]
+    return next((_id.printId for _id in ids if _id.idType == "itemId"), None)
 
 
 def _composed_kinds(printout: postnord_res.LabelPrintoutType) -> typing.List[str]:

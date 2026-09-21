@@ -170,18 +170,23 @@ class Proxy(proxy.Proxy):
         """Fetch the standalone customs printouts for an export-letter booking.
 
         Issues ``POST /rest/shipment/v3/labels/ids/{pdf,zpl}`` (matching the
-        booking's label format) with the booking response's first assigned
-        item id (``shipment.create._first_item_id`` — the same rule that
-        yields the parsed tracking number) and
-        ``definePrintout=onlyCustomsDeclarations``. Returns ctx additions
-        for the parser: ``customs_printouts`` (the response's
-        ``labelPrintout`` entries) on success, or ``customs_printout_error``
-        (the error body, or a synthesized one on transport failure) on
-        failure — the booking itself is unaffected either way (fail-open).
-        A body that parses as a ``labelPrintout`` array is also checked for
-        per-id failures (``itemIds`` members with ``status`` ``FAIL``), so a
-        ``customs_printout_error`` can accompany ``customs_printouts`` when
-        only some ids produced printouts.
+        booking's label format) keyed by the printId accompanying the booking
+        response's first assigned item id
+        (``shipment.create._first_print_id`` — ``/v3/labels/ids`` resolves
+        printIds, not item ids; the item id is the fallback when PostNord
+        allocated no printId) with ``definePrintout=onlyCustomsDeclarations``.
+        Returns ctx additions for the parser: ``customs_printouts`` (the
+        response's ``labelPrintout`` entries) on success, or
+        ``customs_printout_error`` (the error body, or a synthesized one on
+        transport failure) on failure — the booking itself is unaffected
+        either way (fail-open). A body that parses as a ``labelPrintout``
+        array is also checked for per-id failures (``itemIds`` members with
+        ``status`` ``FAIL``), so a ``customs_printout_error`` can accompany
+        ``customs_printouts`` when only some ids produced printouts; and an
+        OK body carrying no printout data at all (observed live as an
+        all-zero ``printoutComposition`` before a declaration exists)
+        surfaces a synthesized no-customs-documents message instead of
+        silence.
         """
         booking = lib.failsafe(
             lambda: lib.to_object(
@@ -192,7 +197,8 @@ class Proxy(proxy.Proxy):
         if not item_id:
             return {}
 
-        ids = [postnord_labels.LabelsIDSRequestElementType(id=item_id)]
+        target_id = provider_shipment._first_print_id(booking) or item_id
+        ids = [postnord_labels.LabelsIDSRequestElementType(id=target_id)]
 
         try:
             customs_response = lib.request(
@@ -222,6 +228,16 @@ class Proxy(proxy.Proxy):
             failure = _per_id_failure(printouts)
             if failure is not None:
                 return dict(customs_printouts=printouts, customs_printout_error=failure)
+            if not _has_printout_data(printouts):
+                return dict(
+                    customs_printouts=printouts,
+                    customs_printout_error=dict(
+                        message=(
+                            "no customs documents in by-id response for "
+                            f"item id: {item_id}"
+                        )
+                    ),
+                )
             return dict(customs_printouts=printouts)
         if isinstance(printouts, dict):
             return dict(customs_printout_error=printouts)
@@ -421,10 +437,13 @@ def _per_id_failure(printouts):
 
     The by-id printout endpoint can answer an HTTP error status with a body
     that still parses as a ``labelPrintout`` array: the failure is reported
-    per id inside the ``itemIds`` members (``status`` ``FAIL`` with an
-    ``errorResponse``, observed live as ``{"message": "id not found"}``) and
-    no printout data at all. Without this check the failure would vanish —
-    no document to attach, no error body reaching the parser.
+    per id inside the ``itemIds`` members — either ``status`` ``FAIL`` or,
+    as a superset, any ``errorResponse`` object present regardless of the
+    member's status (observed live as ``{"message": "id not found"}``) —
+    with no printout data at all. Without this check the failure would
+    vanish — no document to attach, no error body reaching the parser. Both
+    the verbatim ``errorResponse`` body and the fallback synthesis attribute
+    the failed item id.
     """
     for entry in printouts:
         if not isinstance(entry, dict):
@@ -437,16 +456,29 @@ def _per_id_failure(printouts):
             )
             if not failed:
                 continue
+            attribution = (
+                "customs document retrieval failed for item id "
+                f"{member.get('itemIds')}"
+            )
             error = member.get("errorResponse")
             if isinstance(error, dict) and error.get("message"):
-                return error
-            return dict(
-                message=(
-                    "customs document retrieval failed for item id: "
-                    f"{member.get('itemIds')}"
-                )
-            )
+                return {**error, "message": f"{attribution}: {error['message']}"}
+            return dict(message=attribution)
     return None
+
+
+def _has_printout_data(printouts) -> bool:
+    """Return whether any by-id labelPrintout entry carries printout data.
+
+    ``_customs_documents`` attaches a document only for entries whose
+    ``printout.data`` is set, so an OK body without any (observed live as an
+    all-zero ``printoutComposition`` before a declaration exists) attaches
+    nothing — the caller reports it instead of staying silent.
+    """
+    return any(
+        isinstance(entry, dict) and bool((entry.get("printout") or {}).get("data"))
+        for entry in printouts
+    )
 
 
 def _degrade_reason(response):

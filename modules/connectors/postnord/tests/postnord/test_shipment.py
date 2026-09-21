@@ -697,9 +697,11 @@ class TestPostNordCustomsDocument(unittest.TestCase):
 
     def test_create_shipment_customs_document_fetch(self):
         # Export letter + customs: after the booking, a second POST fetches
-        # the standalone customs document by the first assigned item id with
-        # definePrintout=onlyCustomsDeclarations, and the printouts attach as
-        # extra_documents categorized by what PostNord composed.
+        # the standalone customs document by the booking response's printId
+        # (live finding 2026-09-21: /v3/labels/ids resolves a real booking's
+        # printId, not its item id) with definePrintout=onlyCustomsDeclarations,
+        # and the printouts attach as extra_documents categorized by what
+        # PostNord composed.
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
             mock.side_effect = [CustomsBookingResponse, CustomsPrintoutsResponse]
             parsed_response = (
@@ -724,7 +726,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
             self.assertEqual(customs_call[1]["method"], "POST")
             self.assertEqual(
                 json.loads(customs_call[1]["data"]),
-                [{"id": "00373500454541020957"}],
+                [{"id": "P1"}],
             )
         details, messages = parsed_response
         self.assertEqual(messages, [])
@@ -751,6 +753,67 @@ class TestPostNordCustomsDocument(unittest.TestCase):
         self.assertEqual(
             [(r.referenceNo, r.referenceType) for r in reference.shipment],
             [("BOOK-UX1", "IL")],
+        )
+
+    def test_create_shipment_customs_document_fetch_falls_back_to_item_id(self):
+        # The printId accompanying the first assigned item id keys the by-id
+        # fetch; when PostNord allocates no printId the item id is the only
+        # key available.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.side_effect = [
+                CustomsBookingNoPrintIdResponse,
+                CustomsPrintoutsResponse,
+            ]
+            parsed_response = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(**ExportLetterCustomsPayload)
+                )
+                .from_(gateway)
+                .parse()
+            )
+            self.assertEqual(mock.call_count, 2)
+            self.assertEqual(
+                json.loads(mock.call_args_list[1][1]["data"]),
+                [{"id": "00373500454541020957"}],
+            )
+        details, messages = parsed_response
+        self.assertEqual(messages, [])
+        self.assertEqual(
+            [document.category for document in details.docs.extra_documents],
+            ["cn22"],
+        )
+
+    def test_create_shipment_customs_document_empty_ok_response_fails_open(self):
+        # Live capture (2026-09-21): before a declaration exists, the
+        # printId-keyed onlyCustomsDeclarations fetch answers OK members with
+        # no printout data and an all-zero printoutComposition — the fetch
+        # succeeded but nothing attaches. The booking stands, no documents
+        # attach, and exactly one message reports the empty result instead
+        # of silence.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.side_effect = [
+                CustomsBookingResponse,
+                CustomsPrintoutsEmptyResponse,
+            ]
+            parsed_response = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(**ExportLetterCustomsPayload)
+                )
+                .from_(gateway)
+                .parse()
+            )
+            self.assertEqual(mock.call_count, 2)
+        details, messages = parsed_response
+        self.assertIsNotNone(details)
+        self.assertEqual(details.tracking_number, "00373500454541020957")
+        self.assertEqual(details.docs.label, "JVBERi0xLjQK")
+        self.assertEqual(details.docs.extra_documents, [])
+        self.assertEqual(len(messages), 1)
+        self.assertIsNone(messages[0].code)
+        self.assertEqual(
+            messages[0].message,
+            "no customs documents in by-id response for item id: "
+            "00373500454541020957",
         )
 
     def test_create_shipment_customs_document_zpl_fetch(self):
@@ -861,7 +924,8 @@ class TestPostNordCustomsDocument(unittest.TestCase):
         # array, so without per-id inspection the failure would vanish (no
         # printout data to attach as a document, no error body reaching the
         # messages). The FAIL member's errorResponse surfaces as exactly
-        # one message while the booking stands.
+        # one message — attributed to the failed item id like the
+        # synthesized path — while the booking stands.
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
             mock.side_effect = [
                 CustomsBookingResponse,
@@ -882,7 +946,11 @@ class TestPostNordCustomsDocument(unittest.TestCase):
         self.assertEqual(details.docs.extra_documents, [])
         self.assertEqual(len(messages), 1)
         self.assertIsNone(messages[0].code)
-        self.assertIn("id not found", messages[0].message)
+        self.assertEqual(
+            messages[0].message,
+            "customs document retrieval failed for item id "
+            "00373500454541020957: id not found",
+        )
 
     def test_create_shipment_customs_document_partial_failure_fails_open(self):
         # A by-id array mixing a data-bearing printout for one id and a FAIL
@@ -916,7 +984,11 @@ class TestPostNordCustomsDocument(unittest.TestCase):
         )
         self.assertEqual(len(messages), 1)
         self.assertIsNone(messages[0].code)
-        self.assertIn("id not found", messages[0].message)
+        self.assertEqual(
+            messages[0].message,
+            "customs document retrieval failed for item id "
+            "00373500454541020957: id not found",
+        )
 
     def test_create_shipment_customs_document_transport_failure_fails_open(self):
         # A transport-level failure of the by-id fetch is also fail-open: no
@@ -1614,6 +1686,29 @@ CustomsBookingZPLResponse = """{
   }]
 }""" % _zpl_json(RawZPL)
 
+# A booking whose itemId entry carries no printId: the by-id fetch falls
+# back to keying by the item id.
+CustomsBookingNoPrintIdResponse = """{
+  "bookingResponse": {
+    "bookingId": "BOOK-UX4",
+    "idInformation": [{
+      "status": "OK",
+      "ids": [
+        {"idType": "itemId", "value": "00373500454541020957"},
+        {"idType": "shipmentId", "value": "ORDER-7788"}
+      ],
+      "urls": [
+        {"type": "TRACKING", "url": "https://tracking.postnord.com/se/?id=00373500454541020957"}
+      ],
+      "errorResponse": null
+    }]
+  },
+  "labelPrintout": [{
+    "printout": {"type": "LABEL", "labelFormat": "PDF", "encoding": "base64", "data": "JVBERi0xLjQK"},
+    "printoutComposition": {"label": 1, "cn22": 1}
+  }]
+}"""
+
 # A booking that allocated no item ids (inline fault, no label): the by-id
 # customs fetch has no target and is skipped.
 CustomsBookingNoIdsResponse = """{
@@ -1714,6 +1809,26 @@ CustomsPrintoutsPartialFailureResponse = """[{
   "printoutComposition": {"cn22": 1},
   "printout": {"labelFormat": "PDF", "encoding": "base64", "data": "%s"}
 }]""" % CustomsPDFData
+
+# Live capture (2026-09-21): before a declaration exists, the printId-keyed
+# onlyCustomsDeclarations fetch returns OK members, no errorResponse, no
+# printout data, and an all-zero printoutComposition.
+CustomsPrintoutsEmptyResponse = """[{
+  "itemIds": [{"itemIds": "00373500454541020957", "status": "OK"}],
+  "printoutComposition": {
+    "label": 0,
+    "cn22": 0,
+    "cn23": 0,
+    "customsInvoice": 0,
+    "securityDeclarations": 0,
+    "loadList": 0,
+    "dpc": 0,
+    "dangerousGoods": 0,
+    "fraktsedel": 0,
+    "routingDocument": 0,
+    "datametrixbarcode": 0
+  }
+}]"""
 
 CustomsRetrievalErrorResponse = """{
   "message": "Unable to print labels for the requested IDs",
