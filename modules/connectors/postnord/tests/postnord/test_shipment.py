@@ -9,6 +9,7 @@ from unittest.mock import patch, ANY
 import karrio.sdk as karrio
 import karrio.lib as lib
 import karrio.core.models as models
+import karrio.schemas.postnord.shipment_response as postnord_res
 
 from .fixture import (
     _settings,
@@ -739,6 +740,17 @@ class TestPostNordCustomsDocument(unittest.TestCase):
                     }
                 ],
             },
+        )
+        # The by-id itemIds member's reference is the references object
+        # (swagger $ref), not a string: pin its typed deserialization.
+        printout_entry = lib.to_object(
+            postnord_res.LabelPrintoutType, json.loads(CustomsPrintoutsResponse)[0]
+        )
+        reference = printout_entry.itemIds[0].reference
+        self.assertEqual(reference.item, [])
+        self.assertEqual(
+            [(r.referenceNo, r.referenceType) for r in reference.shipment],
+            [("BOOK-UX1", "IL")],
         )
 
     def test_create_shipment_customs_document_zpl_fetch(self):
@@ -1630,9 +1642,18 @@ CustomsBookingNoIdsResponse = """{
 CustomsPDFData = "Q04yMiBQREYgREFUQQ=="
 
 # The itemIds members follow the /v3/labels/ids swagger itemIds_inner shape
-# (one object per requested id with its own status), not a bare string array.
+# (one object per requested id with its own status), not a bare string array;
+# reference is the references object, echoing the booking id with type IL
+# (live by-id capture, 2026-09-21).
 CustomsPrintoutsResponse = """[{
-  "itemIds": [{"itemIds": "00373500454541020957", "status": "OK"}],
+  "itemIds": [{
+    "itemIds": "00373500454541020957",
+    "status": "OK",
+    "reference": {
+      "item": [],
+      "shipment": [{"referenceNo": "BOOK-UX1", "referenceType": "IL"}]
+    }
+  }],
   "printoutComposition": {"cn22": 1},
   "printout": {"labelFormat": "PDF", "encoding": "base64", "data": "%s"}
 }]""" % CustomsPDFData
