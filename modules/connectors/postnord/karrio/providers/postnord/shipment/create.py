@@ -11,9 +11,11 @@ with ``printout.encoding`` set to ``"none"`` (observed on the live
 endpoint; the swagger documents base64 only).
 
 Export-letter bookings that embed a customs declaration additionally fetch
-a standalone customs document by item id (``POST /v3/labels/ids/{pdf,zpl}``
-with ``definePrintout=onlyCustomsDeclarations``, issued by the proxy after
-the booking) and attach it under ``docs.extra_documents``.
+a standalone customs document keyed by the booking's printId, falling back
+to the item id when no printId was allocated (``POST
+/v3/labels/ids/{pdf,zpl}`` with ``definePrintout=onlyCustomsDeclarations``,
+issued by the proxy after the booking) and attach it under
+``docs.extra_documents``.
 """
 
 import base64
@@ -71,7 +73,7 @@ def _extract_details(
     booking = response.bookingResponse
     informations = booking.idInformation or []
 
-    ids = [_id for info in informations for _id in (info.ids or [])]
+    ids = _assigned_ids(booking)
     urls = [url for info in informations for url in (info.urls or [])]
 
     tracking_number = _first_item_id(booking)
@@ -132,6 +134,22 @@ def _extract_details(
     )
 
 
+def _assigned_ids(
+    booking: typing.Optional[postnord_res.BookingResponseType],
+) -> typing.List[postnord_res.IDType]:
+    """Flatten the booking's ``idInformation`` entries into their assigned ids.
+
+    One shared traversal for every id consumer (shipment identifier, item
+    id, printId), so an ``idInformation`` layout change lands in one place.
+    """
+    if booking is None:
+        return []
+
+    return [
+        _id for info in (booking.idInformation or []) for _id in (info.ids or [])
+    ]
+
+
 def _first_item_id(
     booking: typing.Optional[postnord_res.BookingResponseType],
 ) -> typing.Optional[str]:
@@ -141,11 +159,10 @@ def _first_item_id(
     fallback id for the by-id customs document fetch), so both resolve the
     same id even if the idInformation layout changes.
     """
-    if booking is None:
-        return None
-
-    ids = [_id for info in (booking.idInformation or []) for _id in (info.ids or [])]
-    return next((_id.value for _id in ids if _id.idType == "itemId"), None)
+    return next(
+        (_id.value for _id in _assigned_ids(booking) if _id.idType == "itemId"),
+        None,
+    )
 
 
 def _first_print_id(
@@ -158,11 +175,10 @@ def _first_print_id(
     booking fails ``id not found`` keyed by item id and succeeds keyed by
     printId), so the implicit customs fetch keys its request here.
     """
-    if booking is None:
-        return None
-
-    ids = [_id for info in (booking.idInformation or []) for _id in (info.ids or [])]
-    return next((_id.printId for _id in ids if _id.idType == "itemId"), None)
+    return next(
+        (_id.printId for _id in _assigned_ids(booking) if _id.idType == "itemId"),
+        None,
+    )
 
 
 def _composed_kinds(printout: postnord_res.LabelPrintoutType) -> typing.List[str]:
