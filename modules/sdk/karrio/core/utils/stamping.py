@@ -12,6 +12,8 @@ import base64
 import typing
 
 import attr
+import pypdf
+import PIL.Image
 
 import karrio.core.utils.helpers as helpers
 
@@ -76,3 +78,61 @@ def placement_to_pdf_rect(
     y = page_height_pt - mm_to_points(placement.y) - height
 
     return (x, y, width, height)
+
+
+def _build_overlay_page(image_b64: str) -> "pypdf.PageObject":
+    """Return a single-page image-PDF page built from a base64 PNG.
+
+    The image is auto-trimmed to its non-transparent bounding box and
+    white-flattened before the image-PDF save: Pillow's PDF writer emits no
+    soft mask, so alpha is dropped on save (Q6) and a semi-transparent mark
+    would otherwise render fully opaque. Compositing onto opaque white
+    preserves the mark's intended tone against a blank block.
+    """
+    source = PIL.Image.open(helpers.to_buffer(image_b64)).convert("RGBA")
+
+    bounds = source.getchannel("A").getbbox()
+    trimmed = source.crop(bounds) if bounds is not None else source
+
+    backdrop = PIL.Image.new("RGBA", trimmed.size, (255, 255, 255, 255))
+    flattened = PIL.Image.alpha_composite(backdrop, trimmed).convert("RGB")
+
+    buffer = io.BytesIO()
+    flattened.save(buffer, format="PDF", dpi=(300, 300))
+
+    return pypdf.PdfReader(buffer).pages[0]
+
+
+def stamp_pdf(document_b64: str, request: StampRequest) -> str:
+    """Composite the request image onto a base64 PDF, returning base64 PDF.
+
+    The carrier document is cloned whole — pages, text layer, and AcroForm
+    dictionaries survive untouched — then the placement page receives the
+    image via a scale/translate transformation merge. ``overlay`` draws the
+    image over the page content; ``underlay`` draws it beneath, so carrier
+    content stays legible above a letterhead. The page count is invariant.
+    """
+    placement = request.placement
+    reader = pypdf.PdfReader(helpers.to_buffer(document_b64))
+    writer = pypdf.PdfWriter()
+    writer.clone_document_from_reader(reader)
+
+    page = writer.pages[(placement.page or 1) - 1]
+    x, y, width, height = placement_to_pdf_rect(
+        placement, float(page.mediabox.height)
+    )
+
+    overlay = _build_overlay_page(request.image)
+    transformation = (
+        pypdf.Transformation()
+        .scale(width / float(overlay.mediabox.width), height / float(overlay.mediabox.height))
+        .translate(x, y)
+    )
+    page.merge_transformed_page(
+        overlay, transformation, over=(request.layer != "underlay")
+    )
+
+    result = io.BytesIO()
+    writer.write(result)
+
+    return base64.b64encode(result.getvalue()).decode("utf-8")
