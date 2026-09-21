@@ -178,6 +178,10 @@ class Proxy(proxy.Proxy):
         ``labelPrintout`` entries) on success, or ``customs_printout_error``
         (the error body, or a synthesized one on transport failure) on
         failure — the booking itself is unaffected either way (fail-open).
+        A body that parses as a ``labelPrintout`` array is also checked for
+        per-id failures (``itemIds`` members with ``status`` ``FAIL``), so a
+        ``customs_printout_error`` can accompany ``customs_printouts`` when
+        only some ids produced printouts.
         """
         booking = lib.failsafe(
             lambda: lib.to_object(
@@ -215,6 +219,9 @@ class Proxy(proxy.Proxy):
 
         printouts = lib.failsafe(lambda: lib.to_dict(customs_response))
         if isinstance(printouts, list):
+            failure = _per_id_failure(printouts)
+            if failure is not None:
+                return dict(customs_printouts=printouts, customs_printout_error=failure)
             return dict(customs_printouts=printouts)
         if isinstance(printouts, dict):
             return dict(customs_printout_error=printouts)
@@ -407,6 +414,39 @@ def _parse_transit_times(response):
         )
 
     return results
+
+
+def _per_id_failure(printouts):
+    """Return the first per-id failure body in a by-id labelPrintout array.
+
+    The by-id printout endpoint can answer an HTTP error status with a body
+    that still parses as a ``labelPrintout`` array: the failure is reported
+    per id inside the ``itemIds`` members (``status`` ``FAIL`` with an
+    ``errorResponse``, observed live as ``{"message": "id not found"}``) and
+    no printout data at all. Without this check the failure would vanish —
+    no document to attach, no error body reaching the parser.
+    """
+    for entry in printouts:
+        if not isinstance(entry, dict):
+            continue
+        for member in entry.get("itemIds") or []:
+            if not isinstance(member, dict):
+                continue
+            failed = member.get("status") == "FAIL" or isinstance(
+                member.get("errorResponse"), dict
+            )
+            if not failed:
+                continue
+            error = member.get("errorResponse")
+            if isinstance(error, dict) and error.get("message"):
+                return error
+            return dict(
+                message=(
+                    "customs document retrieval failed for item id: "
+                    f"{member.get('itemIds')}"
+                )
+            )
+    return None
 
 
 def _degrade_reason(response):
