@@ -108,6 +108,45 @@ def _post(key, path, body, extra_query=""):
     return str(response)
 
 
+PDF_DIR = os.environ.get(
+    "POSTNORD_PDF_DIR",
+    os.path.join(
+        os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")),
+        "agent-logs",
+        "karrio",
+        "postnord-customs-probe",
+    ),
+)
+
+
+def _save_pdf(body, name):
+    """Write the first data-bearing printout to a file for eye verification."""
+    try:
+        entries = json.loads(body)
+    except (TypeError, ValueError):
+        return None
+    for entry in entries if isinstance(entries, list) else []:
+        if not isinstance(entry, dict):
+            continue
+        data = (entry.get("printout") or {}).get("data")
+        if not data:
+            continue
+        os.makedirs(PDF_DIR, exist_ok=True)
+        path = os.path.join(PDF_DIR, f"{name}.pdf")
+        with open(path, "wb") as handle:
+            handle.write(base64.b64decode(data))
+        return path
+    return None
+
+
+def _run_probe(key, ids, name, extra_query=""):
+    body = _post(key, "/rest/shipment/v3/labels/ids/pdf", ids, extra_query=extra_query)
+    print(_summarize(body))
+    saved = _save_pdf(body, name)
+    if saved:
+        print(f"  saved pdf: {saved}")
+
+
 def main():
     if "POSTNORD_LIVE_APIKEY" not in os.environ:
         print("POSTNORD_LIVE_APIKEY is required (production key; api2 host is used)")
@@ -115,34 +154,26 @@ def main():
     key = os.environ["POSTNORD_LIVE_APIKEY"]
 
     print(f"=== Probe 1: by-id PDF fetch, unrestricted (item {ITEM_ID}) ===")
-    print(_summarize(_post(key, "/rest/shipment/v3/labels/ids/pdf", [{"id": ITEM_ID}])))
+    _run_probe(key, [{"id": ITEM_ID}], "probe1_itemid_unrestricted")
 
     print("\n=== Probe 2: by-id PDF fetch, onlyCustomsDeclarations ===")
-    print(
-        _summarize(
-            _post(
-                key,
-                "/rest/shipment/v3/labels/ids/pdf",
-                [{"id": ITEM_ID}],
-                extra_query="&definePrintout=onlyCustomsDeclarations",
-            )
-        )
+    _run_probe(
+        key,
+        [{"id": ITEM_ID}],
+        "probe2_itemid_onlyCustomsDeclarations",
+        extra_query="&definePrintout=onlyCustomsDeclarations",
     )
 
     print_id = os.environ.get("POSTNORD_PRINT_ID")
     if print_id:
         print("\n=== Probe 1b: by-id PDF fetch, unrestricted, printId key ===")
-        print(_summarize(_post(key, "/rest/shipment/v3/labels/ids/pdf", [{"id": print_id}])))
+        _run_probe(key, [{"id": print_id}], "probe1b_printid_unrestricted")
         print("\n=== Probe 2b: by-id PDF fetch, onlyCustomsDeclarations, printId key ===")
-        print(
-            _summarize(
-                _post(
-                    key,
-                    "/rest/shipment/v3/labels/ids/pdf",
-                    [{"id": print_id}],
-                    extra_query="&definePrintout=onlyCustomsDeclarations",
-                )
-            )
+        _run_probe(
+            key,
+            [{"id": print_id}],
+            "probe2b_printid_onlyCustomsDeclarations",
+            extra_query="&definePrintout=onlyCustomsDeclarations",
         )
     else:
         print("\n[probe 1b/2b skipped] set POSTNORD_PRINT_ID to also probe the printId key")
