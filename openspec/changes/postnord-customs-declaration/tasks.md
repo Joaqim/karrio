@@ -16,6 +16,7 @@
 - [x] 3.2 Add the post-booking by-id fetch to `create_shipment` in `karrio/mappers/postnord/proxy.py`: when the booked service is `postnord_export_letter` and customs data was present, call `POST /v3/labels/ids/pdf` with the first assigned item id and `definePrintout=onlyCustomsDeclarations`, and attach returned printouts as `docs.extra_documents` entries with category from `printoutComposition` and format PDF, and verify a unit test with two mocked `lib.request` calls asserts the second call's URL/query and the populated `extra_documents`
 - [x] 3.3 Reuse `_printout_base64` raw-UTF-8 re-encoding for the ZPL variant and verify a unit test booking with `label_type=ZPL` asserts the `/v3/labels/ids/zpl` path and a ZPL-format `ShippingDocument`
 - [x] 3.4 Make the by-id fetch fail-open: booking stays successful and the retrieval failure is reported as messages, and verify a unit test with a failing second mocked call asserts the shipment result plus error messages and no exception
+- [ ] 3.5 Surface by-id per-id failures as messages (live finding 2026-09-21: a by-id response `[{"itemIds": [{"itemIds": ..., "status": "FAIL", "errorResponse": {"message": "id not found"}}]}]` — the swagger's `itemIds_inner` shape — currently yields zero documents AND zero messages), correcting the by-id `itemIds` schema member to the swagger object shape, and verify a unit test modeled on the live capture asserts the booking stands and the per-id failure surfaces as a message
 
 ## 4. Post-booking declaration proxy (design D3)
 
