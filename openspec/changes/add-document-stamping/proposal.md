@@ -12,6 +12,7 @@ A single utility that sniffs format and composites via the matching backend remo
 - Add a neutral placement vocabulary (`StampPlacement`, millimetres from page top-left) with consumer-supplied anchors as the primary path and an optional registry of karrio-supplied seeds keyed by (carrier, document category, format, paper variant).
 - Add a documented consumer workflow, per carrier, comparing the flow to the established FedEx ETD precedent.
 - ZPL backend, registry seeds, printer-graphic caching, and any server/API surface are out of launch scope (P1 or deferred per the PRD).
+- As follow-on scope, extend placement with a caller-specified rotation and a consumer-supplied date stamp (rendered text composited preceding the signature at the same rotation), and seed the PostNord CN22 registry entry with a measured anchor.
 
 ## Capabilities
 

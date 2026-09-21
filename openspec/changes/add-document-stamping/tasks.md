@@ -19,10 +19,15 @@
 ## 4. Follow-up (P1) — optional registry seeds
 
 - [ ] 4.1 Extend the shipped three-part registry key (carrier, category, format) with the paper-variant segment and add the registry structure with `ShippingDocumentCategory` normalization and a per-seed revision field; verify key hit, miss, and category-normalization resolution tests
-- [ ] 4.2 Measure and add the PostNord CN22 (PDF, A4) seed against a live printout; verify a fixture stamps at the seeded anchor
+- [ ] 4.2 Register the measured PostNord CN22 seed for the A4 paper variant (depends on 4.1): key `postnord/cn22/PDF/A4` once 4.1's paper-variant segment is in place, otherwise the three-part `postnord/cn22/PDF`; anchor x 53.3–61.0 mm, y 91.4–140.5 mm, rotation approximately 90 degrees, date-then-signature layout, from the `cn22_original-1.png` provenance in design.md; verify a fixture stamps a date + signature at the seeded anchor and confirms the ~90-degree rotation direction against the probe2b render (Q10). Supersedes the prior "measure against a live printout" framing now that the anchor is measured.
 - [ ] 4.3 Add the FedEx commercial invoice (PDF, letter) seed; verify a fixture stamps at the seeded anchor
 
 ## 5. Deferred — server exposure (gated on Q7)
 
 - [ ] 5.1 Run the Q7 precedent survey for generalized server surfaces over SDK utilities; record findings in `docs/notes/` and decide go/no-go before any build
 - [ ] 5.2 If precedent holds, build the documents-module pipeline (weasyprint HTML overlay → PDF → pypdf merge, no new deps) in `modules/documents/karrio/documents/`; verify against a server fixture
+
+## 6. Follow-up (P1) — placement rotation and consumer-supplied date stamp
+
+- [ ] 6.1 Add a `rotation` field (degrees clockwise, default `0`) to `StampPlacement` and apply it in `stamp_pdf` by composing `pypdf.Transformation().rotate(...)` with the existing scale/translate chain; verify a rotated-overlay test asserts the image aligns with a sideways field at 90 degrees and that a `0`-degree placement is unchanged from the current upright behavior
+- [ ] 6.2 Add consumer-supplied date rendering: render a caller-supplied pre-formatted date string to a small image with Pillow and composite it preceding the signature within the placement at the same rotation, threading the date value through `stamp_document` / `StampRequest`; verify a date-present test asserts both the date text and the signature appear at the anchor with the date preceding the signature and sharing its rotation, and a date-absent test asserts only the signature is composited (backward compatible)

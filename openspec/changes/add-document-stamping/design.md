@@ -55,6 +55,27 @@ ZPL has no z-order, so ZPL letterhead is out of practical scope.
 
 The stamped document replaces `ShippingDocument.base64` and leaves `format` unchanged (D7), so the consumer's document-list shape is stable and format never leaks into consumer code.
 
+### Rotation is a placement field composed into the transformation
+
+Rotation is a `rotation` field on `StampPlacement`, expressed in degrees clockwise, defaulting to `0`.
+The PDF backend composes `pypdf.Transformation().rotate(...)` with the existing `scale(...)` / `translate(...)` chain fed to `merge_transformed_page`, so a rotated placement reuses the shipped compositing path without a new dependency.
+Arbitrary angles are allowed; `0` degrees leaves the current upright behavior byte-for-byte unchanged.
+Keeping rotation on the placement rather than on the request means the seed registry can carry the angle for a carrier whose target field runs sideways.
+
+### Date text is caller-formatted and rendered via Pillow
+
+The caller supplies the date as a pre-formatted string; the consumer owns format and locale, and the utility performs no date formatting.
+The utility renders the string to a small image with Pillow (`ImageDraw`/`ImageFont`) and composites it as an additional overlay element preceding the signature, sharing the signature's rotation.
+This stays within the already-pinned Pillow + pypdf stack — no reportlab and no new dependency — and reuses the same rotate/scale/translate transformation the signature overlay uses.
+Alternative rejected: the utility formatting a date object — leaks locale and format policy the consumer already owns into the SDK.
+
+### CN22 seed provenance
+
+The PostNord CN22 anchor was measured on `cn22_original-1.png` — the probe2b `onlyCustomsDeclarations` / `declaration/pdf` render at 150 dpi (probe2b and probe4 render byte-identically).
+The measured anchor strip spans pixels x 315–360, y 540–830 on the 1241x1754 render, which is x 53.3–61.0 mm and y 91.4–140.5 mm from the top-left: a roughly 7.6 x 49 mm vertical strip along the sideways "Date and Sender's signature" line.
+The rotation is approximately 90 degrees.
+This provenance seeds the group-4 registry task with measured data rather than a guess; the exact rotation direction is confirmed against the render during implementation (Q10).
+
 ### Illustrative model shapes
 
 Final field names belong to implementation, but the launch shape is:
@@ -94,3 +115,6 @@ Rollback removes the utility module and its `lib` re-export; there is no data to
 
 - Q6 (alpha fidelity): resolved (task 1.1 spike) — Pillow's PDF writer does not preserve PNG alpha as an SMask; saving an RGBA image emits no soft mask, so alpha is dropped and a semi-transparent mark renders fully opaque. The PDF backend white-flattens (composites the RGBA image onto opaque white) before the image-PDF save. This tunes only the backend's flattening behavior; the specs, the Pillow + pypdf approach, and the task breakdown are unchanged.
 - Q7 (server precedent): does precedent exist for a generalized server-side surface over an SDK utility? This gates the deferred server phase only; absent precedent the change stays SDK-scoped, so it does not affect the launch specs or tasks.
+- Q8 (date font): what font renders the date text — a bundled font, a system TTF, or Pillow's `ImageFont.load_default()`? Trades legibility against carrying zero new asset; recorded, not resolved.
+- Q9 (strip partition): how is the anchor strip partitioned between the date and the signature — a fixed proportion, or caller-specified sub-rectangles within the placement? Recorded, not resolved.
+- Q10 (CN22 rotation): what is the exact rotation direction and degree for the PostNord CN22 (approximately 90 degrees)? To be verified against the probe2b render during implementation; recorded, not resolved.
