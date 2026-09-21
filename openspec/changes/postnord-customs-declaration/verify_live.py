@@ -32,7 +32,7 @@ import json
 import os
 import sys
 
-import karrio
+import karrio.sdk as karrio
 import karrio.lib as lib
 
 RECIPIENT = {
@@ -64,8 +64,8 @@ COMMODITY = {
     "quantity": 2,
     "weight": 0.4,
     "weight_unit": "KG",
-    "value_amount": 25.0,
-    "value_currency": "SEK",
+    "value_amount": 2.5,
+    "value_currency": "USD",
     "hs_code": "6115950000",
     "origin_country": "SE",
 }
@@ -96,7 +96,7 @@ def _payload(label_type=None, commodities=None):
             "content_type": "merchandise",
             "commodities": commodities or _commodities(2),
         },
-        "options": {"currency": "SEK"},
+        "options": {"currency": "USD"},
     }
     if label_type:
         payload["label_type"] = label_type
@@ -113,7 +113,7 @@ def _gateway():
                 service_name="PostNord Export Letter",
                 service_code="postnord_export_letter",
                 carrier_service_code="UX",
-                currency="SEK",
+                currency="USD",
                 transit_days=5,
                 domicile=False,
                 international=True,
@@ -136,11 +136,34 @@ def _book(gateway, label_type=None, commodities=None):
     return request.from_(gateway).parse()
 
 
+def scenario_0(gateway):
+    """Auth probe: a light GET that only needs the apikey.
+
+    Discriminates a key/environment problem (probe also fails) from a booking
+    entitlement problem (probe passes, booking 403s).
+    """
+    print("\n=== Scenario 0: apikey probe (service points byaddress) ===")
+    settings = gateway.settings
+    response = lib.request(
+        url=(
+            f"{settings.server_url}/rest/businesslocation/v5/servicepoints"
+            f"/nearest/byaddress?apikey={settings.apikey}"
+            "&returnType=json&countryCode=SE&postalCode=11528"
+        ),
+        method="GET",
+    )
+    body = str(response)
+    print(f"[probe] {body[:300]}")
+    ok = "Forbidden" not in body and "Missing API Key" not in body
+    print(f"[check] {'PASS' if ok else 'FAIL'}: apikey accepted by host ({'accepted' if ok else 'rejected — key/environment problem, not the customs change'})")
+    return ok
+
+
 def scenario_a(gateway):
     print("\n=== Scenario A: UX booking with customs, PDF label ===")
     shipment, messages = _book(gateway)
     for message in messages:
-        print(f"[message] {message.code}: {message.message}")
+        print(f"[message] {message.code}: {message.message} details={getattr(message, 'details', None)}")
 
     checks = []
     if shipment is None:
@@ -203,10 +226,11 @@ def scenario_c(gateway):
     print("\n=== Scenario C: 14-line customs payload (local guard) ===")
     shipment, messages = _book(gateway, commodities=_commodities(14))
     for message in messages:
-        print(f"[message] {message.code}: {message.message}")
+        print(f"[message] {message.code}: {message.message} details={getattr(message, 'details', None)}")
 
     guard_fired = any(
-        message.code == "SHIPPING_SDK_FIELD_ERROR" and "13-line" in (message.message or "")
+        message.code == "SHIPPING_SDK_FIELD_ERROR"
+        and "13-line" in str(getattr(message, "details", None))
         for message in messages
     )
     checks = [
@@ -227,7 +251,7 @@ def scenario_d(gateway, item_id):
             "content": f"Probe line {n}",
             "quantity": {"value": 1},
             "grossWeight": {"value": 0.1, "unit": "KGM"},
-            "value": {"amount": 1.0, "currency": "SEK"},
+            "value": {"amount": 0.1, "currency": "USD"},
             "countryCode": "SE",
             "rowNo": n + 1,
         }
@@ -241,7 +265,7 @@ def scenario_d(gateway, item_id):
                     "countryOfOrigin": "SE",
                     "categoryOfItem": {"categoryType": ["merchandise"]},
                     "detailedDescription": lines,
-                    "totalValue": {"amount": 14.0, "currency": "SEK"},
+                    "totalValue": {"amount": 1.4, "currency": "USD"},
                 },
             }
         ]
@@ -269,6 +293,7 @@ def main():
         return 2
 
     gateway = _gateway()
+    scenario_0(gateway)
     shipment = scenario_a(gateway)
     scenario_b(gateway)
     scenario_c(gateway)
