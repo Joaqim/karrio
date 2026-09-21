@@ -75,7 +75,7 @@ Consequences:
 - The booking's own printout is left unchanged (PostNord may still compose CN22 pages into it); duplication is accepted and documented, with `definePrintout=onlyLabels` on booking as a future lever if consumers report double printing.
 - The document `category` comes from parsed `printoutComposition` counts (`cn22`, `cn23`, `customsInvoice`, …), satisfying the "kinds reflect composition" requirement rather than assuming CN22 from the service code.
 - Retrieval failure does not fail the booking: findings surface as response messages (fail-open, same stance as the dhl-freight-sweden address-validation pre-flight).
-- ZPL customs printouts go through the existing raw-UTF-8 re-encoding path (`_printout_base64`, `shipment/create.py:114-125`) — ZPL is a real option via this route, answering the open question in the proposal; the PDF-variant declaration endpoint itself is PDF-only.
+- ZPL customs printouts go through the existing raw-UTF-8 re-encoding path (`_printout_base64`, `shipment/create.py:226`) — ZPL is a real option via this route, answering the open question in the proposal; the PDF-variant declaration endpoint itself is PDF-only.
 
 ### D3: Post-booking declaration as connector-local proxy methods
 
