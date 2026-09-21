@@ -20,6 +20,11 @@ Environment:
                                  14-line declaration directly, bypassing the
                                  connector guard, to observe PostNord's own
                                  server-side limit behavior
+    POSTNORD_PROBE_DECLARATION   set to 1 to additionally book a shipment
+                                 WITHOUT customs and POST a hand-built 2-line
+                                 CN22 declaration to the digital endpoint
+                                 directly, capturing the raw success
+                                 envelope shape
 
 Scenarios:
     A  book UX (postnord_export_letter) with customs, PDF label — expects a
@@ -28,6 +33,10 @@ Scenarios:
     B  same booking with a ZPL label — expects the by-id ZPL customs printout
     C  14-line customs payload — expects the local field error and no booking
     D  optional server-limit probe (see env above)
+    E  optional declaration shape probe (see env above): books without
+       customs (PostNord's EDI-first alternate flow) and submits a 2-line
+       CN22 via the digital endpoint to capture the authoritative success
+       envelope
 
 Each scenario prints a FINDINGS block; paste the full output back into the
 session so results can be recorded under docs/notes/.
@@ -93,15 +102,7 @@ def _registration_options():
     }
 
 
-def _payload(label_type=None, commodities=None):
-    customs = {
-        "content_type": "merchandise",
-        "commodities": commodities or _commodities(2),
-    }
-    registration = _registration_options()
-    if registration:
-        customs["options"] = registration
-
+def _payload(label_type=None, commodities=None, with_customs=True):
     payload = {
         "shipper": SHIPPER,
         "recipient": RECIPIENT,
@@ -118,9 +119,17 @@ def _payload(label_type=None, commodities=None):
         ],
         "service": "postnord_export_letter",
         "reference": f"CUSTOMS-VERIFY-{os.getpid()}",
-        "customs": customs,
         "options": {"currency": "USD"},
     }
+    if with_customs:
+        customs = {
+            "content_type": "merchandise",
+            "commodities": commodities or _commodities(2),
+        }
+        registration = _registration_options()
+        if registration:
+            customs["options"] = registration
+        payload["customs"] = customs
     if label_type:
         payload["label_type"] = label_type
     return payload
@@ -154,8 +163,10 @@ def _decoded_prefix(document):
     return raw[:8]
 
 
-def _book(gateway, label_type=None, commodities=None):
-    request = karrio.Shipment.create(_payload(label_type, commodities))
+def _book(gateway, label_type=None, commodities=None, with_customs=True):
+    request = karrio.Shipment.create(
+        _payload(label_type, commodities, with_customs)
+    )
     return request.from_(gateway).parse()
 
 
@@ -306,6 +317,68 @@ def scenario_d(gateway, item_id):
     print(f"[probe] response: {str(response)[:600]}")
 
 
+def scenario_e(gateway):
+    """Digital declaration shape probe: capture the success envelope.
+
+    Books a UX shipment WITHOUT the customs block (PostNord's documented
+    EDI-first alternate flow), then POSTs a hand-built 2-line CN22
+    declaration to the digital endpoint. The raw response body is the
+    evidence: the swagger declares the bare ``bookingResponseCN`` there,
+    unlike the PDF variant's wrapped envelope.
+    """
+    print("\n=== Scenario E: digital declaration shape probe (opt-in) ===")
+    registration = _registration_options()
+    shipment, messages = _book(gateway, with_customs=False)
+    for message in messages:
+        print(f"[message] {message.code}: {message.message} details={getattr(message, 'details', None)}")
+
+    if shipment is None or not shipment.tracking_number:
+        print("[skipped] booking without customs failed — the messages above are the finding")
+        return
+
+    item_id = shipment.tracking_number
+    print(f"[booking] tracking_number={item_id}")
+
+    lines = [
+        {
+            "content": f"Probe line {n}",
+            "quantity": {"value": 1},
+            "grossWeight": {"value": 0.1, "unit": "KGM"},
+            "value": {"amount": 0.1, "currency": "USD"},
+            "countryCode": "SE",
+            "rowNo": n + 1,
+        }
+        for n in range(2)
+    ]
+    cn22 = {
+        "countryOfOrigin": "SE",
+        "categoryOfItem": {"categoryType": ["merchandise"]},
+        "detailedDescription": lines,
+        "totalValue": {"amount": 0.2, "currency": "USD"},
+    }
+    for option, field in [
+        ("eori_number", "EORIorPersonalIdNumber"),
+        ("voec_number", "voec"),
+        ("ioss_number", "ioss"),
+    ]:
+        if registration.get(option):
+            cn22[field] = registration[option]
+
+    body = json.dumps(
+        [{"ids": [{"id": item_id, "idType": "itemId"}], "customsDeclarationCN22": cn22}]
+    )
+    settings = gateway.settings
+    response = lib.request(
+        url=f"{settings.server_url}/rest/shipment/v3/customs/declaration"
+        f"?apikey={settings.apikey}",
+        data=body,
+        method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    print(f"[registration] threaded: {sorted(registration) or 'none'}")
+    print(f"[probe] response: {str(response)[:600]}")
+
+
 def _report(checks):
     for name, passed, detail in checks:
         mark = "PASS" if passed else "FAIL"
@@ -325,6 +398,8 @@ def main():
     if os.environ.get("POSTNORD_PROBE_SERVER_LIMIT") == "1":
         item_id = shipment.tracking_number if shipment else None
         scenario_d(gateway, item_id)
+    if os.environ.get("POSTNORD_PROBE_DECLARATION") == "1":
+        scenario_e(gateway)
 
     print("\nDone. Paste this output back into the session for recording under docs/notes/.")
     return 0
