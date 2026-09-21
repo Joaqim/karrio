@@ -844,6 +844,68 @@ class TestPostNordCustomsDocument(unittest.TestCase):
         self.assertEqual(messages[0].code, "EDI_NOT_FOUND")
         self.assertIn("No EDI found", messages[0].message)
 
+    def test_create_shipment_customs_document_per_id_failure_fails_open(self):
+        # Live-captured by-id shape: the body parses as a labelPrintout
+        # array, so without per-id inspection the failure would vanish (no
+        # printout data to attach as a document, no error body reaching the
+        # messages). The FAIL member's errorResponse surfaces as exactly
+        # one message while the booking stands.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.side_effect = [
+                CustomsBookingResponse,
+                CustomsPrintoutsIdNotFoundResponse,
+            ]
+            parsed_response = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(**ExportLetterCustomsPayload)
+                )
+                .from_(gateway)
+                .parse()
+            )
+            self.assertEqual(mock.call_count, 2)
+        details, messages = parsed_response
+        self.assertIsNotNone(details)
+        self.assertEqual(details.tracking_number, "00373500454541020957")
+        self.assertEqual(details.docs.label, "JVBERi0xLjQK")
+        self.assertEqual(details.docs.extra_documents, [])
+        self.assertEqual(len(messages), 1)
+        self.assertIsNone(messages[0].code)
+        self.assertIn("id not found", messages[0].message)
+
+    def test_create_shipment_customs_document_partial_failure_fails_open(self):
+        # A by-id array mixing a data-bearing printout for one id and a FAIL
+        # member for another attaches the document and surfaces the failure
+        # message at once: only data-bearing printouts become documents.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.side_effect = [
+                CustomsBookingResponse,
+                CustomsPrintoutsPartialFailureResponse,
+            ]
+            parsed_response = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(**ExportLetterCustomsPayload)
+                )
+                .from_(gateway)
+                .parse()
+            )
+            self.assertEqual(mock.call_count, 2)
+        details, messages = parsed_response
+        self.assertIsNotNone(details)
+        self.assertEqual(details.tracking_number, "00373500454541020957")
+        self.assertEqual(
+            lib.to_dict(details.docs.extra_documents),
+            [
+                {
+                    "category": "cn22",
+                    "format": "PDF",
+                    "base64": CustomsPDFData,
+                }
+            ],
+        )
+        self.assertEqual(len(messages), 1)
+        self.assertIsNone(messages[0].code)
+        self.assertIn("id not found", messages[0].message)
+
     def test_create_shipment_customs_document_transport_failure_fails_open(self):
         # A transport-level failure of the by-id fetch is also fail-open: no
         # exception escapes, the booking stands, and a synthesized message
@@ -1567,8 +1629,10 @@ CustomsBookingNoIdsResponse = """{
 # (per the /v3/labels/ids swagger) whose entries carry the composed kind.
 CustomsPDFData = "Q04yMiBQREYgREFUQQ=="
 
+# The itemIds members follow the /v3/labels/ids swagger itemIds_inner shape
+# (one object per requested id with its own status), not a bare string array.
 CustomsPrintoutsResponse = """[{
-  "itemIds": ["00373500454541020957"],
+  "itemIds": [{"itemIds": "00373500454541020957", "status": "OK"}],
   "printoutComposition": {"cn22": 1},
   "printout": {"labelFormat": "PDF", "encoding": "base64", "data": "%s"}
 }]""" % CustomsPDFData
@@ -1578,7 +1642,7 @@ CustomsRawZPL = "^XA\n^FO50,50\n^FDCN22\n^FS\n^XZ"
 # No labelFormat: the document format falls back to the requested label
 # type, mirroring the observed /labels/zpl booking behavior.
 CustomsPrintoutsZPLResponse = """[{
-  "itemIds": ["00373500454541020957"],
+  "itemIds": [{"itemIds": "00373500454541020957", "status": "OK"}],
   "printoutComposition": {"cn22": 1},
   "printout": {"encoding": "none", "data": "%s"}
 }]""" % _zpl_json(CustomsRawZPL)
@@ -1586,7 +1650,7 @@ CustomsPrintoutsZPLResponse = """[{
 # Composition keys in non-alphabetical serialization order: the joined
 # document category must not depend on that order.
 CustomsPrintoutsMultiKindResponse = """[{
-  "itemIds": ["00373500454541020957"],
+  "itemIds": [{"itemIds": "00373500454541020957", "status": "OK"}],
   "printoutComposition": {"customsInvoice": 1, "cn22": 1},
   "printout": {"labelFormat": "PDF", "encoding": "base64", "data": "%s"}
 }]""" % CustomsPDFData
@@ -1594,7 +1658,39 @@ CustomsPrintoutsMultiKindResponse = """[{
 # No printoutComposition: the standardized customs-declaration category
 # fallback applies.
 CustomsPrintoutsNoCompositionResponse = """[{
-  "itemIds": ["00373500454541020957"],
+  "itemIds": [{"itemIds": "00373500454541020957", "status": "OK"}],
+  "printout": {"labelFormat": "PDF", "encoding": "base64", "data": "%s"}
+}]""" % CustomsPDFData
+
+# Live capture (atapi2, 2026-09-21): the by-id fetch for a booked export
+# letter returned an HTTP error status whose body still parses as a
+# labelPrintout array, the failure reported per id inside itemIds —
+# [{"itemIds":[{"itemIds":"UX304478474SE","status":"FAIL",
+# "errorResponse":{"message":"id not found"}}]}] — with no printout at all.
+# The requested id is replayed here as the booking's allocated item id.
+CustomsPrintoutsIdNotFoundResponse = """[{
+  "itemIds": [
+    {
+      "itemIds": "00373500454541020957",
+      "status": "FAIL",
+      "errorResponse": {"message": "id not found"}
+    }
+  ]
+}]"""
+
+# Mixed by-id outcome: one entry failed (no printout), another produced a
+# data-bearing printout — the document attaches and the failure surfaces.
+CustomsPrintoutsPartialFailureResponse = """[{
+  "itemIds": [
+    {
+      "itemIds": "00373500454541020957",
+      "status": "FAIL",
+      "errorResponse": {"message": "id not found"}
+    }
+  ]
+}, {
+  "itemIds": [{"itemIds": "00373500454541999999", "status": "OK"}],
+  "printoutComposition": {"cn22": 1},
   "printout": {"labelFormat": "PDF", "encoding": "base64", "data": "%s"}
 }]""" % CustomsPDFData
 
