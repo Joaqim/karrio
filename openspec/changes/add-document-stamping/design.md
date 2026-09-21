@@ -30,9 +30,12 @@ Alternative rejected: per-carrier stamping methods — reimplements the mux, dit
 
 ### PDF backend via Pillow page + pypdf transformation merge, no reportlab
 
-The PNG becomes a single-page image PDF via Pillow, then is scaled and translated into place with a pypdf `Transformation().scale(s).translate(tx, ty)` fed to `merge_transformed_page`.
+The PNG is white-flattened (alpha composited onto an opaque white background per the Q6 finding), becomes a single-page image PDF via Pillow, then is scaled and translated into place with a pypdf `Transformation().scale(s).translate(tx, ty)` fed to `merge_transformed_page`.
 This reuses libraries the SDK already pins (D13 → no reportlab), keeps the carrier text layer intact, and leaves AcroForm dictionaries untouched.
-Alternative rejected: reportlab overlay — adds an SDK dependency for no capability the transformation merge lacks; documented only as the escape hatch if Q6 alpha fidelity proves inadequate.
+Alternative rejected: reportlab overlay — adds an SDK dependency for no capability the transformation merge lacks; documented only as the escape hatch if the white-flatten path proves inadequate.
+
+The Q6 spike (task 1.1) resolved the flattening path: Pillow's PDF writer emits no soft mask (SMask) for an RGBA image, so PNG alpha is dropped on save and a semi-transparent mark would otherwise render fully opaque.
+The backend therefore composites the RGBA image onto an opaque white background before the image-PDF save, so a 50%-alpha stroke reads as its intended tone and the transparent surround reads as white — acceptable because signature anchors target blank blocks and the letterhead underlay draws beneath carrier content regardless.
 
 ### Neutral placement units, optional registry keying
 
@@ -87,5 +90,5 @@ Rollback removes the utility module and its `lib` re-export; there is no data to
 
 ## Open Questions
 
-- Q6 (alpha fidelity): does Pillow's PDF writer preserve PNG alpha as an SMask, or must the overlay be white-flattened? This is the launch spike; its outcome tunes the PDF backend's flattening behavior but does not change the specs, the Pillow + pypdf approach, or the task breakdown (the white-flatten fallback bounds it either way).
+- Q6 (alpha fidelity): resolved (task 1.1 spike) — Pillow's PDF writer does not preserve PNG alpha as an SMask; saving an RGBA image emits no soft mask, so alpha is dropped and a semi-transparent mark renders fully opaque. The PDF backend white-flattens (composites the RGBA image onto opaque white) before the image-PDF save. This tunes only the backend's flattening behavior; the specs, the Pillow + pypdf approach, and the task breakdown are unchanged.
 - Q7 (server precedent): does precedent exist for a generalized server-side surface over an SDK utility? This gates the deferred server phase only; absent precedent the change stays SDK-scoped, so it does not affect the launch specs or tasks.
