@@ -9,7 +9,7 @@
 
 ## 2. Launch — documentation
 
-- [ ] 2.1 Publish a consumer workflow guide (per-carrier, with the FedEx ETD precedent comparison table and the D8 responsibility boundary) following the repo guide conventions; verify it renders and links from the SDK guide index
+- [x] 2.1 Publish a consumer workflow guide (per-carrier, with the FedEx ETD precedent comparison table and the D8 responsibility boundary) following the repo guide conventions; verify it renders and links from the SDK guide index
 
 ## 3. Follow-up (P1) — ZPL backend
 
