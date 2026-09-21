@@ -57,8 +57,17 @@ This live-confirms the shape-tolerant parser fix (6e92b6dcb): the pre-fix code w
 After the declaration exists, the by-id fetch restricted with `onlyCustomsDeclarations` and keyed by printId returns composition `{'cn22': 1}` with a real PDF — 16,748 base64 characters, `%PDF-` magic.
 The unrestricted by-id fetch returns `{'label': 1, 'cn22': 1}` (23,132 characters): the booking printout composes label + CN22, live-confirming the duplication design D2 accepted, and `definePrintout=onlyLabels` remains the documented future lever.
 
+## Re-declaration and rendered documents
+
+A further live round re-declared the same item with a realistic one-line merchandise CN22 ("Candy", HS 1704906500, EUR 30, 0.51 KG gross) using `updateIndicator: "Update"` over the earlier Original — accepted; the Swedish issuer Z12 supports Update (the swagger restricts Update/Deletion to the DK/NO/FI issuers).
+The `categoryType` string `"SALE OF GOODS"`, taken from the swagger-documented value list, is accepted.
+
+The PDF-variant endpoint (`/v3/customs/declaration/pdf` with A4 rendering parameters) returns the wrapped envelope `{bookingResponse: {bookingId, idInformation}, labelPrintout: [...]}` — the inner key is `bookingResponse`, distinct from the digital endpoint's bare envelope — matching the shape the connector already parses (`karrio/providers/postnord/customs.py` reads both).
+Its `labelPrintout` carries the rendered, pre-filled CN22 (17,040 base64 characters, composition `{'cn22': 1}`), the "filled form" deliverable, saved to the probe artifact directory for eye verification.
+
+The post-update by-id ZPL fetch returns the CN22 as raw ZPL text in `printout.data` (2,866 characters, `^XA` magic): the base64 transport applies to the PDF endpoints only, live-confirming the raw-UTF-8 re-encoding design in `_printout_base64` that until this round was unit-tested only.
+
 ## Residuals
 
-Live ZPL customs printout is unverified — no ZPL-configured live booking was tested; the raw-UTF-8 re-encoding path is unit-tested.
 The server-side 14-line rejection is unprobed — the local guard is live-verified, and the optional direct-to-server probe (scenario D, `POSTNORD_PROBE_SERVER_LIMIT`) was not run.
 An OK-but-empty by-id response — status OK, all-zero composition, no printout data — was observed before the declaration existed; surfacing that case as a message is recorded as OpenSpec task 3.6, alongside keying the connector's by-id fetch by printId.
