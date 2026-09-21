@@ -162,9 +162,25 @@ def parse_customs_declaration_pdf_response(
 def _booking_response(
     response: dict,
 ) -> typing.Optional[postnord_res.BookingResponseType]:
-    return lib.to_object(
-        postnord_res.CustomsDeclarationResponseType, response
-    ).bookingResponse
+    """Read the ``bookingResponseCN`` off either endpoint's 200 envelope.
+
+    Per ``vendor/booking.swagger.json`` the digital endpoint returns the
+    bare ``{bookingId, idInformation}`` object; only the PDF variant wraps
+    it under ``bookingResponse``. Bodies carrying neither shape yield None
+    so the error-parsing path reports them instead of an empty success.
+    """
+    body = (
+        response.get("bookingResponse")
+        if "bookingResponse" in response
+        else response
+        if ("bookingId" in response or "idInformation" in response)
+        else None
+    )
+
+    if body is None:
+        return None
+
+    return lib.to_object(postnord_res.BookingResponseType, body)
 
 
 def _declaration_result(booking: postnord_res.BookingResponseType) -> dict:
