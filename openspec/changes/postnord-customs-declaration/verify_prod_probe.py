@@ -10,6 +10,15 @@ Environment:
     POSTNORD_LIVE_APIKEY   required; PRODUCTION apikey (api2.postnord.com)
     POSTNORD_ITEM_ID       optional; real booked item id (default UX478114854SE)
     POSTNORD_EORI          optional; production EORI threaded onto the CN22
+    POSTNORD_PRINT_ID      optional; the booking's printId (hex) — when set,
+                           additionally probes the by-id fetch with it, since
+                           the swagger's assignedIds.printId description names
+                           /v3/labels/ids/{pdf,zpl} as the printId consumer
+                           while the request examples are item-id shaped
+    POSTNORD_ID_TYPE       optional; idType for the declaration ids entry
+                           (default itemId; the swagger prose lists ITEMID
+                           uppercase — retry with ITEMID if production
+                           rejects the camelCase form)
     POSTNORD_SUBMIT        set to 1 to additionally POST the digital
                            declaration (mutating: attaches a 2-line CN22 to
                            the item — only run against a sacrificial booking)
@@ -69,12 +78,31 @@ def main():
         )[:600]
     )
 
+    print_id = os.environ.get("POSTNORD_PRINT_ID")
+    if print_id:
+        print("\n=== Probe 2b: by-id PDF fetch, onlyCustomsDeclarations, printId key ===")
+        print(
+            _post(
+                key,
+                "/rest/shipment/v3/labels/ids/pdf",
+                [{"id": print_id}],
+                extra_query="&definePrintout=onlyCustomsDeclarations",
+            )[:600]
+        )
+    else:
+        print("\n[probe 2b skipped] set POSTNORD_PRINT_ID to also probe the printId key")
+
     if os.environ.get("POSTNORD_SUBMIT") != "1":
         print("\n[probe 3 skipped] set POSTNORD_SUBMIT=1 to POST the declaration")
         return 0
 
     declaration = {
-        "ids": [{"id": ITEM_ID, "idType": "itemId"}],
+        "ids": [
+            {
+                "id": ITEM_ID,
+                "idType": os.environ.get("POSTNORD_ID_TYPE", "itemId"),
+            }
+        ],
         "customsDeclarationCN22": {
             "countryOfOrigin": "SE",
             "categoryOfItem": {"categoryType": ["merchandise"]},
