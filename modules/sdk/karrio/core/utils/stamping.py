@@ -121,14 +121,15 @@ def stamp_pdf(document_b64: str, request: StampRequest) -> str:
     writer.clone_document_from_reader(reader)
 
     page = writer.pages[(placement.page or 1) - 1]
-    x, y, width, height = placement_to_pdf_rect(
-        placement, float(page.mediabox.height)
-    )
+    x, y, width, height = placement_to_pdf_rect(placement, float(page.mediabox.height))
 
     overlay = _build_overlay_page(request.image)
     transformation = (
         pypdf.Transformation()
-        .scale(width / float(overlay.mediabox.width), height / float(overlay.mediabox.height))
+        .scale(
+            width / float(overlay.mediabox.width),
+            height / float(overlay.mediabox.height),
+        )
         .translate(x, y)
     )
     page.merge_transformed_page(

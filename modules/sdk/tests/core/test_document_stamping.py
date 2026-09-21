@@ -63,7 +63,12 @@ def _acroform_pdf_b64() -> str:
             NameObject("/Type"): NameObject("/Annot"),
             NameObject("/Subtype"): NameObject("/Widget"),
             NameObject("/Rect"): ArrayObject(
-                [NumberObject(50), NumberObject(50), NumberObject(250), NumberObject(90)]
+                [
+                    NumberObject(50),
+                    NumberObject(50),
+                    NumberObject(250),
+                    NumberObject(90),
+                ]
             ),
         }
     )
@@ -99,14 +104,10 @@ def _placement() -> stamping.StampPlacement:
 
 class TestSniffDocumentFormat(unittest.TestCase):
     def test_detects_pdf(self):
-        self.assertEqual(
-            helpers.sniff_document_format(_b64(b"%PDF-1.4\n%rest")), "PDF"
-        )
+        self.assertEqual(helpers.sniff_document_format(_b64(b"%PDF-1.4\n%rest")), "PDF")
 
     def test_detects_zpl(self):
-        self.assertEqual(
-            helpers.sniff_document_format(_b64(b"^XA^FO50,50^XZ")), "ZPL"
-        )
+        self.assertEqual(helpers.sniff_document_format(_b64(b"^XA^FO50,50^XZ")), "ZPL")
 
     def test_detects_png(self):
         self.assertEqual(
@@ -117,9 +118,7 @@ class TestSniffDocumentFormat(unittest.TestCase):
         self.assertEqual(helpers.sniff_document_format(b"%PDF-1.7"), "PDF")
 
     def test_tolerates_leading_whitespace(self):
-        self.assertEqual(
-            helpers.sniff_document_format(_b64(b"  \n^XA^XZ")), "ZPL"
-        )
+        self.assertEqual(helpers.sniff_document_format(_b64(b"  \n^XA^XZ")), "ZPL")
 
     def test_magic_bytes_win_over_content_type(self):
         self.assertEqual(
@@ -168,9 +167,7 @@ class TestStampPlacementConversion(unittest.TestCase):
         page_height_pt = 841.8898
         placement = stamping.StampPlacement(x=150.0, y=250.0, width=45.0, height=18.0)
 
-        x, y, width, height = stamping.placement_to_pdf_rect(
-            placement, page_height_pt
-        )
+        x, y, width, height = stamping.placement_to_pdf_rect(placement, page_height_pt)
 
         self.assertAlmostEqual(x, 150.0 * 72.0 / 25.4, places=6)
         self.assertAlmostEqual(width, 45.0 * 72.0 / 25.4, places=6)
@@ -210,17 +207,21 @@ class TestStampPdfBackend(unittest.TestCase):
 
     def test_carrier_text_layer_is_not_rasterized(self):
         document = _cn22_pdf_b64()
-        original = pypdf.PdfReader(
-            io.BytesIO(base64.b64decode(document))
-        ).pages[0].extract_text()
+        original = (
+            pypdf.PdfReader(io.BytesIO(base64.b64decode(document)))
+            .pages[0]
+            .extract_text()
+        )
         request = stamping.StampRequest(
             image=_signature_png_b64(), placement=_placement()
         )
 
         stamped = stamping.stamp_pdf(document, request)
-        after = pypdf.PdfReader(
-            io.BytesIO(base64.b64decode(stamped))
-        ).pages[0].extract_text()
+        after = (
+            pypdf.PdfReader(io.BytesIO(base64.b64decode(stamped)))
+            .pages[0]
+            .extract_text()
+        )
 
         # The selectable carrier text survives the merge intact (the merge only
         # appends the overlay content stream, adding trailing whitespace).
