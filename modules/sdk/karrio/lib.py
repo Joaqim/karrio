@@ -1058,6 +1058,7 @@ def stamp_document(
     doc_type: str = None,
     registry: stamping.RegistryLookup = None,
     date: str = None,
+    graphic_name: str = None,
 ) -> models.ShippingDocument:
     """Composite a base64 PNG onto a returned carrier document.
 
@@ -1067,8 +1068,10 @@ def stamp_document(
     omitted placement triggers a registry lookup that raises an explicit error
     on a miss. Documents whose format has no backend (including PNG) are
     rejected. An optional pre-formatted ``date`` string is composited preceding
-    the signature at the placement's rotation. The utility composites pixels
-    only and asserts nothing about the validity of the stamped content.
+    the signature at the placement's rotation. An optional ``graphic_name`` opts
+    the ZPL backend into the ``~DY`` / ``^XG`` send-once cache and is ignored by
+    the PDF backend. The utility composites pixels only and asserts nothing about
+    the validity of the stamped content.
     """
     return stamping.stamp_document(
         document,
@@ -1079,6 +1082,7 @@ def stamp_document(
         doc_type=doc_type,
         registry=registry,
         date=date,
+        graphic_name=graphic_name,
     )
 
 

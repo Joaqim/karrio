@@ -667,6 +667,46 @@ class TestStampDocument(unittest.TestCase):
         self.assertIn("^GFA,", zpl)
         self.assertLess(zpl.index("^GFA,"), zpl.rindex("^XZ"))
 
+    def test_graphic_name_threads_through_lib_stamp_document(self):
+        # The re-export forwards `graphic_name` to the ZPL backend, opting into
+        # the ~DY (download-once) / ^XG (recall-per-label) cache and replacing
+        # the inline ^GFA field entirely, exactly as stamp_zpl does directly.
+        document = models.ShippingDocument(
+            category="customs_declaration",
+            format="ZPL",
+            base64=_zpl_doc_b64(),
+        )
+
+        stamped = lib.stamp_document(
+            document,
+            image=_signature_png_b64(),
+            placement=_zpl_placement(),
+            graphic_name="MYSIG",
+        )
+
+        self.assertEqual(stamped.format, "ZPL")
+        zpl = _decode_zpl(stamped.base64)
+        self.assertIn("~DYMYSIG,", zpl)
+        self.assertIn("^XGMYSIG,1,1", zpl)
+        self.assertNotIn("^GFA,", zpl)
+
+    def test_default_path_omits_the_zpl_cache(self):
+        # Without graphic_name the re-export leaves the inline ^GFA path intact.
+        document = models.ShippingDocument(
+            category="customs_declaration",
+            format="ZPL",
+            base64=_zpl_doc_b64(),
+        )
+
+        stamped = lib.stamp_document(
+            document, image=_signature_png_b64(), placement=_zpl_placement()
+        )
+
+        zpl = _decode_zpl(stamped.base64)
+        self.assertIn("^GFA,", zpl)
+        self.assertNotIn("~DY", zpl)
+        self.assertNotIn("^XG", zpl)
+
     def test_supplied_placement_skips_registry(self):
         def exploding_registry(key):
             raise AssertionError(
