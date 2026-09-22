@@ -202,7 +202,9 @@ def _validate_anchor(placement: StampPlacement) -> None:
             )
 
 
-def _rotated_corner_extents(width: float, height: float, rotation: float):
+def _rotated_corner_extents(
+    width: float, height: float, rotation: float
+) -> typing.Tuple[float, float]:
     """Return the (min-x, max-y) of a width x height rect rotated clockwise.
 
     The rect is rotated about its own corner (the PDF-space origin) by
@@ -617,7 +619,7 @@ class StampSeed:
 
 # Measured PostNord CN22 anchor: a ~7.6 mm-wide x ~49 mm-tall vertical strip
 # along the sideways "Date and Sender's signature" line, whose rotated extent's
-# top-left sits at x 32.55 mm, y 70.65 mm from the A4 page top-left (design.md
+# top-left sits at x 32.55 mm, y 112.15 mm from the A4 page top-left (design.md
 # "CN22 seed provenance").
 #
 # The rotation direction is confirmed by the vendored ZPL form
@@ -625,11 +627,11 @@ class StampSeed:
 # glyph-up = page +x -- it reads with the head tilted right, matching the
 # clockwise convention -- so rotation=90 aligns the signature with the form.
 _CN22_PLACEMENT: StampPlacement = StampPlacement(
-    x=32.55, y=70.65, width=7.6, height=49.1, rotation=90
+    x=32.55, y=112.15, width=7.6, height=49.1, rotation=90
 )
 
 # revision 2: re-expresses revision 1's identical physical strip under
-# corner-anchored rotation semantics -- (x + (w-h)/2, y - (w-h)/2) from the
+# corner-anchored rotation semantics -- (x + (w-h)/2, y + (h-w)/2) from the
 # centre-pivot anchor (53.3, 91.4).
 _SEED_REGISTRY: typing.Dict[str, StampSeed] = {
     "postnord/cn22/PDF/A4": StampSeed(placement=_CN22_PLACEMENT, revision=2),

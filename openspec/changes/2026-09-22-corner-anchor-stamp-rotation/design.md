@@ -47,8 +47,8 @@ The `graphic_name` cache path shares the same `^FO`, computed before that branch
 
 ## Seed conversion (revision 2)
 
-The shipped centre-pivot seed `(53.3, 91.4, 7.6, 49.1, 90)` composites the extent `x in [32.55, 81.65]`, `y in [70.65, 119.75]` mm; the corner-anchored placement producing the identical extent is `(32.55, 70.65, 7.6, 49.1, 90)`, shipped as revision 2.
-For 90 degrees generally, a consumer re-expresses an old anchor as `x_new = x_old + (w-h)/2`, `y_new = y_old - (w-h)/2`.
+The shipped centre-pivot seed `(53.3, 91.4, 7.6, 49.1, 90)` places the unrotated rect centred at `(57.1, 115.95)`; rotating 90 degrees about that centre yields the extent `x in [32.55, 81.65]`, `y in [112.15, 119.75]` mm, so the corner-anchored placement producing the identical extent is `(32.55, 112.15, 7.6, 49.1, 90)`, shipped as revision 2.
+For 90 degrees generally, a consumer re-expresses an old anchor as `x_new = x_old + (w-h)/2`, `y_new = y_old + (h-w)/2`.
 
 ## Migration
 

@@ -840,9 +840,9 @@ class TestDefaultRegistry(unittest.TestCase):
         self.assertIsNotNone(placement)
         # Revision 2 re-expresses the same physical strip under corner-anchored
         # rotation: the rotated extent's top-left, converted from the original
-        # centre-pivot anchor (53.3, 91.4) by (x + (w-h)/2, y - (w-h)/2).
+        # centre-pivot anchor (53.3, 91.4) by (x + (w-h)/2, y + (h-w)/2).
         self.assertAlmostEqual(placement.x, 32.55, places=2)
-        self.assertAlmostEqual(placement.y, 70.65, places=2)
+        self.assertAlmostEqual(placement.y, 112.15, places=2)
         self.assertAlmostEqual(placement.width, 7.6, places=1)
         self.assertAlmostEqual(placement.height, 49.1, places=1)
         self.assertEqual(placement.rotation, 90)
@@ -879,9 +879,10 @@ class TestCn22Seed(unittest.TestCase):
         # so overlays are isolated by the measured strip's vertical band rather
         # than by _overlay_cms's first-cm-per-stream read (which the carrier's
         # own transform would shadow). The band is an independent literal: the
-        # revision-2 strip spans y 70.65-119.75 mm from the top of an A4 page,
-        # which is 502.3-641.4 pt in bottom-left PDF coordinates and brackets
-        # both sub-anchors' translations.
+        # revision-2 strip spans y 112.15-119.75 mm from the top of an A4 page,
+        # which is 502.4-524.0 pt in bottom-left PDF coordinates; the band adds
+        # margin so it brackets both sub-anchors' translations while excluding
+        # any anchor displaced from the measured strip.
         stamped = lib.stamp_document(
             _pdf_document(),
             image=_signature_png_b64(),
@@ -890,7 +891,7 @@ class TestCn22Seed(unittest.TestCase):
             doc_type="cn22",
         )
 
-        band = _cms_in_y_band(stamped.base64, 502.0, 642.0)
+        band = _cms_in_y_band(stamped.base64, 502.0, 527.0)
         self.assertEqual(len(band), 2)
         # Paint order labels the two overlays. Under clockwise rotation the
         # strip reads downward from its top-left anchor, so the date leads the

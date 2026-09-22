@@ -11,7 +11,7 @@ The backend also emits the negative `^FO` operand silently, which is out-of-spec
 - The PDF backend rotates about the image corner and translates the rotated bounding box's top-left onto the anchor; a rotated extent crossing the mediabox is rejected with an error naming the edge.
 - Negative anchors are rejected before any backend work, naming the field.
 - Unrotated placements are byte-identical to the shipped output and keep their permissive behavior.
-- The PostNord CN22 seed re-expresses its unchanged physical strip under the new semantics as `StampSeed` revision 2: anchor `(53.3, 91.4)` becomes `(32.55, 70.65)`.
+- The PostNord CN22 seed re-expresses its unchanged physical strip under the new semantics as `StampSeed` revision 2: anchor `(53.3, 91.4)` becomes `(32.55, 112.15)`.
 - The rotation direction question (design Q10) closes as confirmed-clockwise using the vendored CN22 ZPL form, whose `^FWR` field stream reads with glyph-up = page +x.
 
 ## Capabilities

@@ -99,9 +99,9 @@ _ZPL_PLACEMENT = stamping.StampPlacement(
 )
 
 # The revision-2 seed strip's vertical band on the A4 CN22 PDF: the rotated
-# extent spans y 70.65-119.75 mm from the page top, and the overlay's anchor
-# translation sits at 641.4 pt in bottom-left PDF coordinates.
-_CN22_BAND_PT = (502.0, 642.0)
+# extent spans y 112.15-119.75 mm from the page top, and the overlay's anchor
+# translation sits at 524.0 pt in bottom-left PDF coordinates.
+_CN22_BAND_PT = (515.0, 530.0)
 
 
 class TestVendoredFixtures(unittest.TestCase):

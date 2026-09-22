@@ -232,12 +232,12 @@ The date leads along the strip exactly as before; only the parameterization of t
 
 ### Seed conversion (revision 2)
 
-The shipped centre-pivot seed `(53.3, 91.4, 7.6, 49.1, 90)` composites a rotated extent of `x ∈ [53.3−20.75, 53.3+7.6/2+20.75]`, `y ∈ [91.4−20.75, 91.4+49.1/2+20.75]` = `x ∈ [32.55, 81.65]`, `y ∈ [70.65, 119.75]` mm.
+The shipped centre-pivot seed `(53.3, 91.4, 7.6, 49.1, 90)` places the unrotated rect at `x ∈ [53.3, 60.9]`, `y ∈ [91.4, 140.5]`, centred at `(57.1, 115.95)`; rotating 90 degrees about that centre yields the extent `x ∈ [32.55, 81.65]`, `y ∈ [112.15, 119.75]` mm.
 The corner-anchored placement producing the identical extent is:
 
 ```python
 _CN22_PLACEMENT = StampPlacement(
-    x=32.55, y=70.65, width=7.6, height=49.1, rotation=90
+    x=32.55, y=112.15, width=7.6, height=49.1, rotation=90
 )
 _SEED_REGISTRY = {
     "postnord/cn22/PDF/A4": StampSeed(placement=_CN22_PLACEMENT, revision=2),
@@ -307,8 +307,8 @@ All tests use `unittest` (never pytest), run from the repository root with the r
 | Test | Current oracle | New oracle |
 |------|----------------|------------|
 | `TestZplRotation.test_rotation_swaps_dimensions_and_preserves_center` | `^FO(320, 80)` centre-preserving | `^FO(160, 240)` = the placement anchor; raster 160 wide × 480 tall |
-| `TestDefaultRegistry.test_cn22_seed_resolves_to_the_documented_anchor` | `(53.3, 91.4, ...)` | `(32.55, 70.65, 7.6, 49.1, 90)` |
-| `TestCn22Seed.test_seed_composites_at_the_measured_anchor` | band y 443.0–583.0 pt | band y 502.0–642.0 pt (extent y 70.65–119.75 mm) |
+| `TestDefaultRegistry.test_cn22_seed_resolves_to_the_documented_anchor` | `(53.3, 91.4, ...)` | `(32.55, 112.15, 7.6, 49.1, 90)` |
+| `TestCn22Seed.test_seed_composites_at_the_measured_anchor` | band y 443.0–583.0 pt | band y 502.0–527.0 pt (extent y 112.15–119.75 mm) |
 | `TestPlacementRotation` | linear part only | linear part unchanged; translation asserts the corner |
 | `test_zero_rotation_is_byte_identical_to_no_rotation` | byte identity | unchanged, must stay green |
 
@@ -352,7 +352,7 @@ def test_negative_anchor_is_rejected_naming_the_field(self):
 
 ### Backward compatibility
 
-- **API compatibility**: unrotated placements are byte-identical; rotated placements must re-express `x, y` as the rotated extent's top-left (for 90 degrees: `x_new = x_old + (w−h)/2`, `y_new = y_old − (w−h)/2`).
+- **API compatibility**: unrotated placements are byte-identical; rotated placements must re-express `x, y` as the rotated extent's top-left (for 90 degrees: `x_new = x_old + (w−h)/2`, `y_new = y_old + (h−w)/2`).
 - **Data compatibility**: no persisted data carries placements; `_SEED_REGISTRY` converts in-tree.
 - **Feature flags**: none, per the change-management preference.
 

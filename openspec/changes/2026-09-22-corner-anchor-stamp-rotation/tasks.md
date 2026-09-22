@@ -8,7 +8,7 @@
 - [x] 2.1 Re-anchor `stamp_zpl` rotation as rotate-then-anchor with the `^FO` operand-range guard (0–32000), and verify the rotation and incident tests turn green
 - [x] 2.2 Re-anchor `_merge_overlay`/`stamp_pdf` rotation on the rotated bounding box with mediabox containment for rotated placements and the date-split tiling offset, and verify the PDF rotation, seed-band, and bounds tests turn green
 - [x] 2.3 Add the shared `_validate_anchor` (negative anchors, positive dimensions) to both backends and update the `StampPlacement`/backend docstrings, and verify the negative-anchor tests name the offending field
-- [x] 2.4 Re-express `_CN22_PLACEMENT` as `(32.55, 70.65, 7.6, 49.1, 90)` under `StampSeed` revision 2 and close the Q10 rotation-direction comment with the vendored-form evidence, and verify `TestDefaultRegistry` and `TestCn22Seed` pass on the converted literals
+- [x] 2.4 Re-express `_CN22_PLACEMENT` as `(32.55, 112.15, 7.6, 49.1, 90)` under `StampSeed` revision 2 and close the Q10 rotation-direction comment with the vendored-form evidence, and verify `TestDefaultRegistry` and `TestCn22Seed` pass on the converted literals
 
 ## 3. Fixtures
 
