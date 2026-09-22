@@ -234,8 +234,10 @@ class TestStampRealPdfForm(unittest.TestCase):
         )
         request = stamping.StampRequest(
             image=_signature_b64(),
+            # The revision-2 seed anchor, for consistency with the registry
+            # tests; any valid placement exercises the text layer the same way.
             placement=stamping.StampPlacement(
-                x=53.3, y=91.4, width=7.6, height=49.1, rotation=90
+                x=32.55, y=112.15, width=7.6, height=49.1, rotation=90
             ),
         )
 

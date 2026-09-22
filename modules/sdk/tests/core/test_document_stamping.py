@@ -1216,6 +1216,41 @@ class TestPlacementBounds(unittest.TestCase):
 
         self.assertIn("32000", str(ctx.exception))
 
+    def test_zpl_rejects_an_in_range_origin_with_an_extent_beyond_the_range(self):
+        # The origin (100 mm -> 799 dots) is well inside 0-32000; only the
+        # raster's width (3910 mm -> 31249 dots) pushes the x extent to 32048.
+        # This isolates the extent operand: an origin-only guard would not
+        # raise here at all.
+        with self.assertRaises(ValueError) as ctx:
+            stamping.stamp_zpl(
+                _zpl_doc_b64(),
+                stamping.StampRequest(
+                    image=_signature_png_b64(),
+                    placement=stamping.StampPlacement(
+                        x=100.0, y=0.0, width=3910.0, height=1.0, dpi=203
+                    ),
+                ),
+            )
+
+        self.assertIn("x extent", str(ctx.exception))
+        self.assertIn("32000", str(ctx.exception))
+
+    def test_zpl_accepts_an_extent_resolving_exactly_to_the_boundary(self):
+        # 8128 mm at 100 dpi is exactly 32000 dots (25.4 * 32000 = 812800), so
+        # an origin of 0 puts the x extent exactly on the operand maximum,
+        # which is in-range and must stamp rather than raise.
+        stamped = stamping.stamp_zpl(
+            _zpl_doc_b64(),
+            stamping.StampRequest(
+                image=_signature_png_b64(),
+                placement=stamping.StampPlacement(
+                    x=0.0, y=0.0, width=8128.0, height=1.0, dpi=100
+                ),
+            ),
+        )
+
+        self.assertIn("^FO0,0", _decode_zpl(stamped))
+
     def test_pdf_rejects_a_rotated_extent_beyond_the_mediabox(self):
         # A 20x200 mm placement rotated 90 degrees at x=200 mm sweeps right to
         # 400 mm -- far past the A4 fixture's 210 mm width.
