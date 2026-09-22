@@ -415,6 +415,9 @@ def shipment_request(
     # filtering (see units.CustomsOption); commodity lines keep flowing from
     # the raw customs model because the Products wrapper normalizes missing
     # quantity/weight_unit and would change line emission.
+    if payload.customs and payload.customs.commodities:
+        provider_units.enforce_customs_option_placement(payload.options)
+
     customs_options = lib.to_customs_info(
         payload.customs, option_type=provider_units.CustomsOption
     ).options

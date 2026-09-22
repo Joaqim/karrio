@@ -286,6 +286,30 @@ def enforce_customs_declaration_lines(
     raise lib.exceptions.FieldError({field: explanation})
 
 
+def enforce_customs_option_placement(options: dict) -> None:
+    """Raise a FieldError when customs option keys sit in shipment options.
+
+    Shipment-level option keys unknown to the booking options enum are
+    dropped silently by the typed-options helper, so a registration number
+    sent under ``options`` instead of ``customs.options`` never reaches the
+    CN22 branch and PostNord rejects the booking (SACUS-BR-24062502 wants
+    EORI, VOEC, or IOSS). Only truthy values reject: an empty value sends
+    nothing under either placement.
+    """
+    misplaced = [
+        key for key in CustomsOption.__members__ if (options or {}).get(key)
+    ]
+    if misplaced:
+        raise lib.exceptions.FieldError(
+            {
+                f"options.{key}": (
+                    "customs registration number; send it under customs.options"
+                )
+                for key in misplaced
+            }
+        )
+
+
 def shipping_options_initializer(
     options: dict,
     package_options: units.ShippingOptions = None,
