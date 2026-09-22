@@ -373,6 +373,76 @@ class TestPostNordShipment(unittest.TestCase):
         )
         self.assertEqual(lib.to_dict(request.serialize()), CustomsShipmentRequest)
 
+    def test_create_shipment_customs_registration_numbers_misplaced_reject(self):
+        # Registration keys under shipment-level options are dropped by the
+        # typed-options helper without any signal; the booking rejects the
+        # placement locally instead of letting PostNord reject the CN22
+        # (SACUS-BR-24062502 "should have either EORI, VOEC, IOSS").
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            shipment, messages = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(
+                        **{
+                            **CustomsShipmentPayload,
+                            "options": {
+                                "eori_number": "SE556000123401",
+                                "voec_number": "1234567",
+                            },
+                        }
+                    )
+                )
+                .from_(gateway)
+                .parse()
+            )
+            mock.assert_not_called()
+        self.assertIsNone(shipment)
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0].code, "SHIPPING_SDK_FIELD_ERROR")
+        self.assertEqual(
+            messages[0].details,
+            {
+                "options.eori_number": (
+                    "customs registration number; send it under customs.options"
+                ),
+                "options.voec_number": (
+                    "customs registration number; send it under customs.options"
+                ),
+            },
+        )
+
+    def test_create_shipment_customs_registration_numbers_misplaced_empty_pass(self):
+        # The guard is truthy-only: empty values send nothing under either
+        # placement, so the booking is identical to one without the keys.
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(
+                **{
+                    **CustomsShipmentPayload,
+                    "options": {
+                        **CustomsShipmentPayload["options"],
+                        "eori_number": "",
+                        "ioss_number": None,
+                    },
+                }
+            )
+        )
+        self.assertEqual(lib.to_dict(request.serialize()), CustomsShipmentRequest)
+
+    def test_create_shipment_without_customs_ignores_registration_options(self):
+        # The guard is scoped to customs bookings: without a customs branch
+        # the registration keys are inert and the booking is unchanged.
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(
+                **{
+                    **ShipmentPayload,
+                    "options": {
+                        **ShipmentPayload["options"],
+                        "eori_number": "SE556000123401",
+                    },
+                }
+            )
+        )
+        self.assertEqual(lib.to_dict(request.serialize()), ShipmentRequest)
+
     def test_create_shipment_customs_lines_at_limit(self):
         # 13 lines is the inclusive boundary and is sent in full.
         request = gateway.mapper.create_shipment_request(
