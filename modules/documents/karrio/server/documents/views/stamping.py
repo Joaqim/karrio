@@ -70,6 +70,7 @@ class DocumentStamper(api.BaseAPIView):
                     carrier=data.get("carrier"),
                     doc_type=data.get("doc_type"),
                     date=data.get("date"),
+                    graphic_name=data.get("graphic_name"),
                 )
 
                 result = serializers.StampedDocument.map(

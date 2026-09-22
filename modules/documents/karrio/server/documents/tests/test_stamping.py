@@ -8,6 +8,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 from karrio.server.core.tests import APITestCase
+from karrio.server.core.models import APILogIndex
 
 
 def _b64(raw: bytes) -> str:
@@ -138,6 +139,88 @@ class TestDocumentStamper(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("postnord/commercial_invoice/PDF/A4", str(response.content))
+
+    def test_stamp_zpl_with_graphic_name_reaches_the_cache_over_http(self):
+        """graphic_name threads through the endpoint into the ZPL ~DY/^XG cache."""
+        response = self.client.post(
+            self.url,
+            {
+                "document": ZPL_DOCUMENT_BASE64,
+                "image": SIGNATURE_PNG_BASE64,
+                "placement": ZPL_PLACEMENT,
+                "graphic_name": "R:STAMP.GRF",
+            },
+            format="json",
+        )
+
+        self.assertResponseNoErrors(response)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        decoded = base64.b64decode(response.data["doc_file"]).decode("utf-8")
+        self.assertIn("~DYR:STAMP.GRF,", decoded)
+        self.assertIn("^XGR:STAMP.GRF,1,1", decoded)
+        self.assertNotIn("^GFA,", decoded)
+
+    def test_stamp_zpl_underlay_returns_400(self):
+        """ZPL has no z-order: an underlay layer is a client fault (400, not 500)."""
+        response = self.client.post(
+            self.url,
+            {
+                "document": ZPL_DOCUMENT_BASE64,
+                "image": SIGNATURE_PNG_BASE64,
+                "placement": ZPL_PLACEMENT,
+                "layer": "underlay",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("underlay", str(response.content))
+
+    def test_stamp_unbacked_format_returns_400(self):
+        """Bytes matching no backed format and no hint are a 400, not a 500."""
+        unbacked = base64.b64encode(
+            b"plain text that is neither a PDF nor a ZPL document"
+        ).decode("utf-8")
+        response = self.client.post(
+            self.url,
+            {
+                "document": unbacked,
+                "image": SIGNATURE_PNG_BASE64,
+                "placement": {"x": 10.0, "y": 10.0, "width": 20.0, "height": 20.0},
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("backend", str(response.content))
+
+    def test_successful_stamp_is_not_indexed_in_api_log(self):
+        """The endpoint skips LoggingMixin, so the base64 never lands in APILogIndex.
+
+        DocumentStamper extends BaseAPIView (no LoggingMixin), unlike the logged
+        GenericAPIView/APIView bases, so a successful stamp adds no log row and
+        the base64 response is absent from every APILogIndex row.
+        """
+        before = APILogIndex.objects.count()
+
+        response = self.client.post(
+            self.url,
+            {
+                "document": A4_PDF_BASE64,
+                "image": SIGNATURE_PNG_BASE64,
+                "placement": PDF_PLACEMENT,
+            },
+            format="json",
+        )
+
+        self.assertResponseNoErrors(response)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        doc_file = response.data["doc_file"]
+        self.assertEqual(APILogIndex.objects.count(), before)
+        self.assertFalse(
+            APILogIndex.objects.filter(response__contains=doc_file[:120]).exists()
+        )
 
     def test_stamp_requires_authentication(self):
         """An unauthenticated request is rejected."""
