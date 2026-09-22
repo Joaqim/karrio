@@ -87,3 +87,82 @@ class GeneratedDocument(serializers.Serializer):
         help_text="A base64 file content",
         required=True,
     )
+
+
+class StampPlacementData(serializers.Serializer):
+    page = serializers.IntegerField(
+        required=False,
+        default=1,
+        help_text="1-based page index",
+    )
+    x = serializers.FloatField(help_text="Millimetres from the page top-left")
+    y = serializers.FloatField(help_text="Millimetres from the page top-left")
+    width = serializers.FloatField(
+        required=False,
+        help_text="Draw width in millimetres before rotation",
+    )
+    height = serializers.FloatField(
+        required=False,
+        help_text="Draw height in millimetres before rotation",
+    )
+    rotation = serializers.FloatField(
+        required=False,
+        default=0,
+        help_text="Degrees clockwise about the rectangle centre",
+    )
+    dpi = serializers.IntegerField(
+        required=False,
+        default=203,
+        help_text="ZPL target density; ignored by the PDF backend",
+    )
+
+
+class StampData(serializers.Serializer):
+    document = serializers.CharField(
+        help_text="base64 carrier document (PDF or ZPL); format is sniffed",
+    )
+    image = serializers.CharField(
+        required=False,
+        help_text="base64 PNG to composite (signature or letterhead)",
+    )
+    placement = StampPlacementData(
+        required=False,
+        help_text="Anchor rectangle; omit only when a carrier/doc_type seed exists",
+    )
+    layer = serializers.ChoiceField(
+        choices=["overlay", "underlay"],
+        required=False,
+        default="overlay",
+        help_text="overlay (signature) or underlay (letterhead, PDF only)",
+    )
+    carrier = serializers.CharField(
+        required=False,
+        help_text="Registry seed key segment; ignored when placement is supplied",
+    )
+    doc_type = serializers.CharField(
+        required=False,
+        help_text="ShippingDocumentCategory name keying the registry seed",
+    )
+    format = serializers.CharField(
+        required=False,
+        help_text="Optional format hint; the document bytes are sniffed regardless",
+    )
+    date = serializers.CharField(
+        required=False,
+        help_text="Pre-formatted date string composited preceding the image",
+    )
+    graphic_name = serializers.CharField(
+        required=False,
+        help_text="ZPL ~DY/^XG send-once cache opt-in; ignored by the PDF backend",
+    )
+
+
+class StampedDocument(serializers.Serializer):
+    doc_file = serializers.CharField(
+        required=True,
+        help_text="A base64 file content",
+    )
+    format = serializers.CharField(
+        required=False,
+        help_text="Format of the stamped document",
+    )
