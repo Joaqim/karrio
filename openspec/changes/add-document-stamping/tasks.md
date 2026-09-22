@@ -13,8 +13,8 @@
 
 ## 3. Follow-up (P1) — ZPL backend
 
-- [ ] 3.1 Implement the ZPL backend (flatten onto white, Floyd–Steinberg dither, 1-bpp GRF hex with byte-padded rows, `^FO/^Gfa` splice into the carrier field stream); verify GRF golden-vector tests match exact hex and dither snapshot tests hold stroke continuity at 203 and 300 dpi
-- [ ] 3.2 Add the `~DY`/`^XG` send-once-per-printer cache variant behind an opt-in path; verify the default `^Gfa` path is unaffected when caching is off
+- [x] 3.1 Implement the ZPL backend (flatten onto white, Floyd–Steinberg dither, 1-bpp GRF hex with byte-padded rows, `^FO/^Gfa` splice into the carrier field stream); verify GRF golden-vector tests match exact hex and dither snapshot tests hold stroke continuity at 203 and 300 dpi
+- [x] 3.2 Add the `~DY`/`^XG` send-once-per-printer cache variant behind an opt-in path; verify the default `^Gfa` path is unaffected when caching is off
 
 ## 4. Follow-up (P1) — optional registry seeds
 
@@ -24,7 +24,7 @@
 
 ## 5. Deferred — server exposure (gated on Q7)
 
-- [ ] 5.1 Run the Q7 precedent survey for generalized server surfaces over SDK utilities; record findings in `docs/notes/` and decide go/no-go before any build
+- [x] 5.1 Run the Q7 precedent survey for generalized server surfaces over SDK utilities; record findings in `docs/notes/` and decide go/no-go before any build. Findings in `docs/notes/documents/stamping-server-precedent-survey.md`: precedent is unqualified — `modules/documents/` already exposes a generalized server surface over an SDK document utility (`DocumentGenerator.post`, `POST /documents/generate`), so a stamping endpoint is a near-copy swapping weasyprint for `lib.stamp_document`. Survey recommends GO; the build (5.2) is a net-new API surface and so is gated on a PRD per the project PRD-first rule and on explicit user go-ahead.
 - [ ] 5.2 If precedent holds, build the documents-module pipeline (weasyprint HTML overlay → PDF → pypdf merge, no new deps) in `modules/documents/karrio/documents/`; verify against a server fixture
 
 ## 6. Follow-up (P1) — placement rotation and consumer-supplied date stamp
