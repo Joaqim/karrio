@@ -8,6 +8,7 @@ the stamped content — that responsibility belongs to the consumer.
 """
 
 import io
+import math
 import base64
 import typing
 
@@ -25,6 +26,11 @@ RegistryLookup = typing.Callable[[str], typing.Optional["StampPlacement"]]
 
 MM_PER_INCH: float = 25.4
 POINTS_PER_INCH: float = 72.0
+
+# ZPL ^FO and graphic operands are valid from 0 to 32000 dots, so any placement
+# whose rotated origin or extent resolves outside that range is rejected rather
+# than emitted as out-of-spec ZPL that printers interpret inconsistently.
+ZPL_OPERAND_LIMIT: int = 32000
 
 # Fraction of the placement's primary (un-rotated) axis given to the date strip
 # when a date is supplied; the signature takes the remainder. A simple even
@@ -50,10 +56,12 @@ class StampPlacement:
     """Anchor rectangle for compositing an image onto a document page.
 
     Coordinates are millimetres measured from the top-left of a one-based
-    ``page`` index. ``rotation`` is degrees clockwise about the rectangle's
-    centre, defaulting to ``0`` (upright); ``width`` and ``height`` are the
-    image's dimensions before rotation. ``dpi`` is the ZPL target density and
-    is ignored by the PDF backend.
+    ``page`` index. ``width`` and ``height`` are the image's dimensions before
+    rotation; a nonzero ``rotation`` (degrees clockwise) rotates the image and
+    anchors the rotated extent's top-left corner at ``(x, y)``, so the anchor
+    means the same thing rotated or upright. ``rotation`` defaults to ``0``
+    (upright, byte-identical to the pre-rotation behavior). ``dpi`` is the ZPL
+    target density and is ignored by the PDF backend.
     """
 
     page: int = 1
@@ -170,19 +178,67 @@ def _render_date_image(date: str) -> str:
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 
+def _validate_anchor(placement: StampPlacement) -> None:
+    """Reject anchors outside the printable coordinate domain.
+
+    Placement coordinates are millimetres from the page top-left and become ZPL
+    ``^FO`` operands valid only from 0, so a negative anchor is rejected before
+    any backend work; width and height must be positive measures.
+    """
+    for field in ("x", "y"):
+        value = getattr(placement, field)
+        if value is None or value < 0:
+            raise ValueError(
+                f"StampPlacement.{field} must be a non-negative millimetre "
+                f"measure from the page top-left (got {value})"
+            )
+
+    for field in ("width", "height"):
+        value = getattr(placement, field)
+        if value is None or value <= 0:
+            raise ValueError(
+                f"StampPlacement.{field} must be a positive millimetre measure "
+                f"(got {value})"
+            )
+
+
+def _rotated_corner_extents(width: float, height: float, rotation: float):
+    """Return the (min-x, max-y) of a width x height rect rotated clockwise.
+
+    The rect is rotated about its own corner (the PDF-space origin) by
+    ``rotation`` degrees clockwise, matching pypdf's ``rotate(-rotation)``; the
+    returned extrema locate the rotated bounding box relative to that corner so
+    the caller can translate the box's top-left onto an anchor point.
+    """
+    radians = math.radians(rotation)
+    corners = [
+        (
+            px * math.cos(radians) + py * math.sin(radians),
+            -px * math.sin(radians) + py * math.cos(radians),
+        )
+        for px, py in ((width, 0.0), (0.0, height), (width, height))
+    ]
+
+    return min(cx for cx, _ in corners), max(cy for _, cy in corners)
+
+
 def _merge_overlay(
     page: "pypdf.PageObject",
     image_b64: str,
     rect: typing.Tuple[float, float, float, float],
     rotation: float,
     over: bool,
+    anchor: typing.Tuple[float, float] = None,
 ) -> None:
     """Composite one base64 PNG into ``rect`` (PDF points) on ``page``.
 
-    The image PDF is scaled to the rectangle and, when ``rotation`` is nonzero,
-    rotated clockwise about the rectangle's centre before translation. A zero
-    rotation takes the shipped scale/translate chain unchanged, so an upright
-    placement is byte-for-byte identical whether or not a rotation is specified.
+    The image PDF is scaled to the rectangle. A zero rotation translates the
+    scaled image to ``rect``'s bottom-left corner, taking the shipped chain
+    unchanged so an upright placement is byte-for-byte identical whether or not
+    a rotation is specified. A nonzero rotation rotates the scaled image
+    clockwise about its corner and translates the rotated extent's top-left to
+    ``anchor`` (bottom-left-origin PDF points), which the caller derives from
+    the placement so rotated sub-images tile along the rotated axis.
     """
     x, y, width, height = rect
     overlay = _build_overlay_page(image_b64)
@@ -192,10 +248,10 @@ def _merge_overlay(
     )
 
     if rotation:
+        min_x, max_y = _rotated_corner_extents(width, height, rotation)
         transformation = (
-            transformation.translate(-width / 2.0, -height / 2.0)
-            .rotate(-rotation)
-            .translate(x + width / 2.0, y + height / 2.0)
+            transformation.rotate(-rotation)
+            .translate(anchor[0] - min_x, anchor[1] - max_y)
         )
     else:
         transformation = transformation.translate(x, y)
@@ -203,37 +259,109 @@ def _merge_overlay(
     page.merge_transformed_page(overlay, transformation, over=over)
 
 
+def _validate_pdf_extent(
+    placement: StampPlacement,
+    anchor: typing.Tuple[float, float],
+    page_width_pt: float,
+    page_height_pt: float,
+) -> None:
+    """Reject a rotated extent that leaves the page mediabox.
+
+    The rotated bounding box is measured around the anchor the same way
+    ``_merge_overlay`` positions it; an edge crossing the mediabox raises,
+    naming the edge and the bound. Unrotated placements skip this check and
+    keep the shipped permissive behavior.
+    """
+    radians = math.radians(placement.rotation or 0)
+    corners = [
+        (
+            anchor[0] + px * math.cos(radians) + py * math.sin(radians),
+            anchor[1] - px * math.sin(radians) + py * math.cos(radians),
+        )
+        for px, py in (
+            (0.0, 0.0),
+            (mm_to_points(placement.width), 0.0),
+            (0.0, mm_to_points(placement.height)),
+            (mm_to_points(placement.width), mm_to_points(placement.height)),
+        )
+    ]
+    for edge, value in (
+        ("left", min(cx for cx, _ in corners)),
+        ("bottom", min(cy for _, cy in corners)),
+    ):
+        if value < -0.5:
+            raise ValueError(
+                f"The rotated stamp extent's {edge} edge ({value:.1f} pt) starts "
+                f"before the page mediabox origin of the page "
+                f"({page_width_pt:.1f} x {page_height_pt:.1f} pt)"
+            )
+
+    for edge, value, bound in (
+        ("right", max(cx for cx, _ in corners), page_width_pt),
+        ("top", max(cy for _, cy in corners), page_height_pt),
+    ):
+        if value > bound + 0.5:
+            raise ValueError(
+                f"The rotated stamp extent's {edge} edge ({value:.1f} pt) leaves "
+                f"the page mediabox ({page_width_pt:.1f} x {page_height_pt:.1f} pt)"
+            )
+
+
 def stamp_pdf(document_b64: str, request: StampRequest) -> str:
     """Composite the request image onto a base64 PDF, returning base64 PDF.
 
     The carrier document is cloned whole — pages, text layer, and AcroForm
     dictionaries survive untouched — then the placement page receives the
-    image via a scale/rotate/translate transformation merge. ``overlay`` draws
-    the image over the page content; ``underlay`` draws it beneath, so carrier
-    content stays legible above a letterhead. When ``request.date`` is supplied,
-    the rendered date occupies the leading portion of the placement along its
-    primary (un-rotated) axis and the signature the remainder, both sharing the
+    image via a scale/rotate/translate transformation merge. A nonzero
+    rotation rotates the image clockwise and anchors the rotated extent's
+    top-left corner at the placement's ``(x, y)``; a rotated extent crossing
+    the mediabox is rejected. ``overlay`` draws the image over the page
+    content; ``underlay`` draws it beneath, so carrier content stays legible
+    above a letterhead. When ``request.date`` is supplied, the rendered date
+    occupies the leading portion of the placement along its primary
+    (un-rotated) axis and the signature the remainder, both sharing the
     placement's rotation. The page count is invariant.
     """
     placement = request.placement
+    _validate_anchor(placement)
     reader = pypdf.PdfReader(helpers.to_buffer(document_b64))
     writer = pypdf.PdfWriter()
     writer.clone_document_from_reader(reader)
 
     page = writer.pages[(placement.page or 1) - 1]
-    rect = placement_to_pdf_rect(placement, float(page.mediabox.height))
+    page_width_pt = float(page.mediabox.width)
+    page_height_pt = float(page.mediabox.height)
+    rect = placement_to_pdf_rect(placement, page_height_pt)
     rotation = placement.rotation or 0
     over = request.layer != "underlay"
+
+    anchor = None
+    if rotation:
+        anchor = (
+            mm_to_points(placement.x),
+            page_height_pt - mm_to_points(placement.y),
+        )
+        _validate_pdf_extent(placement, anchor, page_width_pt, page_height_pt)
 
     if request.date:
         x, y, width, height = rect
         date_width = width * DATE_STRIP_FRACTION
+        date_anchor = signature_anchor = None
+        if rotation:
+            radians = math.radians(rotation)
+            offset = (
+                date_width * math.cos(radians),
+                -date_width * math.sin(radians),
+            )
+            date_anchor = anchor
+            signature_anchor = (anchor[0] + offset[0], anchor[1] + offset[1])
         _merge_overlay(
             page,
             _render_date_image(request.date),
             (x, y, date_width, height),
             rotation,
             over,
+            anchor=date_anchor,
         )
         _merge_overlay(
             page,
@@ -241,9 +369,10 @@ def stamp_pdf(document_b64: str, request: StampRequest) -> str:
             (x + date_width, y, width - date_width, height),
             rotation,
             over,
+            anchor=signature_anchor,
         )
     else:
-        _merge_overlay(page, request.image, rect, rotation, over)
+        _merge_overlay(page, request.image, rect, rotation, over, anchor=anchor)
 
     result = io.BytesIO()
     writer.write(result)
@@ -343,11 +472,12 @@ def stamp_zpl(document_b64: str, request: StampRequest) -> str:
     The image is flattened, resized to the placement's dot extent, dithered to a
     1-bpp raster, and encoded as a GRF graphic spliced over the carrier field
     stream at the placement's ``^FO`` origin. A nonzero rotation rotates the
-    raster clockwise and re-anchors ``^FO`` so the graphic's centre stays on the
-    placement centre. ``request.date`` is composited into the same raster
-    preceding the signature. ``request.graphic_name`` opts into the ``~DY`` /
-    ``^XG`` send-once cache. ZPL has no z-order, so an ``underlay`` layer
-    (letterhead) is out of practical scope and is rejected.
+    raster clockwise and the rotated raster's top-left anchors at the
+    placement's own ``^FO``. Any origin or extent operand resolving outside
+    the ZPL range 0-32000 is rejected. ``request.date`` is composited into the
+    same raster preceding the signature. ``request.graphic_name`` opts into the
+    ``~DY`` / ``^XG`` send-once cache. ZPL has no z-order, so an ``underlay``
+    layer (letterhead) is out of practical scope and is rejected.
     """
     if request.layer == "underlay":
         raise ValueError(
@@ -356,21 +486,28 @@ def stamp_zpl(document_b64: str, request: StampRequest) -> str:
         )
 
     placement = request.placement
+    _validate_anchor(placement)
     stream = helpers.decode_bytes(base64.b64decode(document_b64))
     raster = _build_zpl_raster(request)
-
-    x_dots = mm_to_dots(placement.x, placement.dpi)
-    y_dots = mm_to_dots(placement.y, placement.dpi)
     rotation = placement.rotation or 0
 
     if rotation:
-        width, height = raster.size
-        center_x = x_dots + width / 2.0
-        center_y = y_dots + height / 2.0
         raster = raster.rotate(-rotation, expand=True, fillcolor=1)
-        rotated_width, rotated_height = raster.size
-        x_dots = int(round(center_x - rotated_width / 2.0))
-        y_dots = int(round(center_y - rotated_height / 2.0))
+
+    x_dots = mm_to_dots(placement.x, placement.dpi)
+    y_dots = mm_to_dots(placement.y, placement.dpi)
+    rotated_width, rotated_height = raster.size
+    for edge, operand in (
+        ("x origin", x_dots),
+        ("y origin", y_dots),
+        ("x extent", x_dots + rotated_width),
+        ("y extent", y_dots + rotated_height),
+    ):
+        if not 0 <= operand <= ZPL_OPERAND_LIMIT:
+            raise ValueError(
+                f"The stamp's {edge} resolves to {operand} dots, outside the "
+                f"ZPL ^FO operand range 0-{ZPL_OPERAND_LIMIT}"
+            )
 
     hexdata, total, bytes_per_row = _encode_grf(raster)
 
@@ -479,22 +616,23 @@ class StampSeed:
 
 
 # Measured PostNord CN22 anchor: a ~7.6 mm-wide x ~49 mm-tall vertical strip
-# along the sideways "Date and Sender's signature" line, at x 53.3 mm, y 91.4 mm
-# from the A4 page top-left (design.md "CN22 seed provenance").
+# along the sideways "Date and Sender's signature" line, whose rotated extent's
+# top-left sits at x 32.55 mm, y 70.65 mm from the A4 page top-left (design.md
+# "CN22 seed provenance").
 #
-# The 90-degree magnitude is measured, but the rotation DIRECTION (clockwise vs
-# counter-clockwise) is provisional: the probe render used to measure it is not
-# vendored, so Q10 stays open. The clockwise convention (6.1) is applied here
-# pending a live-render confirmation; StampSeed.revision exists to bump the seed
-# once the direction is confirmed.
+# The rotation direction is confirmed by the vendored ZPL form
+# (tests/core/fixtures/postnord_cn22.zpl): its field stream runs under ^FWR with
+# glyph-up = page +x -- it reads with the head tilted right, matching the
+# clockwise convention -- so rotation=90 aligns the signature with the form.
 _CN22_PLACEMENT: StampPlacement = StampPlacement(
-    x=53.3, y=91.4, width=7.6, height=49.1, rotation=90
+    x=32.55, y=70.65, width=7.6, height=49.1, rotation=90
 )
 
-# revision 1: the first shipped measured seed. A confirmed Q10 direction (or any
-# re-measurement) supersedes it with revision 2.
+# revision 2: re-expresses revision 1's identical physical strip under
+# corner-anchored rotation semantics -- (x + (w-h)/2, y - (w-h)/2) from the
+# centre-pivot anchor (53.3, 91.4).
 _SEED_REGISTRY: typing.Dict[str, StampSeed] = {
-    "postnord/cn22/PDF/A4": StampSeed(placement=_CN22_PLACEMENT, revision=1),
+    "postnord/cn22/PDF/A4": StampSeed(placement=_CN22_PLACEMENT, revision=2),
 }
 
 

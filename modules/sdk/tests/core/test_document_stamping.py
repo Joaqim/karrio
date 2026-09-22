@@ -476,6 +476,27 @@ class TestPlacementRotation(unittest.TestCase):
         self.assertAlmostEqual(c, sy, places=6)
         self.assertAlmostEqual(d, 0.0, places=6)
 
+    def test_rotation_translates_the_rotated_corner_to_the_anchor(self):
+        # The rotated overlay's translation lands the rotated extent's top-left
+        # at the placement's anchor: (pt(x), H - pt(y)) on the sentinel page
+        # (595 x 842 pt). For (40, 200) mm that is (113.386, 275.071) pt --
+        # independent literals from the placement's millimetres, not a re-run
+        # of the transform.
+        document = _sentinel_pdf_b64()
+        image = _signature_png_b64()
+
+        (rotated,) = _overlay_cms(
+            stamping.stamp_pdf(
+                document,
+                stamping.StampRequest(image=image, placement=_rotated_placement(90)),
+            )
+        )
+
+        self.assertAlmostEqual(rotated[4], 40.0 * 72.0 / 25.4, places=3)
+        self.assertAlmostEqual(
+            rotated[5], 842.0 - 200.0 * 72.0 / 25.4, places=2
+        )
+
     def test_zero_rotation_is_byte_identical_to_no_rotation(self):
         # The backward-compat invariant (design.md): a 0-degree placement leaves
         # the shipped upright output byte-for-byte unchanged.
@@ -817,8 +838,11 @@ class TestDefaultRegistry(unittest.TestCase):
         placement = stamping._default_registry("postnord/cn22/PDF/A4")
 
         self.assertIsNotNone(placement)
-        self.assertAlmostEqual(placement.x, 53.3, places=1)
-        self.assertAlmostEqual(placement.y, 91.4, places=1)
+        # Revision 2 re-expresses the same physical strip under corner-anchored
+        # rotation: the rotated extent's top-left, converted from the original
+        # centre-pivot anchor (53.3, 91.4) by (x + (w-h)/2, y - (w-h)/2).
+        self.assertAlmostEqual(placement.x, 32.55, places=2)
+        self.assertAlmostEqual(placement.y, 70.65, places=2)
         self.assertAlmostEqual(placement.width, 7.6, places=1)
         self.assertAlmostEqual(placement.height, 49.1, places=1)
         self.assertEqual(placement.rotation, 90)
@@ -854,9 +878,10 @@ class TestCn22Seed(unittest.TestCase):
         # signature at its 90-degree rotation. The fixture draws its own image,
         # so overlays are isolated by the measured strip's vertical band rather
         # than by _overlay_cms's first-cm-per-stream read (which the carrier's
-        # own transform would shadow). The band is an independent literal:
-        # y 91.4-140.5 mm from the top of an A4 page is 443.6-582.8 pt in
-        # bottom-left PDF coordinates.
+        # own transform would shadow). The band is an independent literal: the
+        # revision-2 strip spans y 70.65-119.75 mm from the top of an A4 page,
+        # which is 502.3-641.4 pt in bottom-left PDF coordinates and brackets
+        # both sub-anchors' translations.
         stamped = lib.stamp_document(
             _pdf_document(),
             image=_signature_png_b64(),
@@ -865,12 +890,14 @@ class TestCn22Seed(unittest.TestCase):
             doc_type="cn22",
         )
 
-        band = _cms_in_y_band(stamped.base64, 443.0, 583.0)
+        band = _cms_in_y_band(stamped.base64, 502.0, 642.0)
         self.assertEqual(len(band), 2)
-        # Paint order labels the two overlays; the date leads the signature
-        # along the strip (shipped 6.2 date-then-signature layout).
+        # Paint order labels the two overlays. Under clockwise rotation the
+        # strip reads downward from its top-left anchor, so the date leads the
+        # signature with a strictly greater translation-y (shipped 6.2
+        # date-then-signature layout).
         date_cm, signature_cm = band
-        self.assertLess(date_cm[4], signature_cm[4])
+        self.assertGreater(date_cm[5], signature_cm[5])
 
         # Each overlay's linear part encodes a clockwise 90-degree rotation: a
         # zero diagonal with b < 0 < c (same pattern the group-6 rotation tests
@@ -1048,13 +1075,13 @@ class TestZplRotation(unittest.TestCase):
     def setUp(self):
         self.maxDiff = None
 
-    def test_rotation_swaps_dimensions_and_preserves_center(self):
+    def test_rotation_swaps_dimensions_and_anchors_at_the_placement(self):
         # At 203 dpi the placement is 480x160 dots anchored at (160, 240). A
         # 90-degree clockwise rotation swaps the raster to 160x480, so the GRF
-        # height becomes 480 (= the un-rotated width). The rotated field is
-        # re-anchored so the graphic's centre is unchanged: the un-rotated centre
-        # is (400, 320) and the rotated 160x480 graphic centres there only when
-        # ^FO is (320, 80) -- an independent literal, not a re-run of the encoder.
+        # height becomes 480 (= the un-rotated width). The rotated graphic's
+        # top-left anchors at the placement's own origin: ^FO stays (160, 240)
+        # and the 160x480 raster hangs down-right from it -- independent
+        # literals, not a re-run of the encoder.
         image = _signature_png_b64()
 
         upright = _decode_zpl(
@@ -1079,9 +1106,9 @@ class TestZplRotation(unittest.TestCase):
         # Row count is total/bytes_per_row; rotation swaps 480 wide -> 480 tall.
         self.assertEqual(up_total // up_bpr, 160)
         self.assertEqual(ro_total // ro_bpr, 480)
-        # The rotated origin differs from the upright one, and re-anchors so the
-        # graphic centre is preserved: (320 + 160/2, 80 + 480/2) == (400, 320).
-        self.assertEqual((ro_x, ro_y), (320, 80))
+        # The rotated origin IS the placement anchor: the graphic starts exactly
+        # at the requested corner instead of a re-derived centre-pivot origin.
+        self.assertEqual((ro_x, ro_y), (160, 240))
 
 
 class TestZplPrinterCache(unittest.TestCase):
@@ -1139,6 +1166,85 @@ class TestZplPrinterCache(unittest.TestCase):
         self.assertEqual(int(match.group(1)), inline_total)
         self.assertEqual(int(match.group(2)), inline_bpr)
         self.assertEqual(match.group(3), inline_hex)
+
+
+class TestPlacementBounds(unittest.TestCase):
+    def setUp(self):
+        self.maxDiff = None
+
+    def test_negative_anchor_is_rejected_naming_the_field(self):
+        with self.assertRaises(ValueError) as ctx:
+            stamping.stamp_zpl(
+                _zpl_doc_b64(),
+                stamping.StampRequest(
+                    image=_signature_png_b64(),
+                    placement=stamping.StampPlacement(
+                        x=-1.0, y=0.0, width=60.0, height=20.0, dpi=203
+                    ),
+                ),
+            )
+
+        self.assertIn("StampPlacement.x", str(ctx.exception))
+
+    def test_pdf_negative_anchor_is_rejected_on_the_shared_validation(self):
+        with self.assertRaises(ValueError) as ctx:
+            stamping.stamp_pdf(
+                _cn22_pdf_b64(),
+                stamping.StampRequest(
+                    image=_signature_png_b64(),
+                    placement=stamping.StampPlacement(
+                        x=40.0, y=-2.0, width=60.0, height=20.0
+                    ),
+                ),
+            )
+
+        self.assertIn("StampPlacement.y", str(ctx.exception))
+
+    def test_zpl_rejects_operands_beyond_the_zpl_range(self):
+        # 4006 mm at 203 dpi resolves past 32000 dots, the ^FO operand maximum.
+        with self.assertRaises(ValueError) as ctx:
+            stamping.stamp_zpl(
+                _zpl_doc_b64(),
+                stamping.StampRequest(
+                    image=_signature_png_b64(),
+                    placement=stamping.StampPlacement(
+                        x=4006.0, y=0.0, width=60.0, height=20.0, dpi=203
+                    ),
+                ),
+            )
+
+        self.assertIn("32000", str(ctx.exception))
+
+    def test_pdf_rejects_a_rotated_extent_beyond_the_mediabox(self):
+        # A 20x200 mm placement rotated 90 degrees at x=200 mm sweeps right to
+        # 400 mm -- far past the A4 fixture's 210 mm width.
+        with self.assertRaises(ValueError) as ctx:
+            stamping.stamp_pdf(
+                _cn22_pdf_b64(),
+                stamping.StampRequest(
+                    image=_signature_png_b64(),
+                    placement=stamping.StampPlacement(
+                        x=200.0, y=50.0, width=20.0, height=200.0, rotation=90
+                    ),
+                ),
+            )
+
+        self.assertIn("mediabox", str(ctx.exception))
+
+    def test_pdf_tolerates_the_same_extent_when_unrotated(self):
+        # The containment guard is scoped to rotated placements: the identical
+        # unrotated geometry keeps its shipped permissive behavior.
+        stamped = stamping.stamp_pdf(
+            _cn22_pdf_b64(),
+            stamping.StampRequest(
+                image=_signature_png_b64(),
+                placement=stamping.StampPlacement(
+                    x=200.0, y=50.0, width=20.0, height=200.0
+                ),
+            ),
+        )
+
+        self.assertTrue(base64.b64decode(stamped).startswith(b"%PDF-"))
 
 
 if __name__ == "__main__":
