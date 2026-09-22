@@ -1057,6 +1057,7 @@ def stamp_document(
     carrier: str = None,
     doc_type: str = None,
     registry: stamping.RegistryLookup = None,
+    date: str = None,
 ) -> models.ShippingDocument:
     """Composite a base64 PNG onto a returned carrier document.
 
@@ -1065,8 +1066,9 @@ def stamp_document(
     the composited image. A consumer-supplied ``placement`` is used directly; an
     omitted placement triggers a registry lookup that raises an explicit error
     on a miss. Documents whose format has no backend (including PNG) are
-    rejected. The utility composites pixels only and asserts nothing about the
-    validity of the stamped content.
+    rejected. An optional pre-formatted ``date`` string is composited preceding
+    the signature at the placement's rotation. The utility composites pixels
+    only and asserts nothing about the validity of the stamped content.
     """
     return stamping.stamp_document(
         document,
@@ -1076,6 +1078,7 @@ def stamp_document(
         carrier=carrier,
         doc_type=doc_type,
         registry=registry,
+        date=date,
     )
 
 
