@@ -25,7 +25,7 @@
 ## 5. Deferred — server exposure (gated on Q7)
 
 - [x] 5.1 Run the Q7 precedent survey for generalized server surfaces over SDK utilities; record findings in `docs/notes/` and decide go/no-go before any build. Findings in `docs/notes/documents/stamping-server-precedent-survey.md`: precedent is unqualified — `modules/documents/` already exposes a generalized server surface over an SDK document utility (`DocumentGenerator.post`, `POST /documents/generate`), so a stamping endpoint is a near-copy swapping weasyprint for `lib.stamp_document`. Survey recommends GO; the build (5.2) is a net-new API surface and so is gated on a PRD per the project PRD-first rule and on explicit user go-ahead.
-- [ ] 5.2 If precedent holds, build the documents-module pipeline (weasyprint HTML overlay → PDF → pypdf merge, no new deps) in `modules/documents/karrio/documents/`; verify against a server fixture
+- [ ] 5.2 (deferred) If precedent holds, build the documents-module pipeline in `modules/documents/karrio/documents/`; verify against a server fixture. PRD written at `PRDs/DOCUMENT_STAMPING_SERVER_ENDPOINT.md` (the endpoint wraps `lib.stamp_document` mirroring `POST /documents/generate`, not a new weasyprint pipeline). Decisions resolved 2026-09-22: REST-only at launch (Q1/D1), base64-in only with no stored-document/org-scoped variant at launch (Q2/D4), synchronous (D3); Q3 payload ceiling and Q4 registry-miss status code left for the build phase. Build DEFERRED by user decision — awaits an explicit go.
 
 ## 6. Follow-up (P1) — placement rotation and consumer-supplied date stamp
 
