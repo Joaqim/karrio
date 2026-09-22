@@ -105,6 +105,48 @@ def _placement() -> stamping.StampPlacement:
     return stamping.StampPlacement(x=40.0, y=200.0, width=60.0, height=20.0)
 
 
+def _zpl_doc_b64(stream: str = "^XA^FO10,10^GB100,100,2^FS^XZ") -> str:
+    return _b64(stream.encode("utf-8"))
+
+
+def _decode_zpl(b64: str) -> str:
+    return base64.b64decode(b64).decode("utf-8")
+
+
+def _zpl_placement(rotation: float = 0, dpi: int = 203) -> stamping.StampPlacement:
+    # 203 dpi: 20/30/60 mm resolve to 160/240/480/160 dots (see the rotation
+    # oracle in TestZplRotation), so the anchor arithmetic lands on integers.
+    return stamping.StampPlacement(
+        x=20.0, y=30.0, width=60.0, height=20.0, rotation=rotation, dpi=dpi
+    )
+
+
+def _grf_fields(zpl: str):
+    """Return each inline ``^FO..^GFA..^FS`` field as a parsed tuple.
+
+    The tuple is ``(fo_x, fo_y, total, total2, bytes_per_row, hexdata)`` with the
+    four numeric header fields as ints and the hex payload verbatim, so a test
+    can assert the exact origin, byte counts, and bytes-per-row independently of
+    the production encoder.
+    """
+    import re
+
+    return [
+        (int(x), int(y), int(t1), int(t2), int(bpr), hexdata)
+        for x, y, t1, t2, bpr, hexdata in re.findall(
+            r"\^FO(\d+),(\d+)\^GFA,(\d+),(\d+),(\d+),([0-9A-F]*)\^FS", zpl
+        )
+    ]
+
+
+def _solid_black_png_b64(width: int = 400, height: int = 140) -> str:
+    """An opaque solid-black PNG: flattens to pure black at any density."""
+    image = PIL.Image.new("RGBA", (width, height), (0, 0, 0, 255))
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return _b64(buffer.getvalue())
+
+
 def _sentinel_pdf_b64() -> str:
     """A 1-page PDF whose sole content stream paints a uniquely-located mark.
 
@@ -605,18 +647,25 @@ class TestStampDocument(unittest.TestCase):
 
         self.assertIn("PNG", str(ctx.exception))
 
-    def test_rejects_format_without_backend(self):
-        # ZPL is recognized by the sniffer but has no launch backend.
+    def test_stamps_zpl_document(self):
+        # ZPL is now a backed format: a `^XA...^XZ` document composites and the
+        # returned document is a `^XA`-prefixed ZPL stream carrying the spliced
+        # `^GFA` graphic before its trailing `^XZ`.
         document = models.ShippingDocument(
-            category="customs_declaration", format="ZPL", base64=_b64(b"^XA^FO^XZ")
+            category="customs_declaration",
+            format="ZPL",
+            base64=_zpl_doc_b64(),
         )
 
-        with self.assertRaises(ValueError) as ctx:
-            lib.stamp_document(
-                document, image=_signature_png_b64(), placement=_placement()
-            )
+        stamped = lib.stamp_document(
+            document, image=_signature_png_b64(), placement=_zpl_placement()
+        )
 
-        self.assertIn("ZPL", str(ctx.exception))
+        self.assertEqual(stamped.format, "ZPL")
+        zpl = _decode_zpl(stamped.base64)
+        self.assertTrue(zpl.startswith("^XA"))
+        self.assertIn("^GFA,", zpl)
+        self.assertLess(zpl.index("^GFA,"), zpl.rindex("^XZ"))
 
     def test_supplied_placement_skips_registry(self):
         def exploding_registry(key):
@@ -791,6 +840,265 @@ class TestCn22Seed(unittest.TestCase):
             self.assertAlmostEqual(cm[3], 0.0, places=6)
             self.assertLess(cm[1], 0.0)
             self.assertGreater(cm[2], 0.0)
+
+
+class TestZplGrfEncoding(unittest.TestCase):
+    def setUp(self):
+        self.maxDiff = None
+
+    def test_all_black_block_packs_to_ff_per_row(self):
+        # An 8x2 all-black block: each 8-px row fills exactly one byte with every
+        # bit set, so the hex is FF twice (a set bit is black), one byte per row.
+        image = PIL.Image.new("1", (8, 2), 0)
+
+        hexdata, total, bytes_per_row = stamping._encode_grf(image)
+
+        self.assertEqual(bytes_per_row, 1)
+        self.assertEqual(total, 2)
+        self.assertEqual(hexdata, "FFFF")
+
+    def test_bit_order_is_msb_first(self):
+        # A 4-px-wide row with black only at x=0 and x=3 packs MSB-first into the
+        # high nibble: 0b1001_0000 = 0x90, and the sub-byte width pads to one byte.
+        image = PIL.Image.new("1", (4, 1), 1)
+        image.putpixel((0, 0), 0)
+        image.putpixel((3, 0), 0)
+
+        hexdata, total, bytes_per_row = stamping._encode_grf(image)
+
+        self.assertEqual(bytes_per_row, 1)
+        self.assertEqual(total, 1)
+        self.assertEqual(hexdata, "90")
+
+    def test_row_is_byte_padded_for_non_multiple_of_eight_width(self):
+        # A 12-px row (not a byte multiple) pads to two bytes: black at x=0 sets
+        # the first byte's MSB (0x80) and black at x=11 sets bit 3 of the second
+        # byte (0x80 >> 3 = 0x10), with the trailing pad bits left clear.
+        image = PIL.Image.new("1", (12, 1), 1)
+        image.putpixel((0, 0), 0)
+        image.putpixel((11, 0), 0)
+
+        hexdata, total, bytes_per_row = stamping._encode_grf(image)
+
+        self.assertEqual(bytes_per_row, 2)
+        self.assertEqual(total, 2)
+        self.assertEqual(hexdata, "8010")
+
+    def test_hex_is_uppercase(self):
+        # x=1 alone sets bit 6 (0x40 = "40"); x=0 and x=4 set 0x88 = "88": both
+        # uppercase, confirming the encoder never emits lowercase nibbles.
+        image = PIL.Image.new("1", (8, 1), 1)
+        image.putpixel((0, 0), 0)
+        image.putpixel((4, 0), 0)
+
+        hexdata, _, _ = stamping._encode_grf(image)
+
+        self.assertEqual(hexdata, "88")
+        self.assertEqual(hexdata, hexdata.upper())
+
+
+class TestZplDitherContinuity(unittest.TestCase):
+    def setUp(self):
+        self.maxDiff = None
+
+    def _assert_connected_black_row(self, dpi):
+        request = stamping.StampRequest(
+            image=_solid_black_png_b64(), placement=_zpl_placement(dpi=dpi)
+        )
+
+        raster = stamping._build_zpl_raster(request)
+
+        width, height = raster.size
+        pixels = raster.load()
+        # A solid-black stamp must survive flatten + resize + Floyd-Steinberg as a
+        # fully connected black run: at least one row is black (value 0) across
+        # its entire width. The oracle is the raster's own pixels, not the GRF
+        # encoder, so an inverted set-bit convention or a lost stroke fails here.
+        connected = any(
+            all(pixels[x, y] == 0 for x in range(width)) for y in range(height)
+        )
+        self.assertTrue(connected)
+
+    def test_stroke_stays_connected_at_203_dpi(self):
+        self._assert_connected_black_row(203)
+
+    def test_stroke_stays_connected_at_300_dpi(self):
+        self._assert_connected_black_row(300)
+
+
+class TestZplBackend(unittest.TestCase):
+    def setUp(self):
+        self.maxDiff = None
+
+    def test_splices_single_grf_before_trailing_xz(self):
+        stamped = stamping.stamp_zpl(
+            _zpl_doc_b64(),
+            stamping.StampRequest(
+                image=_signature_png_b64(), placement=_zpl_placement()
+            ),
+        )
+        zpl = _decode_zpl(stamped)
+
+        self.assertTrue(zpl.startswith("^XA"))
+        self.assertEqual(zpl.count("^XZ"), 1)
+        fields = _grf_fields(zpl)
+        self.assertEqual(len(fields), 1)
+        # The graphic is drawn last (overlay), so it lands before the final ^XZ.
+        self.assertLess(zpl.index("^GFA,"), zpl.index("^XZ"))
+        # The carrier field stream survives ahead of the spliced graphic.
+        self.assertIn("^GB100,100,2^FS", zpl)
+
+    def test_grf_header_matches_the_raster_dimensions(self):
+        request = stamping.StampRequest(
+            image=_signature_png_b64(), placement=_zpl_placement()
+        )
+        raster = stamping._build_zpl_raster(request)
+        width, height = raster.size
+        expected_bpr = math.ceil(width / 8)
+
+        zpl = _decode_zpl(stamping.stamp_zpl(_zpl_doc_b64(), request))
+        (fo_x, fo_y, total, total2, bpr, hexdata), = _grf_fields(zpl)
+
+        # 203 dpi: x=20 mm -> 160 dots, y=30 mm -> 240 dots (independent literals).
+        self.assertEqual((fo_x, fo_y), (160, 240))
+        self.assertEqual(bpr, expected_bpr)
+        self.assertEqual(total, expected_bpr * height)
+        self.assertEqual(total2, total)
+        self.assertEqual(len(hexdata), total * 2)
+
+    def test_date_composites_into_a_single_raster(self):
+        # A supplied date is drawn into the same 1-bpp raster as the signature, so
+        # only one GRF graphic is emitted and it differs from the date-less one.
+        without_date = stamping.stamp_zpl(
+            _zpl_doc_b64(),
+            stamping.StampRequest(
+                image=_signature_png_b64(), placement=_zpl_placement()
+            ),
+        )
+        with_date = stamping.stamp_zpl(
+            _zpl_doc_b64(),
+            stamping.StampRequest(
+                image=_signature_png_b64(),
+                placement=_zpl_placement(),
+                date="2026-09-22",
+            ),
+        )
+
+        self.assertEqual(len(_grf_fields(_decode_zpl(with_date))), 1)
+        self.assertNotEqual(
+            _grf_fields(_decode_zpl(with_date))[0][5],
+            _grf_fields(_decode_zpl(without_date))[0][5],
+        )
+
+    def test_underlay_layer_is_rejected(self):
+        with self.assertRaises(ValueError) as ctx:
+            stamping.stamp_zpl(
+                _zpl_doc_b64(),
+                stamping.StampRequest(
+                    image=_signature_png_b64(),
+                    placement=_zpl_placement(),
+                    layer="underlay",
+                ),
+            )
+
+        self.assertIn("underlay", str(ctx.exception).lower())
+
+
+class TestZplRotation(unittest.TestCase):
+    def setUp(self):
+        self.maxDiff = None
+
+    def test_rotation_swaps_dimensions_and_preserves_center(self):
+        # At 203 dpi the placement is 480x160 dots anchored at (160, 240). A
+        # 90-degree clockwise rotation swaps the raster to 160x480, so the GRF
+        # height becomes 480 (= the un-rotated width). The rotated field is
+        # re-anchored so the graphic's centre is unchanged: the un-rotated centre
+        # is (400, 320) and the rotated 160x480 graphic centres there only when
+        # ^FO is (320, 80) -- an independent literal, not a re-run of the encoder.
+        image = _signature_png_b64()
+
+        upright = _decode_zpl(
+            stamping.stamp_zpl(
+                _zpl_doc_b64(),
+                stamping.StampRequest(image=image, placement=_zpl_placement()),
+            )
+        )
+        rotated = _decode_zpl(
+            stamping.stamp_zpl(
+                _zpl_doc_b64(),
+                stamping.StampRequest(
+                    image=image, placement=_zpl_placement(rotation=90)
+                ),
+            )
+        )
+
+        (up_x, up_y, up_total, _, up_bpr, _), = _grf_fields(upright)
+        (ro_x, ro_y, ro_total, _, ro_bpr, _), = _grf_fields(rotated)
+
+        self.assertEqual((up_x, up_y), (160, 240))
+        # Row count is total/bytes_per_row; rotation swaps 480 wide -> 480 tall.
+        self.assertEqual(up_total // up_bpr, 160)
+        self.assertEqual(ro_total // ro_bpr, 480)
+        # The rotated origin differs from the upright one, and re-anchors so the
+        # graphic centre is preserved: (320 + 160/2, 80 + 480/2) == (400, 320).
+        self.assertEqual((ro_x, ro_y), (320, 80))
+
+
+class TestZplPrinterCache(unittest.TestCase):
+    def setUp(self):
+        self.maxDiff = None
+
+    def test_default_inline_path_is_unaffected_when_caching_off(self):
+        request = stamping.StampRequest(
+            image=_signature_png_b64(), placement=_zpl_placement()
+        )
+
+        first = stamping.stamp_zpl(_zpl_doc_b64(), request)
+        second = stamping.stamp_zpl(_zpl_doc_b64(), request)
+        zpl = _decode_zpl(first)
+
+        self.assertEqual(first, second)
+        self.assertIn("^GFA,", zpl)
+        self.assertNotIn("~DY", zpl)
+        self.assertNotIn("^XG", zpl)
+
+    def test_opt_in_emits_download_and_recall_with_matching_payload(self):
+        inline = _decode_zpl(
+            stamping.stamp_zpl(
+                _zpl_doc_b64(),
+                stamping.StampRequest(
+                    image=_signature_png_b64(), placement=_zpl_placement()
+                ),
+            )
+        )
+        cached = _decode_zpl(
+            stamping.stamp_zpl(
+                _zpl_doc_b64(),
+                stamping.StampRequest(
+                    image=_signature_png_b64(),
+                    placement=_zpl_placement(),
+                    graphic_name="R:STAMP.GRF",
+                ),
+            )
+        )
+
+        # The opt-in path downloads once (~DY) and recalls per label (^XG),
+        # replacing the inline ^GFA entirely, with a matching object name.
+        self.assertIn("~DYR:STAMP.GRF,", cached)
+        self.assertIn("^XGR:STAMP.GRF,1,1", cached)
+        self.assertNotIn("^GFA,", cached)
+
+        # The stored GRF payload is byte-identical to what the inline path packs.
+        (_, _, inline_total, _, inline_bpr, inline_hex), = _grf_fields(inline)
+        import re
+
+        match = re.search(
+            r"~DYR:STAMP\.GRF,A,G,(\d+),(\d+),([0-9A-F]*)", cached
+        )
+        self.assertIsNotNone(match)
+        self.assertEqual(int(match.group(1)), inline_total)
+        self.assertEqual(int(match.group(2)), inline_bpr)
+        self.assertEqual(match.group(3), inline_hex)
 
 
 if __name__ == "__main__":

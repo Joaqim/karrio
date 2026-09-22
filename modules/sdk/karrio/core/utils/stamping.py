@@ -75,7 +75,10 @@ class StampRequest:
     ``layer`` is ``overlay`` for signatures (drawn over content) or ``underlay``
     for letterheads (drawn beneath content, PDF only). ``date`` is an optional
     pre-formatted date string composited preceding the signature at the same
-    rotation; the caller owns its format and locale.
+    rotation; the caller owns its format and locale. ``graphic_name`` opts the
+    ZPL backend into the send-once-per-printer cache: when set, the raster is
+    downloaded once as a stored ``~DY`` object and recalled per label with
+    ``^XG`` instead of inlining ``^GFA``; it is ignored by the PDF backend.
     """
 
     image: str = None
@@ -84,11 +87,22 @@ class StampRequest:
     doc_type: str = None
     layer: str = "overlay"
     date: str = None
+    graphic_name: str = None
 
 
 def mm_to_points(value: float) -> float:
     """Convert a millimetre measure to PDF points (1 pt = 1/72 in)."""
     return value * POINTS_PER_INCH / MM_PER_INCH
+
+
+def mm_to_dots(value: float, dpi: int) -> int:
+    """Convert a millimetre measure to whole printer dots at ``dpi``.
+
+    ZPL addresses the label in dots at the printer's density (203 dpi is the
+    common default), so a placement's millimetre anchor and extent round to the
+    nearest dot: ``dots = round(mm / 25.4 * dpi)``.
+    """
+    return int(round(value / MM_PER_INCH * dpi))
 
 
 def placement_to_pdf_rect(
@@ -237,10 +251,150 @@ def stamp_pdf(document_b64: str, request: StampRequest) -> str:
     return base64.b64encode(result.getvalue()).decode("utf-8")
 
 
-# Per-format compositing backends. Only PDF is active at launch; ZPL is
-# recognized by the sniffer but has no backend yet, so it is rejected.
+def _flatten_to_rgb(image_b64: str) -> "PIL.Image.Image":
+    """Return a base64 PNG trimmed and white-flattened to an opaque RGB image.
+
+    This mirrors the PDF backend's Q6 flatten (auto-trim to the non-transparent
+    bounding box, then alpha-composite onto opaque white) but stops at a Pillow
+    image rather than an image PDF, so the ZPL backend can resize and dither it
+    into a 1-bpp raster.
+    """
+    source = PIL.Image.open(helpers.to_buffer(image_b64)).convert("RGBA")
+
+    bounds = source.getchannel("A").getbbox()
+    trimmed = source.crop(bounds) if bounds is not None else source
+
+    backdrop = PIL.Image.new("RGBA", trimmed.size, (255, 255, 255, 255))
+
+    return PIL.Image.alpha_composite(backdrop, trimmed).convert("RGB")
+
+
+def _build_zpl_raster(request: StampRequest) -> "PIL.Image.Image":
+    """Return the placement's 1-bpp Floyd-Steinberg raster for the ZPL backend.
+
+    The signature (and, when supplied, the rendered date preceding it along the
+    placement's primary axis per ``DATE_STRIP_FRACTION``) is composited onto one
+    white canvas sized to the placement's dot extent, then converted to 1-bpp
+    with a single Floyd-Steinberg dither. Building the whole raster before the
+    one dither keeps the date and signature on a shared halftone grid.
+    """
+    placement = request.placement
+    width = max(mm_to_dots(placement.width, placement.dpi), 1)
+    height = max(mm_to_dots(placement.height, placement.dpi), 1)
+
+    canvas = PIL.Image.new("RGB", (width, height), (255, 255, 255))
+    signature = _flatten_to_rgb(request.image)
+
+    if request.date:
+        date_width = max(int(round(width * DATE_STRIP_FRACTION)), 1)
+        date_image = _flatten_to_rgb(_render_date_image(request.date))
+        canvas.paste(date_image.resize((date_width, height)), (0, 0))
+        canvas.paste(
+            signature.resize((max(width - date_width, 1), height)),
+            (date_width, 0),
+        )
+    else:
+        canvas.paste(signature.resize((width, height)), (0, 0))
+
+    return canvas.convert("1", dither=PIL.Image.Dither.FLOYDSTEINBERG)
+
+
+def _encode_grf(image: "PIL.Image.Image") -> typing.Tuple[str, int, int]:
+    """Pack a 1-bpp image into ZPL GRF hex, returning ``(hex, total, per_row)``.
+
+    Rows are byte-padded (``bytes_per_row = ceil(width / 8)``) and bits run
+    MSB-first, so the left-most pixel is a byte's high bit; a set bit is black
+    (value ``0`` in Pillow's ``"1"`` mode). ``total`` is ``bytes_per_row *
+    height`` and the hex is uppercase, matching the ``^GFA`` header operands.
+    """
+    width, height = image.size
+    bytes_per_row = (width + 7) // 8
+    pixels = image.load()
+
+    rows = []
+    for y in range(height):
+        row = bytearray(bytes_per_row)
+        for x in range(width):
+            if pixels[x, y] == 0:
+                row[x // 8] |= 0x80 >> (x % 8)
+        rows.append(bytes(row).hex().upper())
+
+    return "".join(rows), bytes_per_row * height, bytes_per_row
+
+
+def _splice_zpl_field(stream: str, field: str) -> str:
+    """Insert ``field`` immediately before the carrier stream's trailing ``^XZ``.
+
+    ZPL has no z-order; a later field is drawn on top, so splicing before the
+    format-close ``^XZ`` draws the graphic over the carrier content. A stream
+    with no ``^XZ`` is closed after the appended field.
+    """
+    marker = "^XZ"
+    index = stream.rfind(marker)
+    if index == -1:
+        return f"{stream}{field}{marker}"
+
+    return f"{stream[:index]}{field}{stream[index:]}"
+
+
+def stamp_zpl(document_b64: str, request: StampRequest) -> str:
+    """Composite the request image onto a base64 ZPL stream, returning base64.
+
+    The image is flattened, resized to the placement's dot extent, dithered to a
+    1-bpp raster, and encoded as a GRF graphic spliced over the carrier field
+    stream at the placement's ``^FO`` origin. A nonzero rotation rotates the
+    raster clockwise and re-anchors ``^FO`` so the graphic's centre stays on the
+    placement centre. ``request.date`` is composited into the same raster
+    preceding the signature. ``request.graphic_name`` opts into the ``~DY`` /
+    ``^XG`` send-once cache. ZPL has no z-order, so an ``underlay`` layer
+    (letterhead) is out of practical scope and is rejected.
+    """
+    if request.layer == "underlay":
+        raise ValueError(
+            "ZPL stamping supports only the overlay layer; a ZPL underlay "
+            "(letterhead) is out of practical scope because ZPL has no z-order"
+        )
+
+    placement = request.placement
+    stream = helpers.decode_bytes(base64.b64decode(document_b64))
+    raster = _build_zpl_raster(request)
+
+    x_dots = mm_to_dots(placement.x, placement.dpi)
+    y_dots = mm_to_dots(placement.y, placement.dpi)
+    rotation = placement.rotation or 0
+
+    if rotation:
+        width, height = raster.size
+        center_x = x_dots + width / 2.0
+        center_y = y_dots + height / 2.0
+        raster = raster.rotate(-rotation, expand=True, fillcolor=1)
+        rotated_width, rotated_height = raster.size
+        x_dots = int(round(center_x - rotated_width / 2.0))
+        y_dots = int(round(center_y - rotated_height / 2.0))
+
+    hexdata, total, bytes_per_row = _encode_grf(raster)
+
+    if request.graphic_name:
+        download = (
+            f"~DY{request.graphic_name},A,G,{total},{bytes_per_row},{hexdata}"
+        )
+        field = f"^FO{x_dots},{y_dots}^XG{request.graphic_name},1,1^FS"
+        result = f"{download}\n{_splice_zpl_field(stream, field)}"
+    else:
+        field = (
+            f"^FO{x_dots},{y_dots}^GFA,{total},{total},"
+            f"{bytes_per_row},{hexdata}^FS"
+        )
+        result = _splice_zpl_field(stream, field)
+
+    return base64.b64encode(result.encode("utf-8")).decode("utf-8")
+
+
+# Per-format compositing backends. PDF and ZPL are active; PNG is recognized by
+# the sniffer but has no backend, so it is rejected by the dispatcher.
 _BACKENDS: typing.Dict[str, typing.Callable[[str, StampRequest], str]] = {
     "PDF": stamp_pdf,
+    "ZPL": stamp_zpl,
 }
 
 
@@ -370,6 +524,7 @@ def stamp_document(
     doc_type: str = None,
     registry: RegistryLookup = None,
     date: str = None,
+    graphic_name: str = None,
 ) -> models.ShippingDocument:
     """Composite a base64 PNG onto a returned carrier document.
 
@@ -417,6 +572,7 @@ def stamp_document(
         doc_type=doc_type,
         layer=layer,
         date=date,
+        graphic_name=graphic_name,
     )
     stamped = _BACKENDS[document_format](document.base64, request)
 
