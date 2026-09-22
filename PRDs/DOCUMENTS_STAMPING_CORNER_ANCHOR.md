@@ -33,7 +33,7 @@ This PRD switches both backends to corner-anchored rotated extents, adds a bound
 |----------|--------------|
 | `stamp_zpl` rotation anchoring | Rotation direction (clockwise is confirmed correct; unchanged) |
 | `stamp_pdf` rotation anchoring and date-split tiling | New registry seeds for other carriers |
-| Bounds guard (anchor + rotated extent) | Guard for unrotated placements beyond operand limits (legacy behavior retained) |
+| Bounds guard (anchor + ZPL operands + rotated PDF extent) | Guard for unrotated PDF placements beyond the mediabox (legacy behavior retained) |
 | `_CN22_PLACEMENT` re-expression, revision 2 | Server serializer changes (`ValueError` already maps to 400) |
 | openspec delta for `documents/stamping` | |
 | Test oracle updates + incident regression test | |
@@ -48,7 +48,7 @@ This PRD switches both backends to corner-anchored rotated extents, adds a bound
 |---|----------|--------|-----------|------|
 | D1 | Rotated-anchor semantics | Corner-anchored rotated extent in both backends | Centre-pivot cannot express a rotated strip at the page corner at all (requires negative x); selected by user | 2026-09-22 |
 | D2 | Rotation direction (openspec Q10) | Clockwise, as shipped | Fixture geometry: the CN22 ZPL form's `^FWR` stream has glyph-up = page +x; a clockwise rotation matches that axis. An earlier "counter-clockwise/270" reading was a render misread and is retracted | 2026-09-22 |
-| D3 | Guard scope | Anchor non-negativity and extent containment apply to rotated placements; `rotation=0` keeps shipped behavior and bytes | The shipped compat invariant is "no rotation changes nothing"; containment for unrotated stamps would newly reject legacy-valid requests | 2026-09-22 |
+| D3 | Guard scope | Anchor validation (non-negative `x`/`y`, positive `width`/`height`) and the ZPL operand-range check apply to every placement in both backends; PDF mediabox containment is scoped to rotated placements, so valid `rotation=0` placements keep shipped bytes | Negative anchors are invalid input in every backend and previously emitted out-of-spec operands silently; PDF containment for unrotated stamps would newly reject legacy-valid requests | 2026-09-22 |
 | D4 | Seed update method | Algebraic re-expression, `StampSeed.revision = 2` | The physical strip is identical; the parameterization converts exactly (see Technical Design) | 2026-09-22 |
 
 ### Edge cases requiring input

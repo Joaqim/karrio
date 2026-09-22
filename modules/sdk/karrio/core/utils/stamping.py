@@ -34,7 +34,11 @@ ZPL_OPERAND_LIMIT: int = 32000
 
 # Fraction of the placement's primary (un-rotated) axis given to the date strip
 # when a date is supplied; the signature takes the remainder. A simple even
-# split until the group-4 CN22 seed measures a per-carrier partition (Q9).
+# split until the group-4 CN22 seed measures a per-carrier partition (Q9). The
+# even split also keeps the two sub-rects congruent, which is what makes the
+# rotated sub-anchor offset (d*cos r, -d*sin r) tile exactly at every angle;
+# an unequal partition must instead anchor each sub-rect on its own rotated
+# bounding-box extrema.
 DATE_STRIP_FRACTION: float = 0.5
 
 # Standard portrait page sizes in millimetres, keyed by the paper-variant
