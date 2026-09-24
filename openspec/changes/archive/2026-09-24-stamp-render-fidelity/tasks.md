@@ -14,5 +14,5 @@
 ## 4. Verification and archive
 
 - [x] 4.1 Both stamping suites plus `./bin/run-sdk-tests` exit 0; `black` clean; no cross-module regressions.
-- [ ] 4.2 Fresh-context review gate against this change, the PRD, and `.claude/rules/prd-and-review.md`.
-- [ ] 4.3 Archive this change and sync `openspec/specs/documents/stamping/spec.md`.
+- [x] 4.2 Fresh-context review gate against this change, the PRD, and `.claude/rules/prd-and-review.md`.
+- [x] 4.3 Archive this change and sync `openspec/specs/documents/stamping/spec.md`.
