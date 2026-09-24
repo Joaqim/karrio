@@ -1215,6 +1215,38 @@ class TestKeywordRegistry(unittest.TestCase):
 
         self.assertEqual(seeded.base64, direct.base64)
 
+    def test_injected_registry_owns_keyword_geometry_resolution(self):
+        # Injection owns resolution: a supplied registry is the keyword-geometry
+        # authority exactly where the built-in seed registry would be consulted,
+        # so the built-in postnord seed (which resolves this very key) must not
+        # leak its geometry through as a silent fallback. An empty injected
+        # lookup raises the same explicit error a seedless key raises. The
+        # stream carries the real form's ^FO20,35 origin so the built-in seed
+        # would resolve on-label if (wrongly) consulted, making a leak a clean
+        # failure rather than an anchor-validation rejection.
+        seen = []
+
+        def empty_registry(key):
+            seen.append(key)
+            return None
+
+        with self.assertRaises(ValueError) as ctx:
+            lib.stamp_document(
+                _keyword_zpl_document(
+                    "^XA^FO20,35^FDDate and Sender's signature^FS^XZ"
+                ),
+                image=_signature_png_b64(),
+                carrier="postnord",
+                doc_type="cn22",
+                keyword=_KEYWORD,
+                registry=empty_registry,
+            )
+
+        message = str(ctx.exception)
+        self.assertEqual(seen, ["postnord/cn22/ZPL/*"])
+        self.assertIn("postnord/cn22/ZPL/*", message)
+        self.assertIn("keyword", message.lower())
+
 
 class TestZplGrfEncoding(unittest.TestCase):
     def setUp(self):

@@ -305,6 +305,7 @@ The ZPL lookup reaches the same seed through the sibling `ZPL/*` key (D12); a PD
 | Keyword supplied with a PDF document | `ValueError` identifying keyword anchoring as unsupported for the format | Format sniff precedes resolution |
 | Keyword with a fully anchored placement | `ValueError` | Contradictory anchors (D2) |
 | Keyword, no placement, no seed geometry | `ValueError` naming the missing geometry source | Chain raises before any backend work |
+| Keyword, no placement, custom `registry` supplied | Injected lookup consulted for the keyword geometry; the built-in seed is suppressed | Injection owns resolution — an empty injected lookup raises the same explicit error a seedless key raises |
 | Geometry-only placement (`x`/`y` `None`) | Position from the form, geometry from the placement | Resolution fills `x`/`y` before `_validate_anchor` runs |
 | Float `^FO` operands | Parsed as floats | Locator parses operands as floats |
 | `^FB` blocks after `^FS` | Ignored by the field scan | Token scan keys on `^FD..^FS` blocks |

@@ -806,8 +806,9 @@ def stamp_document(
     placement (``x``/``y`` left ``None``) takes its position from the ZPL
     field whose text contains the keyword and its extent and rotation from the
     placement; a keyword with no placement takes its geometry from the
-    registry seed for the document's key, and a miss raises naming what is
-    missing. With neither placement nor keyword the registry is consulted: a
+    registry for the document's key — the injected ``registry`` lookup when
+    one is supplied, else the built-in seed — and a miss raises naming what
+    is missing. With neither placement nor keyword the registry is consulted: a
     PDF key resolves the seed's coordinate placement, a ZPL key whose seed
     carries a keyword resolves implicitly from the carrier form's own field,
     and a miss raises an explicit error naming the missing key rather than
@@ -859,8 +860,14 @@ def stamp_document(
                 document_format,
                 _detect_paper_variant(document.base64, document_format),
             )
-            seed = _resolve_seed(key)
-            geometry = seed.keyword_placement if seed is not None else None
+            if registry is None:
+                seed = _resolve_seed(key)
+                geometry = seed.keyword_placement if seed is not None else None
+            else:
+                # Injection owns resolution: a supplied registry replaces the
+                # built-in seeds wherever they would be consulted, so a custom
+                # lookup never silently falls back to a shipped anchor.
+                geometry = registry(key)
             if geometry is None:
                 raise ValueError(
                     "A stamp keyword was supplied without a placement and no "
