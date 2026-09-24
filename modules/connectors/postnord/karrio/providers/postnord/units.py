@@ -192,6 +192,58 @@ class ShippingOption(lib.Enum):
     email_notification = postnord_notify_by_email
 
 
+class CustomsOption(lib.Enum):
+    """Unified ``customs.options`` registration identifiers.
+
+    PostNord rejects a CN22 declaration carrying none of EORI/VOEC/IOSS
+    (SACUS-BR-24062502), so these per-request values must reach the booking.
+    ``voec_number`` and ``ioss_number`` are not members of the core
+    ``karrio.core.units.CustomsOption`` enum, and the options helper drops
+    keys unknown to both enums, so the booking converts customs options with
+    this enum as the ``option_type`` (the seko pattern) to keep them visible.
+    """
+
+    eori_number = lib.OptionEnum("eori_number")
+    voec_number = lib.OptionEnum("voec_number")
+    ioss_number = lib.OptionEnum("ioss_number")
+
+
+class CN22CategoryType:
+    """Resolve unified ``customs.content_type`` to a CN22 ``categoryType``.
+
+    PostNord documents six ``categoryOfItem.categoryType`` values
+    (booking.swagger.json): GIFT, DOCUMENT, RETURNED GOODS, COMMERCIAL
+    SAMPLE, OTHER, and SALE OF GOODS — the same six categories as karrio's
+    ``CustomsContentType`` under different names. Both vocabularies are
+    accepted, so ``merchandise`` and ``sale of goods`` both resolve to
+    ``SALE OF GOODS``; resolution ignores case and whitespace. The swagger
+    types categoryType as a free string validated server-side, so a value
+    outside both vocabularies is returned verbatim rather than rejected or
+    coerced.
+    """
+
+    VOCABULARY = (
+        ("DOCUMENTS", "DOCUMENT"),
+        ("GIFT", "GIFT"),
+        ("SAMPLE", "COMMERCIAL SAMPLE"),
+        ("MERCHANDISE", "SALE OF GOODS"),
+        ("RETURN_MERCHANDISE", "RETURNED GOODS"),
+        ("OTHER", "OTHER"),
+    )
+
+    MAPPING = {
+        key: postnord_value
+        for karrio_value, postnord_value in VOCABULARY
+        for key in {karrio_value.casefold(), postnord_value.casefold()}
+    }
+
+    @classmethod
+    def lookup(cls, content_type: typing.Optional[str]) -> typing.Optional[str]:
+        return cls.MAPPING.get(
+            " ".join((content_type or "").casefold().split()), content_type
+        )
+
+
 # Booking freeText usage code carrying the recipient's door/access code;
 # PostNord prints it as "Ref 2" on the label (general-descriptions.pdf:
 # "ZDC ... Door code", "Used in RFF for Consignee"). No PostNord source
@@ -202,6 +254,60 @@ ENTRY_CODE_USAGE_CODE = "ZDC"
 # 50 chars is generous for door codes and stays within address-line and
 # full-name limits; longer values reject the booking before it is sent.
 ENTRY_CODE_MAX_LENGTH = 50
+
+# PostNord customs declarations accept at most 13 detailedDescription
+# lines per item id (Booking Customs Information documentation). The
+# swagger expresses no maxItems, so the documented limit is carried here
+# and enforced before submission.
+CUSTOMS_DECLARATION_MAX_LINES = 13
+
+
+def enforce_customs_declaration_lines(
+    lines: int, field: str, item_id: typing.Optional[str] = None
+) -> None:
+    """Raise a FieldError when a declaration exceeds the customs line limit.
+
+    One guard shared by the booking embedding and the post-booking
+    declaration proxy so the two enforcement points cannot drift. The
+    booking path names the customs field (no PostNord item id exists
+    before allocation); the proxy path additionally names the
+    caller-supplied item id.
+    """
+    if lines <= CUSTOMS_DECLARATION_MAX_LINES:
+        return
+
+    explanation = (
+        f"{field} exceeds the {CUSTOMS_DECLARATION_MAX_LINES}-line "
+        "customs declaration limit"
+    )
+    if item_id is not None:
+        explanation = f"{explanation} for item {item_id}"
+
+    raise lib.exceptions.FieldError({field: explanation})
+
+
+def enforce_customs_option_placement(options: dict) -> None:
+    """Raise a FieldError when customs option keys sit in shipment options.
+
+    Shipment-level option keys unknown to the booking options enum are
+    dropped silently by the typed-options helper, so a registration number
+    sent under ``options`` instead of ``customs.options`` never reaches the
+    CN22 branch and PostNord rejects the booking (SACUS-BR-24062502 wants
+    EORI, VOEC, or IOSS). Only truthy values reject: an empty value sends
+    nothing under either placement.
+    """
+    misplaced = [
+        key for key in CustomsOption.__members__ if (options or {}).get(key)
+    ]
+    if misplaced:
+        raise lib.exceptions.FieldError(
+            {
+                f"options.{key}": (
+                    "customs registration number; send it under customs.options"
+                )
+                for key in misplaced
+            }
+        )
 
 
 def shipping_options_initializer(

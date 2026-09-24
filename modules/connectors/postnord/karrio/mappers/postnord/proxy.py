@@ -1,9 +1,14 @@
 """Karrio PostNord client proxy."""
 
 import datetime
+import http.client
 import karrio.lib as lib
 import karrio.api.proxy as proxy
+import karrio.schemas.postnord.labels_ids_request as postnord_labels
+import karrio.schemas.postnord.shipment_response as postnord_res
 import karrio.mappers.postnord.settings as provider_settings
+import karrio.providers.postnord.shipment.create as provider_shipment
+import karrio.providers.postnord.units as provider_units
 from karrio.universal.mappers.rating_proxy import RatingMixinProxy
 
 
@@ -146,7 +151,105 @@ class Proxy(proxy.Proxy):
             headers={"Content-Type": "application/json"},
         )
 
-        return lib.Deserializable(response, lib.to_dict, request.ctx)
+        # Export-letter bookings with an embedded customs declaration fetch a
+        # standalone customs document by item id so the parser can attach it
+        # next to the label (the booking's own printout is left unchanged).
+        customs_ctx = lib.identity(
+            self._get_customs_printouts(response, label_type)
+            if request.ctx.get("basic_service_code")
+            == provider_units.ShippingService.postnord_export_letter
+            and request.ctx.get("customs_declared")
+            else {}
+        )
+
+        return lib.Deserializable(
+            response, lib.to_dict, dict(request.ctx, **customs_ctx)
+        )
+
+    def _get_customs_printouts(self, response: str, label_type: str) -> dict:
+        """Fetch the standalone customs printouts for an export-letter booking.
+
+        Issues ``POST /rest/shipment/v3/labels/ids/{pdf,zpl}`` (matching the
+        booking's label format) keyed by the printId accompanying the booking
+        response's first assigned item id
+        (``shipment.create._first_print_id`` — ``/v3/labels/ids`` resolves
+        printIds, not item ids; the item id is the fallback when PostNord
+        allocated no printId) with ``definePrintout=onlyCustomsDeclarations``.
+        Returns ctx additions for the parser: ``customs_printouts`` (the
+        response's ``labelPrintout`` entries) on success, or
+        ``customs_printout_error`` (the error body, or a synthesized one on
+        transport failure) on failure — the booking itself is unaffected
+        either way (fail-open). A body that parses as a ``labelPrintout``
+        array is also checked for per-id failures (``itemIds`` members with
+        ``status`` ``FAIL``), so a ``customs_printout_error`` can accompany
+        ``customs_printouts`` when only some ids produced printouts; and an
+        OK body carrying no printout data at all (observed live as an
+        all-zero ``printoutComposition`` before a declaration exists)
+        surfaces a synthesized no-customs-documents message instead of
+        silence.
+        """
+        booking = lib.failsafe(
+            lambda: lib.to_object(
+                postnord_res.ShipmentResponseType, lib.to_dict(response)
+            ).bookingResponse
+        )
+        item_id = provider_shipment._first_item_id(booking)
+        if not item_id:
+            return {}
+
+        target_id = provider_shipment._first_print_id(booking) or item_id
+        ids = [postnord_labels.LabelsIDSRequestElementType(id=target_id)]
+
+        try:
+            customs_response = lib.request(
+                url=self._url(
+                    f"/rest/shipment/v3/labels/ids/{label_type.lower()}",
+                    definePrintout="onlyCustomsDeclarations",
+                ),
+                data=lib.to_json(lib.to_dict(ids)),
+                trace=self.trace_as("json"),
+                method="POST",
+                headers={"Content-Type": "application/json"},
+            )
+        except (OSError, http.client.HTTPException) as error:
+            # lib.request returns HTTP error bodies as strings; what it raises
+            # instead are transport failures — socket-level errors (URLError,
+            # ConnectionError, TimeoutError) are OSError subclasses, while
+            # http.client protocol faults (BadStatusLine, IncompleteRead) are
+            # HTTPException subclasses.
+            return dict(
+                customs_printout_error=dict(
+                    message=f"customs document retrieval failed: {error}"
+                )
+            )
+
+        printouts = lib.failsafe(lambda: lib.to_dict(customs_response))
+        if isinstance(printouts, list):
+            failure = _per_id_failure(printouts)
+            if failure is not None:
+                return dict(customs_printouts=printouts, customs_printout_error=failure)
+            if not _has_printout_data(printouts):
+                return dict(
+                    customs_printouts=printouts,
+                    customs_printout_error=dict(
+                        message=(
+                            "no customs documents in by-id response for "
+                            f"item id: {item_id}"
+                        )
+                    ),
+                )
+            return dict(customs_printouts=printouts)
+        if isinstance(printouts, dict):
+            return dict(customs_printout_error=printouts)
+
+        return dict(
+            customs_printout_error=dict(
+                message=(
+                    "customs document retrieval returned an unreadable body: "
+                    f"{customs_response}"
+                )
+            )
+        )
 
     def cancel_shipment(self, request: lib.Serializable) -> lib.Deserializable[str]:
         # Placeholder endpoint: the id-based deleteEdiRequest delete route is
@@ -294,6 +397,55 @@ def _parse_transit_times(response):
         )
 
     return results
+
+
+def _per_id_failure(printouts):
+    """Return the first per-id failure body in a by-id labelPrintout array.
+
+    The by-id printout endpoint can answer an HTTP error status with a body
+    that still parses as a ``labelPrintout`` array: the failure is reported
+    per id inside the ``itemIds`` members — either ``status`` ``FAIL`` or,
+    as a superset, any ``errorResponse`` object present regardless of the
+    member's status (observed live as ``{"message": "id not found"}``) —
+    with no printout data at all. Without this check the failure would
+    vanish — no document to attach, no error body reaching the parser. Both
+    the verbatim ``errorResponse`` body and the fallback synthesis attribute
+    the failed item id.
+    """
+    for entry in printouts:
+        if not isinstance(entry, dict):
+            continue
+        for member in entry.get("itemIds") or []:
+            if not isinstance(member, dict):
+                continue
+            failed = member.get("status") == "FAIL" or isinstance(
+                member.get("errorResponse"), dict
+            )
+            if not failed:
+                continue
+            attribution = (
+                "customs document retrieval failed for item id "
+                f"{member.get('itemIds')}"
+            )
+            error = member.get("errorResponse")
+            if isinstance(error, dict) and error.get("message"):
+                return {**error, "message": f"{attribution}: {error['message']}"}
+            return dict(message=attribution)
+    return None
+
+
+def _has_printout_data(printouts) -> bool:
+    """Return whether any by-id labelPrintout entry carries printout data.
+
+    ``_customs_documents`` attaches a document only for entries whose
+    ``printout.data`` is set, so an OK body without any (observed live as an
+    all-zero ``printoutComposition`` before a declaration exists) attaches
+    nothing — the caller reports it instead of staying silent.
+    """
+    return any(
+        isinstance(entry, dict) and bool((entry.get("printout") or {}).get("data"))
+        for entry in printouts
+    )
 
 
 def _degrade_reason(response):
