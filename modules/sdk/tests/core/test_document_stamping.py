@@ -1086,6 +1086,11 @@ class TestDefaultRegistry(unittest.TestCase):
         self.assertAlmostEqual(rendered_y[0], 91.44, places=2)
         self.assertAlmostEqual(rendered_y[1], 140.55, places=2)
 
+        # The spec scenario's supersession clause: the seed carries revision 3,
+        # superseding the axis-swapped revision 2. The literal comes from the
+        # spec's AND clause, not from the seed object.
+        self.assertEqual(stamping._SEED_REGISTRY["postnord/cn22/PDF/A4"].revision, 3)
+
     def test_unseeded_key_misses(self):
         self.assertIsNone(stamping._default_registry("acme/unknown/PDF/A4"))
 
@@ -1121,7 +1126,9 @@ class TestCn22Seed(unittest.TestCase):
         # probe strip's translations land at 582.7 pt (date overlay) and
         # 513.1 pt (signature, one 69.6 pt date split lower), so the band
         # brackets both while excluding the carrier's own image transform at
-        # 151.7 pt and any anchor displaced from the measured strip.
+        # 151.7 pt. Band membership alone does not discriminate a displaced
+        # anchor -- the revision-2 translations also fall inside it -- so the
+        # translation literals asserted below carry that weight.
         stamped = lib.stamp_document(
             _pdf_document(),
             image=_signature_png_b64(),
