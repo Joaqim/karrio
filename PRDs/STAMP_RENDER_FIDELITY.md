@@ -5,7 +5,7 @@
 | Project | Karrio |
 | Version | 1.0 |
 | Date | 2026-09-24 |
-| Status | In Progress |
+| Status | Implemented |
 | Owner | Joaqim Planstedt |
 | Type | Bug fix |
 | Reference | openspec change [stamp-render-fidelity](../openspec/changes/stamp-render-fidelity/proposal.md) ([design](../openspec/changes/stamp-render-fidelity/design.md), [tasks](../openspec/changes/stamp-render-fidelity/tasks.md), [spec delta](../openspec/changes/stamp-render-fidelity/specs/documents/stamping/spec.md)) |
@@ -145,10 +145,10 @@ gray.point(lambda v: 255 if v >= ZPL_INK_THRESHOLD else 0).convert(
 
 **Must-have (P0):**
 
-- [ ] openspec change + this PRD (task 1.1)
-- [ ] Red-first oracles landed red (task 2.1), reproduction re-measured (task 2.2)
-- [ ] Implementation green (task 3.1)
-- [ ] Gates + fresh-context review (task 4.1, 4.2), archive + spec sync (task 4.3)
+- [x] openspec change + this PRD (task 1.1)
+- [x] Red-first oracles landed red (task 2.1), reproduction re-measured (task 2.2)
+- [x] Implementation green (task 3.1)
+- [x] Gates + fresh-context review (task 4.1, 4.2), archive + spec sync (task 4.3)
 
 ---
 
