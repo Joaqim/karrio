@@ -24,7 +24,7 @@ See `proposal.md` for motivation. The landed utility resolves placement in one s
 
 ### Position derivation
 
-The resolved position is the matched field's origin — the nearest preceding `^FO` in command order — converted from dots to millimetres at the geometry's `dpi`, plus a seed-owned offset in millimetres. Only position derives from the form; extent and rotation come from the geometry, so a keyword-resolved placement flows through `_validate_anchor`, the operand range check, and rotation exactly like a consumer placement. Rotation deliberately does not read the stream's `^FW` state: deriving it would require tracking format state across the stream for one input, and the seed's `rotation=90` already encodes the form's axis (confirmed against this fixture's `^FWR` in the prior change's seed provenance).
+The resolved position is the matched field's origin — the nearest preceding `^FO` in command order — converted from dots to millimetres at the geometry's `dpi`, plus a geometry-owned offset in millimetres: an axis left `None` offsets by 0 and a set axis is the millimetre offset from the located origin, for both fully and partially anchored geometries. Only position derives from the form; extent and rotation come from the geometry, so a keyword-resolved placement flows through `_validate_anchor`, the operand range check, and rotation exactly like a consumer placement. Rotation deliberately does not read the stream's `^FW` state: deriving it would require tracking format state across the stream for one input, and the seed's `rotation=90` already encodes the form's axis (confirmed against this fixture's `^FWR` in the prior change's seed provenance).
 
 ### Locator
 
