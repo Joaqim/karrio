@@ -15,9 +15,29 @@ class Mapper(mapper.Mapper):
         self, payload: models.RateRequest
     ) -> lib.Serializable:
         return provider.rate_request(payload, self.settings)
+    
+    def create_shipment_request(
+        self, payload: models.ShipmentRequest
+    ) -> lib.Serializable:
+        return provider.shipment_request(payload, self.settings)
+    
+    def create_return_shipment_request(
+        self, payload: models.ShipmentRequest
+    ) -> lib.Serializable:
+        return provider.return_shipment_request(payload, self.settings)
 
 
     def parse_rate_response(
         self, response: lib.Deserializable[str]
     ) -> typing.Tuple[typing.List[models.RateDetails], typing.List[models.Message]]:
         return provider.parse_rate_response(response, self.settings)
+    
+    def parse_shipment_response(
+        self, response: lib.Deserializable[str]
+    ) -> typing.Tuple[models.ShipmentDetails, typing.List[models.Message]]:
+        return provider.parse_shipment_response(response, self.settings)
+    
+    def parse_return_shipment_response(
+        self, response: lib.Deserializable[str]
+    ) -> typing.Tuple[models.ShipmentDetails, typing.List[models.Message]]:
+        return provider.parse_return_shipment_response(response, self.settings)

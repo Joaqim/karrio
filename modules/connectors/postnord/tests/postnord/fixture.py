@@ -155,3 +155,8 @@ gateway_letters_z11 = karrio.gateway["postnord"].create(
         config=dict(offer_tracked_letter=True, offer_export_letter=True),
     )
 )
+
+# Language-config gateway: connection-config language sets booking locale.
+gateway_with_language = karrio.gateway["postnord"].create(
+    dict(_settings, config=dict(language="da"))
+)
