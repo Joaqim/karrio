@@ -10,7 +10,7 @@
 
 - [x] 2.1 Implement the `_locate_zpl_field` command-token scan (`^FD`/`^FS` blocks, nearest preceding `^FO`, float operands, first match wins, explicit miss error), and verify task 1.2 turns green
 - [x] 2.2 Thread `keyword` through `stamp_document`, `StampRequest`, and the `lib` re-export with the resolution chain and PDF rejection after format sniff, and verify tasks 1.3 and the PDF case turn green
-- [ ] 2.3 Extend `StampSeed` with `keyword` and `keyword_placement` (extent, rotation, `dpi`, offset in `x`/`y`) and let `_default_registry` resolve ZPL seeds implicitly, and verify task 1.4 turns green with the keyword-absent suite unchanged
+- [x] 2.3 Extend `StampSeed` with `keyword` and `keyword_placement` (extent, rotation, `dpi`, offset in `x`/`y`) and let `_default_registry` resolve ZPL seeds implicitly, and verify task 1.4 turns green with the keyword-absent suite unchanged
 
 ## 3. PostNord CN22 seed
 
