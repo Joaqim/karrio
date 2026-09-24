@@ -695,6 +695,14 @@ def buy_shipment_label(
     )
     pre_purchase_generation = invoice_template is not None and is_paperless_trade
 
+    # Materialized before the request is built and the tracker is created so
+    # booking, label text, and scheduled polls agree on one locale.
+    if not shipment.options.get("language") and (
+        locale := carrier.gateway.settings.recipient_locale(shipment.recipient)
+    ):
+        shipment.options = {**shipment.options, "language": locale}
+        shipment.save(update_fields=["options"])
+
     # Generate invoice in advance if is_paperless_trade
     if pre_purchase_generation:
         # Set carrier snapshot on shipment (consistent with other models)
