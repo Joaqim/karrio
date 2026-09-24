@@ -196,7 +196,8 @@ def shipment_request(
     # Assign a client-controlled shipmentId from the merchant reference so the
     # booking carries a searchable Track & Trace id; without one PostNord
     # auto-allocates an opaque id. Prefer the caller reference; fall back to a
-    # generated id (unit tests always set a reference).
+    # generated id (unit tests always set a reference). Cancellation is not
+    # performed via this id (see shipment/cancel.py).
     shipment_id = payload.reference or uuid.uuid4().hex[:12].upper()
 
     def _party(address, *, with_consignor_id: bool) -> postnord_req.ConsignType:
