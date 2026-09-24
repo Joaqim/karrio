@@ -12,4 +12,4 @@
 
 ## 3. Verification
 
-- [ ] 3.1 Run both stamping suites and the full `./bin/run-sdk-tests` gate with black formatting clean, and verify exit 0 with no cross-module regressions; then pass the fresh-context review gate against the spec delta, the PRD, and the checklist in `.claude/rules/prd-and-review.md`
+- [x] 3.1 Run both stamping suites and the full `./bin/run-sdk-tests` gate with black formatting clean, and verify exit 0 with no cross-module regressions; then pass the fresh-context review gate against the spec delta, the PRD, and the checklist in `.claude/rules/prd-and-review.md`
