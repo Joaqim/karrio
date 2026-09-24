@@ -36,6 +36,12 @@ def _cn22_pdf_b64() -> str:
         return _b64(handle.read())
 
 
+def _cn22_zpl_b64() -> str:
+    """The real PostNord CN22 ZPL form (^LL1520, ^FWR-rotated field stream)."""
+    with open(os.path.join(FIXTURES_DIR, "postnord_cn22.zpl"), "rb") as handle:
+        return _b64(handle.read())
+
+
 def _signature_png_b64() -> str:
     """A synthetic RGBA signature PNG on a transparent background."""
     image = PIL.Image.new("RGBA", (400, 140), (255, 255, 255, 0))
@@ -145,6 +151,62 @@ def _solid_black_png_b64(width: int = 400, height: int = 140) -> str:
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")
     return _b64(buffer.getvalue())
+
+
+# The keyword the PostNord CN22 form prints beside its date/signature strip.
+_KEYWORD = "Date and Sender's signature"
+
+# Synthetic ZPL streams in the two command styles carrier generators emit: the
+# inline style runs whole fields on one line; the newline-separated style (the
+# vendored CN22 form's own) puts one command per line and emits a field's ^FB
+# block after its ^FS.
+_INLINE_KEYWORD_STREAM = "^XA^FO10,20^FDDate and Sender's signature^FS^XZ"
+
+_LINE_KEYWORD_STREAM = "\n".join(
+    [
+        "^XA",
+        "^FO160,240",
+        "^FDTotal Weight (in kg)^FS",
+        "^FB620,1, 0,L",
+        "^FO20,35",
+        "^FDDate and Sender's signature^FS",
+        "^FB680,1, 0,L",
+        "^FO665,35",
+        "^FDSweden Post^FS",
+        "^XZ",
+    ]
+)
+
+# A float-operand ^FO, as the vendored form emits at line 107.
+_FLOAT_FO_STREAM = "^FO385,488.3333333333333^FDTotal Weight (in kg)^FS"
+
+# An ^FD block whose text spans physical lines, as the vendored form's
+# certification block does at lines 117-119.
+_MULTILINE_FD_STREAM = "\n".join(
+    [
+        "^FO25,35",
+        "^FDI, the undersigned whos name and address are given on the item, ",
+        "  certify that particulars given in this declaration are correct^FS",
+    ]
+)
+
+# The keyword appearing in two fields: the first in stream order must win.
+_TWICE_KEYWORD_STREAM = "\n".join(
+    [
+        "^XA",
+        "^FO20,35",
+        "^FDDate and Sender's signature^FS",
+        "^FO665,35",
+        "^FDDate and Sender's signature^FS",
+        "^XZ",
+    ]
+)
+
+
+def _keyword_zpl_document(stream: str) -> models.ShippingDocument:
+    return models.ShippingDocument(
+        category="customs_declaration", format="ZPL", base64=_zpl_doc_b64(stream)
+    )
 
 
 def _sentinel_pdf_b64() -> str:
@@ -493,9 +555,7 @@ class TestPlacementRotation(unittest.TestCase):
         )
 
         self.assertAlmostEqual(rotated[4], 40.0 * 72.0 / 25.4, places=3)
-        self.assertAlmostEqual(
-            rotated[5], 842.0 - 200.0 * 72.0 / 25.4, places=2
-        )
+        self.assertAlmostEqual(rotated[5], 842.0 - 200.0 * 72.0 / 25.4, places=2)
 
     def test_zero_rotation_is_byte_identical_to_no_rotation(self):
         # The backward-compat invariant (design.md): a 0-degree placement leaves
@@ -781,6 +841,104 @@ class TestStampDocument(unittest.TestCase):
             lib.stamp_document(_pdf_document(), image=_signature_png_b64())
 
 
+class TestKeywordResolution(unittest.TestCase):
+    def setUp(self):
+        self.maxDiff = None
+
+    def test_keyword_with_a_fully_anchored_placement_raises(self):
+        # Two contradictory anchors must fail loudly (D2), never silently
+        # prefer one: a keyword names a field while the placement pins exact
+        # coordinates, and picking either would mask the conflict.
+        with self.assertRaises(ValueError) as ctx:
+            lib.stamp_document(
+                _keyword_zpl_document(_INLINE_KEYWORD_STREAM),
+                image=_signature_png_b64(),
+                placement=_zpl_placement(),
+                keyword=_KEYWORD,
+            )
+
+        self.assertIn("placement", str(ctx.exception).lower())
+        self.assertIn("keyword", str(ctx.exception).lower())
+
+    def test_keyword_with_geometry_only_placement_resolves_from_the_form(self):
+        # Spec scenario "A consumer keyword anchors the stamp at the carrier's
+        # own field": the geometry-only placement (x/y left None, D3) carries
+        # extent/rotation/dpi while the position comes from the located field's
+        # ^FO160,240 origin. Dots -> mm -> dots round-trips integer dots, so the
+        # derived anchor IS the field origin (independent literals from the
+        # synthetic stream, not a re-run of the conversion).
+        geometry = stamping.StampPlacement(width=60.0, height=20.0, dpi=203)
+
+        stamped = lib.stamp_document(
+            _keyword_zpl_document("^XA^FO160,240^FDTotal Weight (in kg)^FS^XZ"),
+            image=_signature_png_b64(),
+            placement=geometry,
+            keyword="Total Weight (in kg)",
+        )
+
+        zpl = _decode_zpl(stamped.base64)
+        ((fo_x, fo_y, total, _, bpr, _),) = _grf_fields(zpl)
+        self.assertEqual((fo_x, fo_y), (160, 240))
+        # Extent and rotation come from the geometry placement, not the form:
+        # 60x20 mm at 203 dpi is a 480x160-dot raster -- 60 bytes/row, 9600
+        # total -- anchored upright (rotation 0).
+        self.assertEqual((total, bpr), (9600, 60))
+        # The matched field's own text remains present in the output.
+        self.assertIn("Total Weight (in kg)", zpl)
+
+    def test_geometry_only_placement_offsets_add_to_the_located_origin(self):
+        # A geometry axis left None offsets by 0; a set axis is the millimetre
+        # offset from the located origin (D4). Expected operands derive from
+        # the spec's formula spelled out independently of the production code:
+        # dots -> mm at the geometry's dpi, plus the offset, -> back to dots.
+        geometry = stamping.StampPlacement(x=10.0, width=60.0, height=20.0, dpi=203)
+
+        stamped = lib.stamp_document(
+            _keyword_zpl_document("^XA^FO160,240^FDTotal Weight (in kg)^FS^XZ"),
+            image=_signature_png_b64(),
+            placement=geometry,
+            keyword="Total Weight (in kg)",
+        )
+
+        ((fo_x, fo_y, *_),) = _grf_fields(_decode_zpl(stamped.base64))
+        self.assertEqual(fo_x, int(round(((160 * 25.4 / 203) + 10.0) / 25.4 * 203)))
+        self.assertEqual(fo_y, int(round(((240 * 25.4 / 203) + 0.0) / 25.4 * 203)))
+
+    def test_keyword_with_no_placement_and_no_seed_raises_naming_the_source(self):
+        # Spec scenario "A keyword with unresolvable geometry fails explicitly":
+        # no geometry-only placement and no registry seed for the key, so the
+        # error must name what is missing -- the keyword geometry and the key.
+        with self.assertRaises(ValueError) as ctx:
+            lib.stamp_document(
+                _keyword_zpl_document(_INLINE_KEYWORD_STREAM),
+                image=_signature_png_b64(),
+                carrier="acme",
+                doc_type="unknown",
+                keyword=_KEYWORD,
+            )
+
+        message = str(ctx.exception)
+        self.assertIn("acme/unknown/ZPL/*", message)
+        self.assertIn("keyword", message.lower())
+
+    def test_keyword_against_a_pdf_document_is_rejected(self):
+        # Spec scenario "A keyword supplied for a PDF document is rejected":
+        # keyword anchoring locates ZPL field origins only, and the rejection
+        # happens after the format sniff, before any registry consultation.
+        with self.assertRaises(ValueError) as ctx:
+            lib.stamp_document(
+                _pdf_document(),
+                image=_signature_png_b64(),
+                carrier="postnord",
+                doc_type="cn22",
+                keyword=_KEYWORD,
+            )
+
+        message = str(ctx.exception)
+        self.assertIn("PDF", message)
+        self.assertIn("keyword", message.lower())
+
+
 class TestPaperVariantDetection(unittest.TestCase):
     def test_detects_a4_from_mediabox_points(self):
         # A4 mediabox in points (210 x 297 mm).
@@ -910,6 +1068,154 @@ class TestCn22Seed(unittest.TestCase):
             self.assertGreater(cm[2], 0.0)
 
 
+class TestKeywordRegistry(unittest.TestCase):
+    def setUp(self):
+        self.maxDiff = None
+
+    def test_seeded_zpl_document_resolves_implicitly_by_keyword(self):
+        # Spec scenario "A seeded ZPL document resolves implicitly by keyword":
+        # neither placement nor keyword supplied, yet the ZPL key resolves
+        # through the seed's own keyword. Expected operands derive from the
+        # seed object's geometry values (not pinned literals), combined with
+        # the fixture fact that the keyword field's origin is ^FO20,35
+        # (postnord_cn22.zpl:121-122).
+        stamped = lib.stamp_document(
+            models.ShippingDocument(
+                category="customs_declaration", format="ZPL", base64=_cn22_zpl_b64()
+            ),
+            image=_signature_png_b64(),
+            carrier="postnord",
+            doc_type="cn22",
+        )
+
+        zpl = _decode_zpl(stamped.base64)
+        fields = _grf_fields(zpl)
+        self.assertEqual(len(fields), 1)
+
+        seed = stamping._SEED_REGISTRY["postnord/cn22/ZPL/*"]
+        geometry = seed.keyword_placement
+        expected = (
+            int(
+                round(
+                    ((20 * 25.4 / geometry.dpi) + (geometry.x or 0.0))
+                    / 25.4
+                    * geometry.dpi
+                )
+            ),
+            int(
+                round(
+                    ((35 * 25.4 / geometry.dpi) + (geometry.y or 0.0))
+                    / 25.4
+                    * geometry.dpi
+                )
+            ),
+        )
+        ((fo_x, fo_y, *_),) = fields
+        self.assertEqual((fo_x, fo_y), expected)
+        # The seed's keyword field survives in the composited output.
+        self.assertIn(seed.keyword, zpl)
+
+    def test_consumer_keyword_outranks_the_seed_keyword(self):
+        # Spec scenario "A supplied keyword outranks the registry": the consumer
+        # keyword resolves against the consumer's own field, not the seed's. The
+        # Total Weight field's ^FO385,488.3333333333333 origin (fixture line
+        # 107) differs from the seed keyword's ^FO20,35 (fixture line 121), so
+        # the operands identify which keyword won.
+        stamped = lib.stamp_document(
+            models.ShippingDocument(
+                category="customs_declaration", format="ZPL", base64=_cn22_zpl_b64()
+            ),
+            image=_signature_png_b64(),
+            carrier="postnord",
+            doc_type="cn22",
+            keyword="Total Weight (in kg)",
+        )
+
+        ((fo_x, fo_y, *_),) = _grf_fields(_decode_zpl(stamped.base64))
+        geometry = stamping._SEED_REGISTRY["postnord/cn22/ZPL/*"].keyword_placement
+        expected = (
+            int(
+                round(
+                    ((385 * 25.4 / geometry.dpi) + (geometry.x or 0.0))
+                    / 25.4
+                    * geometry.dpi
+                )
+            ),
+            int(
+                round(
+                    ((488.3333333333333 * 25.4 / geometry.dpi) + (geometry.y or 0.0))
+                    / 25.4
+                    * geometry.dpi
+                )
+            ),
+        )
+        self.assertEqual((fo_x, fo_y), expected)
+        self.assertNotEqual((fo_x, fo_y), (20, 35))
+
+    def test_seed_keyword_geometry_offsets_derive_the_anchor(self):
+        # The seed's keyword_placement carries both-axis millimetre offsets from
+        # the located origin (D4's seed-owned offset); expected operands follow
+        # the spec's dots -> mm -> offset -> dots formula spelled out inline.
+        geometry = stamping.StampPlacement(
+            x=3.0, y=7.0, width=33.0, height=12.0, rotation=90, dpi=203
+        )
+        stamping._SEED_REGISTRY["acme/unknown/ZPL/*"] = stamping.StampSeed(
+            keyword="Total Weight (in kg)", keyword_placement=geometry
+        )
+        self.addCleanup(stamping._SEED_REGISTRY.pop, "acme/unknown/ZPL/*", None)
+
+        stamped = lib.stamp_document(
+            _keyword_zpl_document("^XA^FO160,240^FDTotal Weight (in kg)^FS^XZ"),
+            image=_signature_png_b64(),
+            carrier="acme",
+            doc_type="unknown",
+            keyword="Total Weight (in kg)",
+        )
+
+        ((fo_x, fo_y, *_),) = _grf_fields(_decode_zpl(stamped.base64))
+        self.assertEqual(fo_x, int(round(((160 * 25.4 / 203) + 3.0) / 25.4 * 203)))
+        self.assertEqual(fo_y, int(round(((240 * 25.4 / 203) + 7.0) / 25.4 * 203)))
+
+    def test_zpl_keyword_less_seed_keeps_the_registry_miss_error(self):
+        # A keyword-less seed has no ZPL currency (D12: the format-to-currency
+        # choice happens at resolution), so a ZPL document against it keeps
+        # today's registry-miss error naming the composed key.
+        stamping._SEED_REGISTRY["acme/cn22/ZPL/*"] = stamping.StampSeed(
+            placement=_zpl_placement()
+        )
+        self.addCleanup(stamping._SEED_REGISTRY.pop, "acme/cn22/ZPL/*", None)
+
+        with self.assertRaises(ValueError) as ctx:
+            lib.stamp_document(
+                _keyword_zpl_document(_INLINE_KEYWORD_STREAM),
+                image=_signature_png_b64(),
+                carrier="acme",
+                doc_type="cn22",
+            )
+
+        self.assertIn("acme/cn22/ZPL/*", str(ctx.exception))
+
+    def test_supplied_placement_wins_with_a_keyword_seed_present(self):
+        # Spec scenario "A supplied placement is used as given": a fully
+        # anchored placement composites identically whether or not the seeded
+        # key (whose seed now carries a keyword) is named -- byte-identical
+        # output, no keyword or registry consultation.
+        document = _keyword_zpl_document(_INLINE_KEYWORD_STREAM)
+
+        seeded = lib.stamp_document(
+            document,
+            image=_signature_png_b64(),
+            placement=_zpl_placement(),
+            carrier="postnord",
+            doc_type="cn22",
+        )
+        direct = lib.stamp_document(
+            document, image=_signature_png_b64(), placement=_zpl_placement()
+        )
+
+        self.assertEqual(seeded.base64, direct.base64)
+
+
 class TestZplGrfEncoding(unittest.TestCase):
     def setUp(self):
         self.maxDiff = None
@@ -963,6 +1269,61 @@ class TestZplGrfEncoding(unittest.TestCase):
 
         self.assertEqual(hexdata, "88")
         self.assertEqual(hexdata, hexdata.upper())
+
+
+class TestZplKeywordLocator(unittest.TestCase):
+    def setUp(self):
+        self.maxDiff = None
+
+    def test_inline_stream_locates_the_nearest_preceding_fo(self):
+        # The field's origin is the ^FO nearest preceding the matched ^FD..^FS
+        # block in stream order; the inline style carries it on the same line.
+        origin = stamping._locate_zpl_field(_INLINE_KEYWORD_STREAM, _KEYWORD)
+
+        self.assertEqual(origin, (10.0, 20.0))
+
+    def test_newline_separated_stream_skips_fb_blocks(self):
+        # One command per line with ^FB blocks emitted after their field's ^FS:
+        # the scan keys on ^FD..^FS blocks, so the ^FB tokens are never confused
+        # with field text and the preceding ^FO20,35 (not the earlier ^FO160,240
+        # of the Total Weight field) is the matched field's origin.
+        origin = stamping._locate_zpl_field(_LINE_KEYWORD_STREAM, _KEYWORD)
+
+        self.assertEqual(origin, (20.0, 35.0))
+
+    def test_float_fo_operands_parse_as_floats(self):
+        # Carrier generators emit float operands (^FO385,488.3333333333333 at
+        # postnord_cn22.zpl:107); the origin comes back as floats, unrounded.
+        origin = stamping._locate_zpl_field(_FLOAT_FO_STREAM, "Total Weight")
+
+        self.assertEqual(origin, (385.0, 488.3333333333333))
+
+    def test_multi_line_fd_text_matches_within_one_block(self):
+        # The vendored form's certification block spans three physical lines
+        # inside one ^FD..^FS block (postnord_cn22.zpl:117-119); the scan works
+        # on command tokens, not lines, so text on a continuation line matches
+        # and resolves to the block's own preceding ^FO.
+        origin = stamping._locate_zpl_field(
+            _MULTILINE_FD_STREAM, "certify that particulars"
+        )
+
+        self.assertEqual(origin, (25.0, 35.0))
+
+    def test_first_match_in_stream_order_wins(self):
+        # The keyword appears in two fields with different origins; the first
+        # match in stream order (D5) resolves, never the last or a "best" one.
+        origin = stamping._locate_zpl_field(_TWICE_KEYWORD_STREAM, _KEYWORD)
+
+        self.assertEqual(origin, (20.0, 35.0))
+
+    def test_miss_raises_naming_the_keyword(self):
+        # A keyword matching no field text is an explicit error naming the
+        # keyword, so a drifted seed keyword surfaces loudly (spec scenario
+        # "A keyword that matches no field fails explicitly").
+        with self.assertRaises(ValueError) as ctx:
+            stamping._locate_zpl_field(_LINE_KEYWORD_STREAM, "no such field text")
+
+        self.assertIn("no such field text", str(ctx.exception))
 
 
 class TestZplDitherContinuity(unittest.TestCase):
@@ -1025,7 +1386,7 @@ class TestZplBackend(unittest.TestCase):
         expected_bpr = math.ceil(width / 8)
 
         zpl = _decode_zpl(stamping.stamp_zpl(_zpl_doc_b64(), request))
-        (fo_x, fo_y, total, total2, bpr, hexdata), = _grf_fields(zpl)
+        ((fo_x, fo_y, total, total2, bpr, hexdata),) = _grf_fields(zpl)
 
         # 203 dpi: x=20 mm -> 160 dots, y=30 mm -> 240 dots (independent literals).
         self.assertEqual((fo_x, fo_y), (160, 240))
@@ -1100,8 +1461,8 @@ class TestZplRotation(unittest.TestCase):
             )
         )
 
-        (up_x, up_y, up_total, _, up_bpr, _), = _grf_fields(upright)
-        (ro_x, ro_y, ro_total, _, ro_bpr, _), = _grf_fields(rotated)
+        ((up_x, up_y, up_total, _, up_bpr, _),) = _grf_fields(upright)
+        ((ro_x, ro_y, ro_total, _, ro_bpr, _),) = _grf_fields(rotated)
 
         self.assertEqual((up_x, up_y), (160, 240))
         # Row count is total/bytes_per_row; rotation swaps 480 wide -> 480 tall.
@@ -1157,12 +1518,10 @@ class TestZplPrinterCache(unittest.TestCase):
         self.assertNotIn("^GFA,", cached)
 
         # The stored GRF payload is byte-identical to what the inline path packs.
-        (_, _, inline_total, _, inline_bpr, inline_hex), = _grf_fields(inline)
+        ((_, _, inline_total, _, inline_bpr, inline_hex),) = _grf_fields(inline)
         import re
 
-        match = re.search(
-            r"~DYR:STAMP\.GRF,A,G,(\d+),(\d+),([0-9A-F]*)", cached
-        )
+        match = re.search(r"~DYR:STAMP\.GRF,A,G,(\d+),(\d+),([0-9A-F]*)", cached)
         self.assertIsNotNone(match)
         self.assertEqual(int(match.group(1)), inline_total)
         self.assertEqual(int(match.group(2)), inline_bpr)

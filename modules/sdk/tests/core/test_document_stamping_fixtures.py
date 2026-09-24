@@ -153,7 +153,7 @@ class TestStampRealZplForm(unittest.TestCase):
         # to 96x264 dots whose top-left anchors at the placement's own ^FO40,799.
         zpl = _decode_zpl(stamping.stamp_zpl(_cn22_zpl_b64(), self.request))
 
-        (fo_x, fo_y, total, total2, bpr, hexdata), = _grf_fields(zpl)
+        ((fo_x, fo_y, total, total2, bpr, hexdata),) = _grf_fields(zpl)
 
         self.assertEqual((fo_x, fo_y), (40, 799))
         self.assertEqual(bpr, 12)
@@ -177,7 +177,7 @@ class TestStampRealZplForm(unittest.TestCase):
             )
         )
 
-        (fo_x, fo_y, total, _, bpr, _), = _grf_fields(zpl)
+        ((fo_x, fo_y, total, _, bpr, _),) = _grf_fields(zpl)
 
         self.assertEqual((fo_x, fo_y), (0, 0))
         self.assertEqual(bpr, 20)
@@ -189,7 +189,7 @@ class TestStampRealZplForm(unittest.TestCase):
         # never as a silently emitted out-of-spec operand.
         zpl = _decode_zpl(stamping.stamp_zpl(_cn22_zpl_b64(), self.request))
 
-        (fo_x, fo_y, *_), = _grf_fields(zpl)
+        ((fo_x, fo_y, *_),) = _grf_fields(zpl)
 
         for operand in (fo_x, fo_y):
             self.assertTrue(0 <= operand <= 32000, operand)
@@ -269,6 +269,100 @@ class TestStampRealPdfForm(unittest.TestCase):
         self.assertAlmostEqual(cm[3], 0.0, places=6)
         self.assertLess(cm[1], 0.0)
         self.assertGreater(cm[2], 0.0)
+
+
+def _cn22_zpl_document() -> models.ShippingDocument:
+    return models.ShippingDocument(
+        category="customs_declaration", format="ZPL", base64=_cn22_zpl_b64()
+    )
+
+
+class TestCn22KeywordStamp(unittest.TestCase):
+    def setUp(self):
+        self.maxDiff = None
+        # The shipped seed for the ZPL sibling key (D12): the same StampSeed
+        # object as the PDF entry, carrying the form keyword and the strip
+        # geometry whose x/y are the offsets from the located ^FO origin.
+        self.seed = stamping._SEED_REGISTRY["postnord/cn22/ZPL/*"]
+
+    def _expected_origin(self, stream: str):
+        """Derive the expected ^FO operands from the seed's geometry values.
+
+        The fixture fact is independent of the seed: the keyword field's origin
+        is the ``^FO20,35`` at postnord_cn22.zpl:121 preceding
+        ``^FDDate and Sender's signature^FS`` at line 122. The operands then
+        follow the spec's derivation spelled out inline -- dots to millimetres
+        at the geometry's dpi, plus the seed's millimetre offsets, back to
+        whole dots -- so the expectation tracks the seed's values rather than
+        pinning measured literals (task 3.1 pins those after measuring).
+        """
+        geometry = self.seed.keyword_placement
+        origin_x, origin_y = stamping._locate_zpl_field(stream, self.seed.keyword)
+        return (
+            int(
+                round(
+                    ((origin_x * 25.4 / geometry.dpi) + (geometry.x or 0.0))
+                    / 25.4
+                    * geometry.dpi
+                )
+            ),
+            int(
+                round(
+                    ((origin_y * 25.4 / geometry.dpi) + (geometry.y or 0.0))
+                    / 25.4
+                    * geometry.dpi
+                )
+            ),
+        )
+
+    def test_keyword_stamp_resolves_from_the_signature_field(self):
+        # The consumer keyword against the real form, with the geometry coming
+        # from the seed: exactly one ^GFA field spliced, anchored at the
+        # signature line's own field origin, with the carrier text surviving.
+        stamped = lib.stamp_document(
+            _cn22_zpl_document(),
+            image=_signature_b64(),
+            carrier="postnord",
+            doc_type="cn22",
+            keyword=self.seed.keyword,
+        )
+
+        zpl = _decode_zpl(stamped.base64)
+        fields = _grf_fields(zpl)
+        self.assertEqual(len(fields), 1)
+        ((fo_x, fo_y, *_),) = fields
+        self.assertEqual(
+            (fo_x, fo_y), self._expected_origin(_decode_zpl(_cn22_zpl_b64()))
+        )
+        self.assertIn(self.seed.keyword, zpl)
+        self.assertEqual(zpl.count("^XZ"), 1)
+
+    def test_keyword_stamp_with_date_composites_one_strip(self):
+        # The single call with image AND date composites one combined strip at
+        # the derived origin (never two graphics), and the strip's ink survives
+        # flatten + dither as neither blank nor solid. The rotated raster width
+        # is byte-multiple (12 mm at 203 dpi = 96 dots), so every hex bit is a
+        # real pixel and the fraction needs no pad-bit masking.
+        stamped = lib.stamp_document(
+            _cn22_zpl_document(),
+            image=_signature_b64(),
+            carrier="postnord",
+            doc_type="cn22",
+            keyword=self.seed.keyword,
+            date="2026-09-24",
+        )
+
+        zpl = _decode_zpl(stamped.base64)
+        fields = _grf_fields(zpl)
+        self.assertEqual(len(fields), 1)
+        ((fo_x, fo_y, total, _, bpr, hexdata),) = fields
+        self.assertEqual(
+            (fo_x, fo_y), self._expected_origin(_decode_zpl(_cn22_zpl_b64()))
+        )
+
+        fraction = bin(int(hexdata, 16)).count("1") / (total * 8)
+        self.assertGreater(fraction, 0.005)
+        self.assertLess(fraction, 0.30)
 
 
 if __name__ == "__main__":
