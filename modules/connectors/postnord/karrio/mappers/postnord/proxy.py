@@ -170,6 +170,18 @@ class Proxy(proxy.Proxy):
         # unsupported and resolves to an explicit Message.
         return lib.Deserializable("{}", lib.to_dict)
 
+    def find_service_points(self, request: lib.Serializable) -> lib.Deserializable[dict]:
+        # Service Points v5 lookup (GET, apikey). The provider request carries the
+        # chosen endpoint path (byaddress/bycoordinates) on its ctx; the v5 base
+        # path is /rest/businesslocation per the spec's `servers` entry.
+        response = lib.request(
+            url=self._url(request.ctx["path"], **request.serialize()),
+            trace=self.trace_as("json"),
+            method="GET",
+        )
+
+        return lib.Deserializable(response, lib.to_dict)
+
     def get_tracking(self, request: lib.Serializable) -> lib.Deserializable[str]:
         # Track & Trace v7 (findByIdentifier): GET
         # /rest/shipment/v7/trackandtrace/id/{id}/public?apikey=…&locale=…
