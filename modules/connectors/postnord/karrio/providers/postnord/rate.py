@@ -4,11 +4,146 @@ PostNord publishes no live money-rate API, so PRICE resolution is served from
 Karrio's first-class static-rate mechanism: per-merchant contract prices live in
 the server-side RateSheet and are resolved against the connection's service
 levels by the universal rating mixin.
+
+On top of that price resolution, ``rate()`` can optionally call PostNord's
+Transit Time API (``GET /rest/transport/v2/transittime/addresstoaddress``) to
+enrich each rate with an accurate ``transit_days`` and estimated delivery date,
+and to drop services that PostNord reports as not bookable for the requested
+origin/destination. Enrichment is opt-in via the ``enable_transit_times``
+connection config flag (default off), because PostNord returns 403 "Invalid API
+Key" on the Transit Time API for keys not subscribed to that product. When the
+flag is off, no carrier call is made and rates pass through with their static
+``transit_days``. When enabled, the transit lookup is issued from the proxy and
+its parsed results are threaded to this parser via the ``Deserializable.ctx``
+channel.
+
+If the transit call is unavailable (network error, non-200, or unparseable
+body), price rating still succeeds: the proxy attaches an empty transit context
+plus a degrade marker, this parser leaves the static ``transit_days`` untouched,
+applies no serviceability filtering, and surfaces a single warning ``Message``.
 """
 
+import attr
+import typing
+import karrio.lib as lib
+import karrio.core.models as models
+import karrio.providers.postnord.utils as provider_utils
 from karrio.universal.providers.rating import (
-    parse_rate_response,
+    parse_rate_response as universal_parse_rate_response,
     rate_request,
 )
 
 __all__ = ["parse_rate_response", "rate_request"]
+
+
+def parse_rate_response(
+    _response: lib.Deserializable,
+    settings: provider_utils.Settings,
+) -> typing.Tuple[typing.List[models.RateDetails], typing.List[models.Message]]:
+    """Resolve static prices, then merge any PostNord transit-time enrichment.
+
+    The universal parser produces base ``RateDetails`` (prices) from the static
+    rate sheet. When transit enrichment is enabled, transit results parsed by
+    the proxy arrive on ``_response.ctx`` keyed by ``carrier_service_code``
+    (PostNord ``basicServiceCode``); when it is disabled the ctx is empty and
+    rates pass through unchanged with their static ``transit_days``. For each
+    rate we override ``transit_days`` from the matching transit result, record
+    the estimated delivery date in ``meta["estimated_delivery"]``, and drop any
+    rate whose matching transit result is ``isBookable == false`` — except
+    services the transit system does not know at all (``no_transit_data``),
+    which keep their static rate unchanged. When the transit lookup degraded,
+    no filtering or overriding occurs and a warning is surfaced.
+    """
+    rates, messages = universal_parse_rate_response(_response, settings)
+
+    ctx = _response.ctx or {}
+    transit_by_code: dict = ctx.get("transit_results") or {}
+    degraded: bool = bool(ctx.get("transit_degraded"))
+
+    if degraded:
+        unauthorized = ctx.get("transit_degrade_reason") == "unauthorized"
+        message = (
+            (
+                "PostNord transit-time enrichment is unavailable for this "
+                "connection: the API key is not authorized for the Transit Time "
+                "product. Rates use static transit days and no serviceability "
+                "filtering. If this connection's key has no Transit Time "
+                "subscription, turn off the 'enable_transit_times' option in the "
+                "connection settings to remove this notice."
+            )
+            if unauthorized
+            else (
+                "PostNord transit-time enrichment was unavailable; rates use "
+                "static transit days and no serviceability filtering. You can "
+                "turn off the 'enable_transit_times' option in the connection "
+                "settings."
+            )
+        )
+        messages = [
+            *messages,
+            models.Message(
+                carrier_id=settings.carrier_id,
+                carrier_name=settings.carrier_name,
+                code=lib.identity(
+                    "transit_time_unauthorized"
+                    if unauthorized
+                    else "transit_time_unavailable"
+                ),
+                level="warning",
+                message=message,
+            ),
+        ]
+        return rates, messages
+
+    enriched: typing.List[models.RateDetails] = []
+    unavailable: typing.List[typing.Tuple[models.RateDetails, dict]] = []
+    for rate in rates:
+        code = (rate.meta or {}).get("carrier_service_code")
+        transit = transit_by_code.get(code) if code is not None else None
+
+        if transit is None or transit.get("no_transit_data"):
+            enriched.append(rate)
+            continue
+
+        if transit.get("is_bookable") is False:
+            unavailable.append((rate, transit))
+            continue
+
+        transit_days = transit.get("transit_days")
+        estimated_delivery = transit.get("estimated_delivery")
+
+        meta = {**(rate.meta or {})}
+        if estimated_delivery is not None:
+            meta["estimated_delivery"] = estimated_delivery
+
+        enriched.append(
+            attr.evolve(
+                rate,
+                transit_days=(
+                    transit_days if transit_days is not None else rate.transit_days
+                ),
+                meta=meta,
+            )
+        )
+
+    # Inform why a service was dropped rather than removing it silently.
+    # PostNord's transit errorMessage has two classes: a route-level rejection
+    # ("Service SE-17 is not offered from postal code ...") drops the rate
+    # here, while a service unknown to the transit system ("Requested service
+    # 'SE-37' not found.") keeps its static rate via no_transit_data above.
+    dropped_messages = [
+        models.Message(
+            carrier_id=settings.carrier_id,
+            carrier_name=settings.carrier_name,
+            code="service_not_bookable",
+            level="info",
+            message=lib.identity(
+                transit.get("error_message")
+                or f"{rate.service} is not bookable for this route."
+            ),
+            details=lib.to_dict({"service": rate.service}) or None,
+        )
+        for rate, transit in unavailable
+    ]
+
+    return enriched, [*messages, *dropped_messages]
