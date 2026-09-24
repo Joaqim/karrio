@@ -1520,9 +1520,16 @@ class TestZplDateRenderFidelity(unittest.TestCase):
 
     # The spec'd contract value, pinned as a literal so a constant change
     # without a spec change fails here rather than tracking it silently.
+    # The bite comes from the short-date oracle below: DATE's natural width
+    # (252 px at the contract font) exceeds the 240-dot date half, so the
+    # shrink step normalizes every fraction above the contract value to the
+    # same width-fitted render and no height bound on DATE alone can see
+    # the constant.
     DATE_FONT_HEIGHT_FRACTION = 0.30
 
     DATE = "2026-09-22"
+
+    SHORT_DATE = "9/22"
 
     def setUp(self):
         self.maxDiff = None
@@ -1587,6 +1594,30 @@ class TestZplDateRenderFidelity(unittest.TestCase):
         self.assertGreater(observed, natural * 0.7)
         self.assertLess(observed, natural * 1.4)
 
+    def test_short_date_tracks_the_contract_font_height(self):
+        # A string narrow enough to fit the date half at the contract font
+        # takes no shrink step, so its ink band observes the fraction
+        # constant directly: the band must match the ink height Pillow itself
+        # measures for the same string at the same size. Drift in either
+        # direction escapes the window (0.40 renders 49 rows, 0.25 renders
+        # 31, against a natural 36 on this geometry).
+        raster = self._raster(date=self.SHORT_DATE)
+        width, height = raster.size
+
+        font_size = int(round(height * self.DATE_FONT_HEIGHT_FRACTION))
+        ruler = PIL.ImageDraw.Draw(PIL.Image.new("RGBA", (1, 1)))
+        font = PIL.ImageFont.load_default(size=font_size)
+        left, top, right, bottom = ruler.textbbox((0, 0), self.SHORT_DATE, font=font)
+        # Precondition: the short string fits its half at the contract size,
+        # so the pipeline renders it unshrunk.
+        self.assertLessEqual(right - left, width // 2)
+
+        rows, _ = self._ink_band(raster, 0, width // 2)
+        band = rows[-1] - rows[0] + 1
+        natural = bottom - top
+        self.assertGreaterEqual(band, natural - 3)
+        self.assertLessEqual(band, natural + 2)
+
     def test_date_region_carries_no_isolated_speckle_pixels(self):
         # Threshold binarization, not error diffusion: no single-pixel ink dots
         # isolated from the glyph strokes. The shipped Floyd-Steinberg dither
@@ -1630,7 +1661,10 @@ class TestZplDateRenderFidelity(unittest.TestCase):
     def test_faint_signature_strokes_survive_as_connected_ink(self):
         # A semi-transparent stroke (flattens to gray ~115) survives binarization
         # as one connected run spanning the stroke's length; under error
-        # diffusion the same stroke renders as scattered fragments.
+        # diffusion the same stroke renders as scattered fragments. The
+        # alpha-bbox trim crops the stroke to its own extent, so after the
+        # resize it spans the full raster width and 90% of the stroke length
+        # is 90% of the width (the PRD's success bound).
         request = stamping.StampRequest(
             image=_faint_stroke_png_b64(), placement=_zpl_placement()
         )
@@ -1647,7 +1681,7 @@ class TestZplDateRenderFidelity(unittest.TestCase):
                 best = max(best, run)
             longest = max(longest, best)
 
-        self.assertGreaterEqual(longest, int(width * 0.8))
+        self.assertGreaterEqual(longest, int(width * 0.9))
 
     def test_pdf_date_overlay_scales_uniformly(self):
         # The PDF date overlay's horizontal and vertical scale factors into the
