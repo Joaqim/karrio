@@ -142,6 +142,33 @@ class Proxy(proxy.Proxy):
 
         return lib.Deserializable(response, lib.to_dict)
 
+    def get_tracking(self, request: lib.Serializable) -> lib.Deserializable[str]:
+        # Track & Trace v7 (findByIdentifier): GET
+        # /rest/shipment/v7/trackandtrace/id/{id}/public?apikey=…&locale=…
+        # where {id} is the karrio tracking_number (the allocated itemId). The
+        # tracking provider serializes a list of {id, locale} dicts. When the
+        # apikey is not authorized for the T&T product PostNord returns the
+        # gateway 403 envelope; the parser degrades that to the link-only result.
+        response = lib.run_asynchronously(
+            lambda query: (
+                query["id"],
+                lib.request(
+                    url=self._url(
+                        f"/rest/shipment/v7/trackandtrace/id/{query['id']}/public",
+                        locale=query.get("locale"),
+                    ),
+                    trace=self.trace_as("json"),
+                    method="GET",
+                ),
+            ),
+            request.serialize(),
+        )
+
+        return lib.Deserializable(
+            response,
+            lambda res: [(identifier, lib.to_dict(data)) for identifier, data in res],
+        )
+
 
 def _parse_transit_times(response):
     """Parse a Transit Time V2 response body into a service-code map.

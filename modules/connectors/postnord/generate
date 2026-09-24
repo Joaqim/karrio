@@ -8,4 +8,6 @@ touch "${LIB_MODULES}/__init__.py"
 # generated schemas.
 kcli codegen generate "${SCHEMAS}/shipment_request.json" "${LIB_MODULES}/shipment_request.py"
 kcli codegen generate "${SCHEMAS}/shipment_response.json" "${LIB_MODULES}/shipment_response.py"
+# Tracking (Track & Trace v7) and the transit/service-point GET endpoints are
+# dict-parsed (no generated schema), so no tracking codegen line here.
 

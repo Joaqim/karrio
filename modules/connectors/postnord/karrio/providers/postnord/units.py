@@ -174,6 +174,24 @@ def shipping_options_initializer(
     return units.ShippingOptions(options, ShippingOption, items_filter=items_filter)
 
 
+class TrackingStatus(lib.Enum):
+    """Maps PostNord Track & Trace v7 ``ItemStatus`` values to Karrio statuses.
+
+    The v7 ``findByIdentifier`` response carries an ``ItemStatus`` enum on each
+    item (``status``/``eventStatus``). These 13 values are normalized to
+    ``karrio.core.units.TrackerStatus`` names; unmapped/``OTHER`` values fall
+    back to ``in_transit`` at the call site.
+    """
+
+    delivered = ["DELIVERED"]
+    in_transit = ["EN_ROUTE", "INFORMED", "CREATED", "OTHER"]
+    ready_for_pickup = ["AVAILABLE_FOR_DELIVERY", "AVAILABLE_FOR_DELIVERY_PAR_LOC"]
+    delivery_delayed = ["DELAYED", "EXPECTED_DELAY"]
+    delivery_failed = ["DELIVERY_IMPOSSIBLE", "DELIVERY_REFUSED"]
+    return_to_sender = ["RETURNED"]
+    on_hold = ["STOPPED"]
+
+
 # PostNord publishes no live money-rate API; prices are per-merchant contract
 # rates supplied server-side via Karrio's RateSheet. These defaults seed the
 # rate-sheet catalog with the carrier's service levels and zones; the rate=0.0
