@@ -62,6 +62,26 @@ class ConnectionConfig(lib.Enum):
     offer_tracked_letter = lib.OptionEnum("offer_tracked_letter", bool, False)
     offer_export_letter = lib.OptionEnum("offer_export_letter", bool, False)
 
+    # When enabled, a shipment with no explicit options.language and no
+    # config.language resolves its locale from the recipient's country code
+    # (see CountryLocale); other countries fall back to "en". Default off.
+    locale_by_recipient = lib.OptionEnum("locale_by_recipient", bool, False)
+
+
+class CountryLocale:
+    """Map recipient country codes to PostNord's Nordic locales.
+
+    Keys are ISO 3166-1 alpha-2 country codes, not language codes
+    (Denmark is DK; DA is the Danish language). Countries outside the
+    mapping fall back to "en" via `lookup`.
+    """
+
+    MAPPING = dict(SE="sv", DK="da", NO="no", FI="fi")
+
+    @classmethod
+    def lookup(cls, country_code: typing.Optional[str]) -> typing.Optional[str]:
+        return cls.MAPPING.get((country_code or "").upper())
+
 
 class PackagingType(lib.StrEnum):
     """PostNord packageTypeCode values."""

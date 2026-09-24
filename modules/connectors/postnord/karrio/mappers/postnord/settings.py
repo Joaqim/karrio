@@ -52,3 +52,19 @@ class Settings(provider_utils.Settings, rating_proxy.RatingMixinSettings):
                 service.service_code, issuer_code, connection_config
             )
         ]
+
+    def recipient_locale(
+        self, recipient: typing.Optional[dict] = None
+    ) -> typing.Optional[str]:
+        """Nordic locale of the recipient country under ``locale_by_recipient``.
+
+        ``config.language`` outranks the country tier, so no locale is derived
+        when it is set.
+        """
+        config = self.connection_config
+        if not config.locale_by_recipient.state or config.language.state:
+            return None
+
+        return provider_units.CountryLocale.lookup(
+            (recipient or {}).get("country_code")
+        )

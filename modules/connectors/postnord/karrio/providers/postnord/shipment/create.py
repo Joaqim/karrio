@@ -182,7 +182,7 @@ def shipment_request(
     ]
 
     # Booking locale: request options.language > connection config language >
-    # "en".
+    # recipient country (when config locale_by_recipient is enabled) > "en".
     # Sent lowercase as the query `locale` (SMS/Email language) and uppercased
     # as the body `language` element (label/document text). A non-string
     # request value is coerced: PlainDictField does not enforce inner types,
@@ -190,6 +190,11 @@ def shipment_request(
     locale = str(
         (payload.options or {}).get("language")
         or settings.connection_config.language.state
+        or (
+            provider_units.CountryLocale.lookup(recipient.country_code)
+            if settings.connection_config.locale_by_recipient.state
+            else None
+        )
         or "en"
     )
 
