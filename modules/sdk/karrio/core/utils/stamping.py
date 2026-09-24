@@ -716,11 +716,33 @@ _CN22_PLACEMENT: StampPlacement = StampPlacement(
     x=32.55, y=112.15, width=7.6, height=49.1, rotation=90
 )
 
+# Provisional keyword geometry pending the task 3.1 measurement cross-check
+# against the vendored form and the PDF seed strip on the same CN22 layout: the
+# fixtures suite's standing ZPL strip dimensions (33x12 mm, rotation 90, 203
+# dpi) with a zero offset, so the anchor resolves to the located ^FO origin
+# itself until the measured offset lands.
+_CN22_KEYWORD_PLACEMENT: StampPlacement = StampPlacement(
+    x=0.0, y=0.0, width=33.0, height=12.0, rotation=90, dpi=203
+)
+
 # revision 2: re-expresses revision 1's identical physical strip under
 # corner-anchored rotation semantics -- (x + (w-h)/2, y + (h-w)/2) from the
-# centre-pivot anchor (53.3, 91.4).
+# centre-pivot anchor (53.3, 91.4). The keyword fields are additive anchor
+# data, not a re-measurement of the PDF placement, so the revision stays 2.
+_CN22_SEED: StampSeed = StampSeed(
+    placement=_CN22_PLACEMENT,
+    revision=2,
+    keyword="Date and Sender's signature",
+    keyword_placement=_CN22_KEYWORD_PLACEMENT,
+)
+
 _SEED_REGISTRY: typing.Dict[str, StampSeed] = {
-    "postnord/cn22/PDF/A4": StampSeed(placement=_CN22_PLACEMENT, revision=2),
+    "postnord/cn22/PDF/A4": _CN22_SEED,
+    # The same seed object reached by a ZPL document's natural key, so one
+    # entry anchors both formats of the CN22: the format-to-currency choice
+    # (PDF resolves `placement`, ZPL resolves `keyword` + `keyword_placement`)
+    # happens at resolution, not here.
+    "postnord/cn22/ZPL/*": _CN22_SEED,
 }
 
 
@@ -773,7 +795,9 @@ def stamp_document(
     field whose text contains the keyword and its extent and rotation from the
     placement; a keyword with no placement takes its geometry from the
     registry seed for the document's key, and a miss raises naming what is
-    missing. With neither placement nor keyword the registry hook is consulted
+    missing. With neither placement nor keyword the registry is consulted: a
+    PDF key resolves the seed's coordinate placement, a ZPL key whose seed
+    carries a keyword resolves implicitly from the carrier form's own field,
     and a miss raises an explicit error naming the missing key rather than
     guessing an anchor. Keyword anchoring locates ZPL field origins only: a
     keyword supplied against another format is rejected explicitly. A document
@@ -784,7 +808,6 @@ def stamp_document(
     The utility composites pixels only: it stores nothing and makes no
     assertion about the legal validity or signature semantics of the result.
     """
-    lookup = registry if registry is not None else _default_registry
     document_format = helpers.sniff_document_format(
         document.base64,
         content_type=document.format,
@@ -836,7 +859,19 @@ def stamp_document(
     else:
         paper = _detect_paper_variant(document.base64, document_format)
         key = _registry_key(carrier, doc_type, document_format, paper)
-        resolved = lookup(key)
+        resolved = None
+        if registry is None:
+            seed = _resolve_seed(key)
+            if seed is not None:
+                if document_format == "ZPL":
+                    if seed.keyword and seed.keyword_placement is not None:
+                        resolved = _resolve_keyword_placement(
+                            document.base64, seed.keyword, seed.keyword_placement
+                        )
+                else:
+                    resolved = seed.placement
+        else:
+            resolved = registry(key)
         if resolved is None:
             raise ValueError(
                 "No stamp placement was supplied and no registry seed "
