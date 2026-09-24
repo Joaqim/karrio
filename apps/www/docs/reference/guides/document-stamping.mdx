@@ -1,0 +1,217 @@
+---
+id: document-stamping
+title: Document Stamping
+description: Composite a signature, date or letterhead onto a carrier document.
+tags:
+  - REST API
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+Carriers return duty documents such as customs declarations and commercial invoices that often need a signature, a date or a letterhead before they are printed.
+Document stamping composites a PNG image onto a document karrio returned and gives the document back in the same format, so a PDF stays a PDF and a ZPL label stays a ZPL label.
+The document format is detected from its bytes, so the caller never branches on it.
+
+<div id="tailwind">
+  <table className="table-auto">
+    <thead>
+      <tr>
+        <th>ENDPOINTS</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>POST</td>
+        <td>/v1/documents/stamp</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+:::info
+Stamping composites pixels only.
+Karrio stores nothing and makes no assertion about the legal validity of the result: the caller owns whether the image constitutes a valid signature and what the stamped document means in a customs workflow.
+:::
+
+## Stamp a document
+
+Pass the base64 document, a base64 PNG and a placement.
+
+<div id="tabs">
+<Tabs>
+<TabItem value="curl" label="Curl">
+
+```bash
+curl --request POST \
+  --url https://api.karrio.io/v1/documents/stamp \
+  --header 'Authorization: Token [API_KEY]' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "document": "JVBERi0xLjcK...",
+    "image": "iVBORw0KGgo...",
+    "placement": {"page": 1, "x": 150, "y": 250, "width": 45, "height": 18}
+  }'
+```
+
+</TabItem>
+<TabItem value="python" label="Python SDK">
+
+```python
+import karrio.lib as lib
+
+stamped = lib.stamp_document(
+    document,  # a ShippingDocument karrio returned, e.g. shipment.docs.invoice
+    image=signature_png_b64,
+    placement=lib.StampPlacement(page=1, x=150, y=250, width=45, height=18),
+)
+
+assert stamped.format == document.format
+```
+
+</TabItem>
+</Tabs>
+</div>
+
+The response carries the stamped document and its detected format.
+
+<div id="tabs">
+
+```json
+{
+  "doc_file": "JVBERi0xLjcK...",
+  "format": "PDF"
+}
+```
+
+</div>
+
+A PDF keeps its page count, its selectable text and any fillable form fields; only the content of the stamped page changes.
+
+## Placement
+
+A placement is a rectangle in millimetres measured from the top-left corner of a one-based page, the way a person measures a printed form with a ruler.
+
+| Field | Default | Meaning |
+|---|---|---|
+| `page` | `1` | One-based page index (PDF) |
+| `x`, `y` | required | Millimetres from the page's top-left corner |
+| `width`, `height` | required | The image's size in millimetres before rotation |
+| `rotation` | `0` | Degrees clockwise |
+| `dpi` | `203` | Printer density for ZPL; ignored for PDF |
+
+The image is trimmed to its non-transparent pixels and scaled to fill the rectangle.
+
+### Rotation
+
+A nonzero `rotation` turns the image clockwise and places the rotated image so that the top-left corner of its bounding box is at `(x, y)`.
+The anchor therefore means the same thing at every angle, for PDF and ZPL alike: a 60 x 20 mm placement at `rotation: 90` covers a 20 mm wide, 60 mm tall area hanging right and down from `(x, y)`, and at `rotation: 30` it covers the 62.0 x 47.3 mm box that the tilted image spans, again hanging right and down from `(x, y)`.
+This is how to sign a form printed sideways, such as a ZPL label whose fields run under `^FWR`.
+A rotated rectangle that would leave the PDF page is rejected.
+
+## Overlay and underlay
+
+| Layer | Draw order | Use |
+|---|---|---|
+| `overlay` (default) | image over the document content | signatures |
+| `underlay` | document content over the image | letterheads, PDF only |
+
+ZPL has no z-order, so a ZPL underlay is rejected.
+
+## Transparency
+
+The image's transparent surround is flattened onto white before compositing, because PDF image embedding drops the alpha channel and a semi-transparent stroke would otherwise print fully opaque.
+Place signatures over a blank signature block, where a white surround is invisible.
+Letterhead underlays are unaffected because the document content draws over them.
+
+## Adding a date
+
+A `date` string is drawn in front of the image within the same placement: the date takes the first half of the rectangle along its width and the image the second half, and the rotation turns the two together as one rectangle.
+The string is drawn verbatim, so the caller chooses its format and locale.
+
+```json
+{
+  "document": "JVBERi0xLjcK...",
+  "image": "iVBORw0KGgo...",
+  "placement": {"x": 20, "y": 240, "width": 90, "height": 12},
+  "date": "2026-09-24"
+}
+```
+
+## ZPL labels
+
+A ZPL document is stamped by converting the image to a black-and-white graphic at the placement's `dpi` and adding it as the last field before the label's closing `^XZ`.
+Every origin and extent must stay within the ZPL range of 0-32000 dots.
+
+When the same stamp prints on many labels, set `graphic_name` to store the graphic on the printer once with `~DY` and recall it on each label with `^XG`, instead of embedding it every time.
+The name is an optional device prefix, one to eight uppercase letters, digits or underscores, and an optional `.GRF` extension, for example `R:SIGN.GRF`.
+
+Known limitations: a stream holding several labels is stamped on its last label only, and a document is recognized as ZPL only when it starts with `^XA`.
+
+## Carrier seeds
+
+When `placement` is omitted, karrio looks up a measured placement for the document by `carrier`, `doc_type`, the detected format and, for PDF, the paper size.
+Carrier integrations declare these seeds; a request whose key has no seed fails with a 400 naming the key, for example `acme/customs_declaration/PDF/A4`.
+
+```json
+{
+  "document": "JVBERi0xLjcK...",
+  "image": "iVBORw0KGgo...",
+  "carrier": "acme",
+  "doc_type": "customs_declaration"
+}
+```
+
+A seed for a ZPL form can name a keyword, the text of the form's own field beside the signature area, and karrio then places the stamp relative to that field wherever the carrier printed it.
+
+### Keyword anchoring in the SDK
+
+The Python SDK accepts a `keyword` directly, together with a placement that carries only the size and rotation.
+The stamp is positioned at the ZPL field whose text contains the keyword, and a placement `x`/`y` given alongside it acts as a millimetre offset from that field.
+
+```python
+stamped = lib.stamp_document(
+    zpl_document,
+    image=signature_png_b64,
+    keyword="Sender signature",
+    placement=lib.StampPlacement(width=49, height=7.6, rotation=90, y=33.5),
+)
+```
+
+A keyword works on ZPL documents only, cannot be combined with a placement that sets both `x` and `y`, and fails when no field matches.
+
+### Declaring seeds in a carrier plugin
+
+A connector declares seeds on its plugin metadata, keyed `doc_type/FORMAT/paper` with `*` for any paper size.
+
+```python
+METADATA = PluginMetadata(
+    id="acme",
+    label="Acme",
+    # ...
+    stamp_seeds={
+        "customs_declaration/PDF/A4": lib.StampSeed(
+            placement=lib.StampPlacement(x=53.34, y=91.44, width=49.11, height=7.62, rotation=90),
+            revision=1,
+        ),
+        "customs_declaration/ZPL/*": lib.StampSeed(
+            keyword="Sender signature",
+            keyword_placement=lib.StampPlacement(x=-1.673, y=33.529, width=49.1, height=7.6, rotation=90),
+            revision=1,
+        ),
+    },
+)
+```
+
+Increase `revision` when a seed is re-measured, for example after the carrier changes its form.
+
+## Errors
+
+Every client fault returns 400 with a message naming the cause: a document that is neither PDF nor ZPL, a missing or undecodable image, an unreadable PDF, a page outside the document, a negative or empty placement, a rotated extent leaving the page, ZPL coordinates outside 0-32000 dots, a ZPL underlay, an invalid `graphic_name`, or no placement and no seed for the key.
+
+## When to stamp
+
+The FedEx electronic trade documents (ETD) flow shows the two points where a document can be signed.
+If you generate the document yourself, stamp it before uploading it; karrio is not involved.
+If the carrier renders the document, for example a commercial invoice requested at booking, stamp the returned document with this endpoint.
