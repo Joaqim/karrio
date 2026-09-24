@@ -8,7 +8,7 @@
 
 ## 2. Seed correction
 
-- [ ] 2.1 Set `_CN22_PLACEMENT` to `StampPlacement(x=53.34, y=91.44, width=49.11, height=7.62, rotation=90)`, bump `_CN22_SEED.revision` to 3, replace the known-defect comment block with the probe provenance and the revision history, and verify tasks 1.2-1.4 turn green with the rest of the stamping suites unchanged
+- [x] 2.1 Set `_CN22_PLACEMENT` to `StampPlacement(x=53.34, y=91.44, width=49.11, height=7.62, rotation=90)`, bump `_CN22_SEED.revision` to 3, replace the known-defect comment block with the probe provenance and the revision history, and verify tasks 1.2-1.4 turn green with the rest of the stamping suites unchanged
 
 ## 3. Verification
 

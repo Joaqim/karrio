@@ -703,24 +703,18 @@ class StampSeed:
     keyword_placement: StampPlacement = None
 
 
-# Measured PostNord CN22 anchor: a ~7.6 mm-wide x ~49 mm-tall vertical strip
-# along the sideways "Date and Sender's signature" line, whose rotated extent's
-# top-left sits at x 32.55 mm, y 112.15 mm from the A4 page top-left (design.md
-# "CN22 seed provenance").
-#
-# The rotation direction is confirmed by the vendored ZPL form
-# (tests/core/fixtures/postnord_cn22.zpl): its field stream runs under ^FWR with
-# glyph-up = page +x -- it reads with the head tilted right, matching the
-# clockwise convention -- so rotation=90 aligns the signature with the form.
-#
-# Known defect (measured 2026-09-24, PRDs/KEYWORD_ANCHORED_STAMPING.md
-# appendix B): revision 2's extent axes are swapped relative to the archived
-# probe, so this placement renders a horizontal 49.1x7.6 mm strip starting
-# ~20 mm off the label's left edge. The PDF re-measurement (vertical 7.62x49.11
-# at page 53.34,91.44, rotation 0, revision 3) is a follow-up change; the ZPL
-# keyword anchor below already pins the measured strip.
+# Measured PostNord CN22 anchor (revision 3, probe2b; arithmetic and
+# cross-checks in PRDs/KEYWORD_ANCHORED_STAMPING.md appendix B): a vertical
+# 7.62x49.11 mm strip along the sideways "Date and Sender's signature" line
+# -- page x 53.34..60.96, y 91.44..140.55 mm of the A4 page, bottom edge on
+# the form box's bottom rule. Width/height are pre-rotation dimensions, so
+# rotation=90 turns the landscape 49.11x7.62 rect clockwise into that extent,
+# anchored top-left at (53.34, 91.44). The rotation direction matches the
+# vendored ZPL form (tests/core/fixtures/postnord_cn22.zpl), whose field
+# stream runs under ^FWR with glyph-up = page +x, and
+# _CN22_KEYWORD_PLACEMENT below pins the same physical strip in label dots.
 _CN22_PLACEMENT: StampPlacement = StampPlacement(
-    x=32.55, y=112.15, width=7.6, height=49.1, rotation=90
+    x=53.34, y=91.44, width=49.11, height=7.62, rotation=90
 )
 
 # Measured PostNord CN22 ZPL keyword anchor: the located "Date and Sender's
@@ -737,13 +731,16 @@ _CN22_KEYWORD_PLACEMENT: StampPlacement = StampPlacement(
     x=-1.673, y=33.529, width=49.1, height=7.6, rotation=90, dpi=203
 )
 
-# revision 2: re-expresses revision 1's identical physical strip under
-# corner-anchored rotation semantics -- (x + (w-h)/2, y + (h-w)/2) from the
-# centre-pivot anchor (53.3, 91.4). The keyword fields are additive anchor
-# data, not a re-measurement of the PDF placement, so the revision stays 2.
+# Revision history: revision 1 hand-measured the strip under centre-pivot
+# semantics; revision 2 re-expressed that anchor algebraically under
+# corner-anchored rotation -- (x + (w-h)/2, y + (h-w)/2) from (53.3, 91.4) --
+# which preserved the strip's centre but not its rendered orientation
+# (measured 2026-09-24: the rendered axes swapped, ~20 mm off the label);
+# revision 3 re-measures to the probe strip. The keyword fields are additive
+# anchor data, not a re-measurement.
 _CN22_SEED: StampSeed = StampSeed(
     placement=_CN22_PLACEMENT,
-    revision=2,
+    revision=3,
     keyword="Date and Sender's signature",
     keyword_placement=_CN22_KEYWORD_PLACEMENT,
 )
