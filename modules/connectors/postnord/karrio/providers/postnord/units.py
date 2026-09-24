@@ -1,10 +1,15 @@
 import typing
 import karrio.lib as lib
+import karrio.core.units as units
 import karrio.core.models as models
 
 
 class ConnectionConfig(lib.Enum):
     """PostNord connection configuration options."""
+
+    # Booking/notification language (lowercase ISO 639-1); sent as the query
+    # `locale` and uppercased as the body `language` element.
+    language = lib.OptionEnum("language", str, "en")
 
     shipping_options = lib.OptionEnum("shipping_options", list)
     shipping_services = lib.OptionEnum("shipping_services", list)
@@ -19,6 +24,29 @@ class ConnectionConfig(lib.Enum):
     # default so the rate catalog is unchanged until a merchant enables them.
     offer_tracked_letter = lib.OptionEnum("offer_tracked_letter", bool, False)
     offer_export_letter = lib.OptionEnum("offer_export_letter", bool, False)
+
+
+class PackagingType(lib.StrEnum):
+    """PostNord packageTypeCode values."""
+
+    postnord_parcel = "PC"
+    postnord_eur_pallet = "PE"
+    postnord_half_pallet = "AF"
+    postnord_quarter_pallet = "OA"
+    postnord_special_pallet = "OF"
+    postnord_cage_roll = "CW"
+    postnord_box = "BX"
+    postnord_envelope = "EN"
+
+    """ Unified Packaging type mapping """
+    envelope = postnord_envelope
+    pak = postnord_parcel
+    tube = postnord_parcel
+    pallet = postnord_eur_pallet
+    small_box = postnord_box
+    medium_box = postnord_box
+    large_box = postnord_box
+    your_packaging = postnord_parcel
 
 
 class ShippingService(lib.StrEnum):
@@ -92,6 +120,21 @@ class ShippingOption(lib.Enum):
     """ Unified Option type mapping """
     cash_on_delivery = postnord_cod
     insurance = postnord_insurance
+
+
+def shipping_options_initializer(
+    options: dict,
+    package_options: units.ShippingOptions = None,
+) -> units.ShippingOptions:
+    """Apply default values to the given options."""
+
+    if package_options is not None:
+        options.update(package_options.content)
+
+    def items_filter(key: str) -> bool:
+        return key in ShippingOption  # type: ignore
+
+    return units.ShippingOptions(options, ShippingOption, items_filter=items_filter)
 
 
 # PostNord publishes no live money-rate API; prices are per-merchant contract

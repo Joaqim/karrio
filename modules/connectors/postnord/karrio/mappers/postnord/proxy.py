@@ -100,6 +100,20 @@ class Proxy(proxy.Proxy):
         )
         return f"{self.settings.server_url}{path}?{query}"
 
+    def create_shipment(self, request: lib.Serializable) -> lib.Deserializable[str]:
+        response = lib.request(
+            url=self._url(
+                "/rest/shipment/v3/edi/labels/pdf",
+                locale=request.ctx.get("locale"),
+            ),
+            data=lib.to_json(request.serialize()),
+            trace=self.trace_as("json"),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+
+        return lib.Deserializable(response, lib.to_dict, request.ctx)
+
 
 def _parse_transit_times(response):
     """Parse a Transit Time V2 response body into a service-code map.
