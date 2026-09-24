@@ -8,6 +8,7 @@ parsed ``^GFA`` headers, raster pixels) and never re-run production maths.
 
 import io
 import os
+import re
 import base64
 
 import pypdf
@@ -281,3 +282,94 @@ def png_document() -> models.ShippingDocument:
     return models.ShippingDocument(
         category="customs_declaration", format="PNG", base64=signature_png_b64()
     )
+
+
+# A carrier-style ZPL form: a redundant second ^XA open, ^LL label length, a
+# ^FWR-rotated field stream with ^FB blocks, float ^FO operands and an ^FD
+# block whose text spans physical lines. The keyword field sits at ^FO20,35.
+EXAMPLE_ZPL_FORM = "\n".join(
+    [
+        "^XA",
+        "^LL1520",
+        "^FX utf-8^FS   ^CI28",
+        "^XA",
+        "^LH0,0",
+        "^FWN",
+        "^FO10,15",
+        "^GB820,680,1,^FS",
+        "^FO420,468.3333333333333",
+        "^GB170,0,1^FS",
+        "^CF0,20,20",
+        "^FWR",
+        "^FB300,2, 0,L",
+        "^FO740,35",
+        "^FDCUSTOMS DECLARATION^FS",
+        "^FB186.66666666666666,1, 0,C",
+        "^FO385,488.3333333333333",
+        "^FDTotal Weight (in kg)^FS",
+        "^FB620,6, 0,L",
+        "^FO25,35",
+        "^FDI, the undersigned, certify that the particulars given ",
+        "  in this declaration are correct^FS",
+        "^FB620,1, 0,L",
+        "^FO20,35",
+        "^FDSender signature^FS",
+        "^FO165,295",
+        "^FDREF0012345^FS",
+        "^XZ",
+    ]
+)
+
+
+def example_zpl_form_b64() -> str:
+    return b64(EXAMPLE_ZPL_FORM.encode("utf-8"))
+
+
+def zpl_doc_b64(stream: str = "^XA^FO10,10^GB100,100,2^FS^XZ") -> str:
+    return b64(stream.encode("utf-8"))
+
+
+def decode_zpl(document_b64: str) -> str:
+    return base64.b64decode(document_b64).decode("utf-8")
+
+
+def zpl_document(stream: str = None) -> models.ShippingDocument:
+    return models.ShippingDocument(
+        category="customs_declaration",
+        format="ZPL",
+        base64=zpl_doc_b64(stream) if stream else zpl_doc_b64(),
+    )
+
+
+def zpl_placement(dpi: int = 203) -> stamping.StampPlacement:
+    # At 203 dpi 20/30/60/20 mm resolve to 160/240/480/160 dots.
+    return stamping.StampPlacement(x=20.0, y=30.0, width=60.0, height=20.0, dpi=dpi)
+
+
+def grf_fields(zpl: str):
+    """Return each inline ``^FO..^GFA..^FS`` field as a parsed tuple.
+
+    The tuple is ``(fo_x, fo_y, total, total2, bytes_per_row, hexdata)`` with the
+    four numeric header fields as ints and the hex payload verbatim, so a test
+    can assert the exact origin, byte counts, and bytes-per-row independently of
+    the production encoder.
+    """
+    return [
+        (int(x), int(y), int(t1), int(t2), int(bpr), hexdata)
+        for x, y, t1, t2, bpr, hexdata in re.findall(
+            r"\^FO(\d+),(\d+)\^GFA,(\d+),(\d+),(\d+),([0-9A-F]*)\^FS", zpl
+        )
+    ]
+
+
+def solid_black_png_b64(width: int = 400, height: int = 140) -> str:
+    """An opaque solid-black PNG: flattens to pure black at any density."""
+    return _png_b64(PIL.Image.new("RGBA", (width, height), (0, 0, 0, 255)))
+
+
+def faint_stroke_png_b64(width: int = 400, height: int = 140) -> str:
+    """A semi-transparent signature stroke: flattens to gray ~115 on white."""
+    image = PIL.Image.new("RGBA", (width, height), (255, 255, 255, 0))
+    draw = PIL.ImageDraw.Draw(image)
+    draw.line((20, height // 2, width - 20, height // 2), fill=(0, 0, 0, 140), width=3)
+    return _png_b64(image)

@@ -1053,6 +1053,7 @@ def stamp_document(
     image: str = None,
     placement: stamping.StampPlacement = None,
     layer: str = "overlay",
+    graphic_name: str = None,
 ) -> models.ShippingDocument:
     """Composite a base64 PNG onto a returned carrier document.
 
@@ -1064,6 +1065,7 @@ def stamp_document(
         image=image,
         placement=placement,
         layer=layer,
+        graphic_name=graphic_name,
     )
 
 
