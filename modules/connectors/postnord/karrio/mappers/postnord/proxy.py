@@ -127,6 +127,21 @@ class Proxy(proxy.Proxy):
 
         return lib.Deserializable(response, lib.to_dict, request.ctx)
 
+    def cancel_shipment(self, request: lib.Serializable) -> lib.Deserializable[str]:
+        # Placeholder endpoint: the id-based deleteEdiRequest delete route is
+        # absent from the available swagger, so the {ids:[{id}]} body is POSTed to
+        # /v3/edi, which safely rejects it. Pending the real delete endpoint URL
+        # from PostNord's v3 reference manual (see shipment/cancel.py).
+        response = lib.request(
+            url=self._url("/rest/shipment/v3/edi"),
+            data=lib.to_json(request.serialize()),
+            trace=self.trace_as("json"),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+
+        return lib.Deserializable(response, lib.to_dict)
+
 
 def _parse_transit_times(response):
     """Parse a Transit Time V2 response body into a service-code map.

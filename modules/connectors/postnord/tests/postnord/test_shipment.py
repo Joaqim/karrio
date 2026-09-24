@@ -20,6 +20,9 @@ class TestPostNordShipment(unittest.TestCase):
     def setUp(self):
         self.maxDiff = None
         self.ShipmentRequest = models.ShipmentRequest(**ShipmentPayload)
+        self.ShipmentCancelRequest = models.ShipmentCancelRequest(
+            **ShipmentCancelPayload
+        )
 
     def test_create_shipment_request(self):
         request = gateway.mapper.create_shipment_request(self.ShipmentRequest)
@@ -84,6 +87,31 @@ class TestPostNordShipment(unittest.TestCase):
             )
             self.assertListEqual(
                 lib.to_dict(parsed_response), ParsedShipmentResponse
+            )
+
+    def test_create_cancel_shipment_request(self):
+        request = gateway.mapper.create_cancel_shipment_request(
+            self.ShipmentCancelRequest
+        )
+        self.assertEqual(lib.to_dict(request.serialize()), ShipmentCancelRequest)
+
+    def test_cancel_shipment(self):
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = "{}"
+            karrio.Shipment.cancel(self.ShipmentCancelRequest).from_(gateway)
+            self.assertEqual(
+                mock.call_args[1]["url"],
+                f"{gateway.settings.server_url}/rest/shipment/v3/edi?apikey=TEST_API_KEY",
+            )
+
+    def test_parse_cancel_shipment_response(self):
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = ShipmentCancelResponse
+            parsed_response = (
+                karrio.Shipment.cancel(self.ShipmentCancelRequest).from_(gateway).parse()
+            )
+            self.assertListEqual(
+                lib.to_dict(parsed_response), ParsedShipmentCancelResponse
             )
 
     def test_parse_error_response(self):
@@ -311,6 +339,10 @@ ShipmentPayload = {
     "reference": "ORDER-7788",
 }
 
+ShipmentCancelPayload = {
+    "shipment_identifier": "SHIP-0001",
+}
+
 ShipmentRequest = {
     "application": {"name": "Karrio", "applicationId": 2458},
     "messageDate": ANY,
@@ -395,6 +427,10 @@ ShipmentRequest = {
     ],
 }
 
+ShipmentCancelRequest = {
+    "ids": [{"id": "SHIP-0001"}],
+}
+
 ShipmentResponse = """{
   "bookingResponse": {
     "bookingId": "BOOK-123",
@@ -414,6 +450,8 @@ ShipmentResponse = """{
     "printout": {"type": "LABEL", "labelFormat": "PDF", "encoding": "base64", "data": "JVBERi0xLjQK"}
   }]
 }"""
+
+ShipmentCancelResponse = "{}"
 
 ErrorResponse = """{
   "message": "Invalid indata object EdiInstruction",
@@ -452,6 +490,21 @@ ParsedShipmentResponse = [
         },
     },
     [],
+]
+
+ParsedShipmentCancelResponse = [
+    None,
+    [
+        {
+            "carrier_id": "postnord",
+            "carrier_name": "postnord",
+            "code": "cancellation_unsupported",
+            "message": (
+                "PostNord REST cancellation is unavailable: the id-based delete "
+                "endpoint is pending. The shipment was not cancelled."
+            ),
+        }
+    ],
 ]
 
 ParsedErrorResponse = [
