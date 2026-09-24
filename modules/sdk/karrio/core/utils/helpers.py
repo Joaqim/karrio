@@ -5,7 +5,7 @@ import uuid
 import string
 import base64
 import json
-import PyPDF2
+import pypdf
 import asyncio
 import datetime
 import urllib.parse
@@ -74,8 +74,8 @@ def image_to_pdf(image_str: str, rotate: int = None, resize: dict = None) -> str
     return base64.b64encode(new_buffer.getvalue()).decode("utf-8")
 
 
-def bundle_pdfs(base64_strings: List[str]) -> PyPDF2.PdfMerger:
-    merger = PyPDF2.PdfMerger(strict=False)
+def bundle_pdfs(base64_strings: List[str]) -> pypdf.PdfWriter:
+    merger = pypdf.PdfWriter()
 
     for b64_str in base64_strings:
         buffer = to_buffer(b64_str)
@@ -150,6 +150,55 @@ def binary_to_base64(binary_str: str) -> str:
     buffer = to_buffer(binary_str)
 
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
+
+
+# Magic prefixes for the document formats karrio composites against.
+DOCUMENT_MAGICS: List[tuple] = [
+    (b"%PDF-", "PDF"),
+    (b"^XA", "ZPL"),
+    (b"\x89PNG\r\n\x1a\n", "PNG"),
+]
+CONTENT_TYPE_FORMATS: List[tuple] = [
+    ("pdf", "PDF"),
+    ("zpl", "ZPL"),
+    ("png", "PNG"),
+]
+
+
+def sniff_document_format(
+    content: Union[str, bytes],
+    content_type: str = None,
+    default: str = None,
+) -> Optional[str]:
+    """Detect a document's format by magic-byte inspection with fallbacks.
+
+    Inspects base64 or raw document bytes, recognizing ``PDF`` (``%PDF-``),
+    ``ZPL`` (``^XA``), and ``PNG`` (the 8-byte PNG signature). Magic-byte
+    detection is authoritative; a ``content_type`` hint and an explicit
+    ``default`` (the caller's config fallback) are consulted only when the
+    leading bytes match no known signature.
+
+    Returns the format label, or ``default`` when nothing resolves.
+    """
+    raw = (
+        bytes(content)
+        if isinstance(content, (bytes, bytearray))
+        else (failsafe(lambda: base64.b64decode(content or "")) or b"")
+    )
+    prefix = raw[:16].lstrip()
+    keyword = (content_type or "").lower()
+
+    return (
+        next(
+            (label for magic, label in DOCUMENT_MAGICS if prefix.startswith(magic)),
+            None,
+        )
+        or next(
+            (label for kw, label in CONTENT_TYPE_FORMATS if kw in keyword),
+            None,
+        )
+        or default
+    )
 
 
 def decode_bytes(byte):
