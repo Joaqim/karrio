@@ -93,8 +93,8 @@ class StampRequest:
     downloaded once as a stored ``~DY`` object and recalled per label with
     ``^XG`` instead of inlining ``^GFA``; it is ignored by the PDF backend.
     ``keyword`` anchors the placement at the carrier ZPL field whose rendered
-    text contains it; it is ZPL-only and is consumed entirely by placement
-    resolution, so the compositing backends never see it.
+    text contains it; it is ZPL-only, is consumed entirely by placement
+    resolution, and is never read by the compositing backends.
     """
 
     image: str = None
