@@ -341,9 +341,17 @@ def zpl_document(stream: str = None) -> models.ShippingDocument:
     )
 
 
-def zpl_placement(dpi: int = 203) -> stamping.StampPlacement:
+def zpl_placement(rotation: float = 0, dpi: int = 203) -> stamping.StampPlacement:
     # At 203 dpi 20/30/60/20 mm resolve to 160/240/480/160 dots.
-    return stamping.StampPlacement(x=20.0, y=30.0, width=60.0, height=20.0, dpi=dpi)
+    return stamping.StampPlacement(
+        x=20.0, y=30.0, width=60.0, height=20.0, rotation=rotation, dpi=dpi
+    )
+
+
+def rotated_placement(rotation: float) -> stamping.StampPlacement:
+    return stamping.StampPlacement(
+        x=40.0, y=200.0, width=60.0, height=20.0, rotation=rotation
+    )
 
 
 def grf_fields(zpl: str):
