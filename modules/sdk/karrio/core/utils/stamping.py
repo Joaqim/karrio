@@ -42,6 +42,23 @@ ZPL_OPERAND_LIMIT: int = 32000
 # bounding-box extrema.
 DATE_STRIP_FRACTION: float = 0.5
 
+# Glyph height of the rendered date as a fraction of the placement's short
+# (pre-rotation height) axis. 0.30 renders 18 dots on the CN22 strip's 61-dot
+# short axis at 203 dpi — the form's own ^CF0,18,18 body font — and stays
+# physically constant across printer densities. Per-carrier refinement stays
+# open with the Q9 partition.
+DATE_FONT_HEIGHT_FRACTION: float = 0.30
+
+# Luminance bound below which a pixel binarizes to ink in the ZPL raster. A
+# fixed threshold (not error diffusion) keeps anti-aliased glyph edges solid
+# and faint signature strokes connected; error diffusion rendered exactly
+# those pixels as scattered speckle.
+ZPL_INK_THRESHOLD: int = 200
+
+# Resolution of the PDF backend's image-PDF overlay save. The date renders at
+# this density so its scale into the placement rectangle stays uniform.
+OVERLAY_DPI: int = 300
+
 # Standard portrait page sizes in millimetres, keyed by the paper-variant
 # segment they contribute to a registry key. Detection compares a page's
 # mediabox against these on the orientation-independent (short, long) axes.
@@ -169,27 +186,39 @@ def _build_overlay_page(image_b64: str) -> "pypdf.PageObject":
     flattened = PIL.Image.alpha_composite(backdrop, trimmed).convert("RGB")
 
     buffer = io.BytesIO()
-    flattened.save(buffer, format="PDF", dpi=(300, 300))
+    flattened.save(buffer, format="PDF", dpi=(OVERLAY_DPI, OVERLAY_DPI))
 
     return pypdf.PdfReader(buffer).pages[0]
 
 
-def _render_date_image(date: str) -> str:
-    """Render a pre-formatted date string to a transparent base64 PNG.
+def _render_date_image(date: str, width: int, height: int) -> str:
+    """Render a pre-formatted date string onto an opaque white base64 PNG.
 
-    The caller owns the string's format and locale; the text is rendered
-    verbatim with Pillow's built-in font (no bundled asset, Q8) as black glyphs
-    on a fully transparent ground, so the shared overlay path trims and
-    white-flattens the date exactly as it does a signature.
+    The caller owns the string's format and locale; the text renders verbatim
+    with Pillow's built-in scalable font (no bundled asset, Q8), centered on a
+    ``width`` x ``height`` white ground at its natural aspect. The glyph
+    height is ``DATE_FONT_HEIGHT_FRACTION`` of ``height``, reduced
+    proportionally when the text would overflow ``width``. The opaque ground —
+    not an ink-trimmed transparency — is what keeps the image at the target
+    aspect: the shared overlay path trims by the alpha bounding box, which
+    would otherwise crop back to the ink and reintroduce the stretch.
     """
-    font = PIL.ImageFont.load_default()
+    font_size = max(int(round(height * DATE_FONT_HEIGHT_FRACTION)), 1)
+    font = PIL.ImageFont.load_default(size=font_size)
     ruler = PIL.ImageDraw.Draw(PIL.Image.new("RGBA", (1, 1)))
     left, top, right, bottom = ruler.textbbox((0, 0), date, font=font)
-    width = int(max(right - left, 1))
-    height = int(max(bottom - top, 1))
 
-    image = PIL.Image.new("RGBA", (width, height), (255, 255, 255, 0))
-    PIL.ImageDraw.Draw(image).text((-left, -top), date, fill=(0, 0, 0, 255), font=font)
+    if right - left > width:
+        font_size = max(int(font_size * width / (right - left)), 1)
+        font = PIL.ImageFont.load_default(size=font_size)
+        left, top, right, bottom = ruler.textbbox((0, 0), date, font=font)
+
+    image = PIL.Image.new("RGB", (max(width, 1), max(height, 1)), (255, 255, 255))
+    origin = (
+        (width - (right - left)) // 2 - left,
+        (height - (bottom - top)) // 2 - top,
+    )
+    PIL.ImageDraw.Draw(image).text(origin, date, fill=(0, 0, 0), font=font)
 
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")
@@ -377,7 +406,11 @@ def stamp_pdf(document_b64: str, request: StampRequest) -> str:
             signature_anchor = (anchor[0] + offset[0], anchor[1] + offset[1])
         _merge_overlay(
             page,
-            _render_date_image(request.date),
+            _render_date_image(
+                request.date,
+                max(int(round(date_width / POINTS_PER_INCH * OVERLAY_DPI)), 1),
+                max(int(round(height / POINTS_PER_INCH * OVERLAY_DPI)), 1),
+            ),
             (x, y, date_width, height),
             rotation,
             over,
@@ -405,8 +438,8 @@ def _flatten_to_rgb(image_b64: str) -> "PIL.Image.Image":
 
     This mirrors the PDF backend's Q6 flatten (auto-trim to the non-transparent
     bounding box, then alpha-composite onto opaque white) but stops at a Pillow
-    image rather than an image PDF, so the ZPL backend can resize and dither it
-    into a 1-bpp raster.
+    image rather than an image PDF, so the ZPL backend can resize and binarize
+    it into a 1-bpp raster.
     """
     source = PIL.Image.open(helpers.to_buffer(image_b64)).convert("RGBA")
 
@@ -419,13 +452,15 @@ def _flatten_to_rgb(image_b64: str) -> "PIL.Image.Image":
 
 
 def _build_zpl_raster(request: StampRequest) -> "PIL.Image.Image":
-    """Return the placement's 1-bpp Floyd-Steinberg raster for the ZPL backend.
+    """Return the placement's 1-bpp ink-threshold raster for the ZPL backend.
 
     The signature (and, when supplied, the rendered date preceding it along the
     placement's primary axis per ``DATE_STRIP_FRACTION``) is composited onto one
-    white canvas sized to the placement's dot extent, then converted to 1-bpp
-    with a single Floyd-Steinberg dither. Building the whole raster before the
-    one dither keeps the date and signature on a shared halftone grid.
+    white canvas sized to the placement's dot extent, then binarized with the
+    fixed ``ZPL_INK_THRESHOLD``. A threshold rather than error diffusion keeps
+    the date's anti-aliased edges and the signature's faint strokes solid ink
+    instead of scattered speckle; the signature resamples with LANCZOS to
+    preserve stroke connectivity across the resize.
     """
     placement = request.placement
     width = max(mm_to_dots(placement.width, placement.dpi), 1)
@@ -436,16 +471,22 @@ def _build_zpl_raster(request: StampRequest) -> "PIL.Image.Image":
 
     if request.date:
         date_width = max(int(round(width * DATE_STRIP_FRACTION)), 1)
-        date_image = _flatten_to_rgb(_render_date_image(request.date))
-        canvas.paste(date_image.resize((date_width, height)), (0, 0))
+        date_image = PIL.Image.open(
+            helpers.to_buffer(_render_date_image(request.date, date_width, height))
+        ).convert("RGB")
+        canvas.paste(date_image, (0, 0))
         canvas.paste(
-            signature.resize((max(width - date_width, 1), height)),
+            signature.resize((max(width - date_width, 1), height), PIL.Image.LANCZOS),
             (date_width, 0),
         )
     else:
-        canvas.paste(signature.resize((width, height)), (0, 0))
+        canvas.paste(signature.resize((width, height), PIL.Image.LANCZOS), (0, 0))
 
-    return canvas.convert("1", dither=PIL.Image.Dither.FLOYDSTEINBERG)
+    return (
+        canvas.convert("L")
+        .point(lambda value: 255 if value >= ZPL_INK_THRESHOLD else 0)
+        .convert("1", dither=PIL.Image.Dither.NONE)
+    )
 
 
 def _encode_grf(image: "PIL.Image.Image") -> typing.Tuple[str, int, int]:
@@ -532,8 +573,8 @@ def _locate_zpl_field(stream: str, keyword: str) -> typing.Tuple[float, float]:
 def stamp_zpl(document_b64: str, request: StampRequest) -> str:
     """Composite the request image onto a base64 ZPL stream, returning base64.
 
-    The image is flattened, resized to the placement's dot extent, dithered to a
-    1-bpp raster, and encoded as a GRF graphic spliced over the carrier field
+    The image is flattened, resized to the placement's dot extent, binarized to
+    a 1-bpp raster, and encoded as a GRF graphic spliced over the carrier field
     stream at the placement's ``^FO`` origin. A nonzero rotation rotates the
     raster clockwise and the rotated raster's top-left anchors at the
     placement's own ``^FO``. Any origin or extent operand resolving outside

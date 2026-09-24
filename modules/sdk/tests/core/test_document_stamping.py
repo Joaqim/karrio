@@ -158,9 +158,7 @@ def _faint_stroke_png_b64(width: int = 400, height: int = 140) -> str:
     """A semi-transparent signature stroke: flattens to gray ~115 on white."""
     image = PIL.Image.new("RGBA", (width, height), (255, 255, 255, 0))
     draw = PIL.ImageDraw.Draw(image)
-    draw.line(
-        (20, height // 2, width - 20, height // 2), fill=(0, 0, 0, 140), width=3
-    )
+    draw.line((20, height // 2, width - 20, height // 2), fill=(0, 0, 0, 140), width=3)
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")
     return _b64(buffer.getvalue())
@@ -1559,7 +1557,7 @@ class TestZplDateRenderFidelity(unittest.TestCase):
         raster = self._raster()
         width, height = raster.size
 
-        rows, cols = self._ink_band(raster, 0, width // 2)
+        rows, _ = self._ink_band(raster, 0, width // 2)
 
         self.assertTrue(rows)
         bound = int(round(height * self.DATE_FONT_HEIGHT_FRACTION)) + 2
