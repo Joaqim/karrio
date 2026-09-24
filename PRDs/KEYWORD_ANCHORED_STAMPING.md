@@ -438,5 +438,28 @@ Stream facts the locator must tolerate: one command per line in general, but `^F
 
 ### Appendix B: measurement cross-check (task 3.1)
 
-The PostNord keyword offset is measured against the vendored ZPL form and cross-checked against the PDF seed strip `(32.55, 112.15, 7.6, 49.1, rotation=90)` — the revision-2 anchor on the same CN22 layout.
-Both formats' seeds must pin the same physical strip on that layout; a disagreement is a measurement error to resolve before the seed lands, not a tolerance to absorb.
+The PostNord keyword offset is measured against the vendored ZPL form and cross-checked against the PDF seed on the same CN22 layout, per this appendix's mandate that both formats' seeds pin the same physical strip.
+The cross-check resolved the mapping, produced the measured ZPL seed, and found the shipped PDF placement to be the erroneous party.
+The verification script's outputs (run 2026-09-24) are recorded below.
+
+**Mapping.**
+The CN22 PDF carries the label form as a `/Form1` XObject (`BBox` 839.0 x 1518.0 dots at 203 dpi; the form's `cm` placement on the page is a pure translation, label origin at page (52.51, 53.53) mm).
+Fonts use a `/Differences` cipher, so text positions decode through `extract_text`'s visitor.
+Validation: the PDF's vector separator columns land at label x 153.1/200.2/370.1/420.1/540.2/590.2/660.2/710.2 against the ZPL separators' integer dots, and the rule y-span [15.2, 694.9] against the `^FO10,15 ^GB820,680` form box — sub-dot agreement throughout.
+Decoded landmarks: the keyword field at label (25.00, 35.00) against `^FO20,35`, "Sweden Post" at (670.00, 35.00) against `^FO665,35`, the certification block at (130.00, 35.00) against `^FO25,35`.
+So `^FO` y is the line's reading start exactly and `^FO` x anchors the descender-side bottom (baseline + descender, 5 dots at fs20); `^FO20,35` is the field's absolute origin on the label.
+
+**Measured keyword seed.**
+Offset from the located origin (2.5025, 4.3793) mm: `(x=-1.673, y=+33.529)`, resolving to (0.829, 37.908) mm → `^FO7,303`; extent `width=49.1, height=7.6` (pre-rotation 392x61 dots → rotated 61x392, bpr 8, total 3136), rotation=90, dpi=203.
+The strip (label x 7..68, y 303..695 dots) covers the signature column with its bottom edge on the form box's bottom rule.
+
+**Cross-check outcome: the shipped PDF placement is the erroneous party.**
+The shipped `_CN22_PLACEMENT` (32.55, 112.15, 7.6 x 49.1, rotation=90) maps to label x [-159.5, 232.9], y [468.5, 529.2]: a horizontal strip starting 19.96 mm off the label's left edge (confirmed on a 150 dpi render), and unexpressible as a keyword-anchored placement — `_validate_anchor` rejects the derived x of -19.961 mm.
+The original archived probe (probe2b: page x [53.34, 60.96], y [91.44, 140.55] mm — a vertical 7.62 x 49.11 mm strip) maps on-form (label x [6.63, 67.53], y [302.97, 695.44], bottom edge on the form bottom rule).
+The two strips share a centre (~(57.1, 115.9) page mm): the shipped extent is the archived strip rotated 90 degrees about its centre — the fossil of the revision-1 centre-pivot seed, faithfully converted by revision 2 but never re-measured, and that change's band oracles were circular against the same anchor.
+
+**Decision (owner, 2026-09-24, option A).**
+The ZPL keyword seed lands on the measured vertical strip.
+The shipped PDF placement is documented here as the erroneous party, with a correction note beside `_CN22_PLACEMENT` in the module.
+A follow-up change re-measures `_CN22_PLACEMENT` (vertical 7.62 x 49.11 mm at page (53.34, 91.44), rotation 0 under corner-anchor semantics, revision 3) and rewrites `TestDefaultRegistry`/`TestCn22Seed` and the fixtures band literals with non-circular oracles.
+The registry-seeded PDF path is not live in production, so the follow-up carries no deployment urgency.

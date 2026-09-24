@@ -712,17 +712,29 @@ class StampSeed:
 # (tests/core/fixtures/postnord_cn22.zpl): its field stream runs under ^FWR with
 # glyph-up = page +x -- it reads with the head tilted right, matching the
 # clockwise convention -- so rotation=90 aligns the signature with the form.
+#
+# Known defect (measured 2026-09-24, PRDs/KEYWORD_ANCHORED_STAMPING.md
+# appendix B): revision 2's extent axes are swapped relative to the archived
+# probe, so this placement renders a horizontal 49.1x7.6 mm strip starting
+# ~20 mm off the label's left edge. The PDF re-measurement (vertical 7.62x49.11
+# at page 53.34,91.44, rotation 0, revision 3) is a follow-up change; the ZPL
+# keyword anchor below already pins the measured strip.
 _CN22_PLACEMENT: StampPlacement = StampPlacement(
     x=32.55, y=112.15, width=7.6, height=49.1, rotation=90
 )
 
-# Provisional keyword geometry pending the task 3.1 measurement cross-check
-# against the vendored form and the PDF seed strip on the same CN22 layout: the
-# fixtures suite's standing ZPL strip dimensions (33x12 mm, rotation 90, 203
-# dpi) with a zero offset, so the anchor resolves to the located ^FO origin
-# itself until the measured offset lands.
+# Measured PostNord CN22 ZPL keyword anchor: the located "Date and Sender's
+# signature" origin (^FO20,35) plus this offset resolves to ^FO7,303, and the
+# pre-rotation 49.1x7.6 mm extent at 203 dpi rotates to a 61x392-dot vertical
+# strip (x 7..68, y 303..695) over the signature column with its bottom edge
+# on the form box's bottom rule (^GB820,680 ends at y 695). Measured by
+# mapping the CN22 PDF's /Form1 XObject onto the label frame -- eight
+# separator columns and the rule span agree with the ZPL form at sub-dot
+# precision -- and anchoring the archived probe strip (page x 53.34..60.96,
+# y 91.44..140.55 mm) onto the keyword field; arithmetic in
+# PRDs/KEYWORD_ANCHORED_STAMPING.md appendix B.
 _CN22_KEYWORD_PLACEMENT: StampPlacement = StampPlacement(
-    x=0.0, y=0.0, width=33.0, height=12.0, rotation=90, dpi=203
+    x=-1.673, y=33.529, width=49.1, height=7.6, rotation=90, dpi=203
 )
 
 # revision 2: re-expresses revision 1's identical physical strip under

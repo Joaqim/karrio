@@ -285,40 +285,11 @@ class TestCn22KeywordStamp(unittest.TestCase):
         # geometry whose x/y are the offsets from the located ^FO origin.
         self.seed = stamping._SEED_REGISTRY["postnord/cn22/ZPL/*"]
 
-    def _expected_origin(self, stream: str):
-        """Derive the expected ^FO operands from the seed's geometry values.
-
-        The fixture fact is independent of the seed: the keyword field's origin
-        is the ``^FO20,35`` at postnord_cn22.zpl:121 preceding
-        ``^FDDate and Sender's signature^FS`` at line 122. The operands then
-        follow the spec's derivation spelled out inline -- dots to millimetres
-        at the geometry's dpi, plus the seed's millimetre offsets, back to
-        whole dots -- so the expectation tracks the seed's values rather than
-        pinning measured literals (task 3.1 pins those after measuring).
-        """
-        geometry = self.seed.keyword_placement
-        origin_x, origin_y = stamping._locate_zpl_field(stream, self.seed.keyword)
-        return (
-            int(
-                round(
-                    ((origin_x * 25.4 / geometry.dpi) + (geometry.x or 0.0))
-                    / 25.4
-                    * geometry.dpi
-                )
-            ),
-            int(
-                round(
-                    ((origin_y * 25.4 / geometry.dpi) + (geometry.y or 0.0))
-                    / 25.4
-                    * geometry.dpi
-                )
-            ),
-        )
-
     def test_keyword_stamp_resolves_from_the_signature_field(self):
         # The consumer keyword against the real form, with the geometry coming
-        # from the seed: exactly one ^GFA field spliced, anchored at the
-        # signature line's own field origin, with the carrier text surviving.
+        # from the seed: exactly one ^GFA field spliced at the measured anchor
+        # -- ^FO7,303 with a 61x392-dot rotated raster, bpr 8, total 3136 --
+        # and the carrier text surviving.
         stamped = lib.stamp_document(
             _cn22_zpl_document(),
             image=_signature_b64(),
@@ -330,19 +301,21 @@ class TestCn22KeywordStamp(unittest.TestCase):
         zpl = _decode_zpl(stamped.base64)
         fields = _grf_fields(zpl)
         self.assertEqual(len(fields), 1)
-        ((fo_x, fo_y, *_),) = fields
-        self.assertEqual(
-            (fo_x, fo_y), self._expected_origin(_decode_zpl(_cn22_zpl_b64()))
-        )
+        ((fo_x, fo_y, total, total2, bpr, hexdata),) = fields
+        self.assertEqual((fo_x, fo_y), (7, 303))
+        self.assertEqual(bpr, 8)
+        self.assertEqual(total, 3136)
+        self.assertEqual(total2, total)
+        self.assertEqual(len(hexdata), total * 2)
         self.assertIn(self.seed.keyword, zpl)
         self.assertEqual(zpl.count("^XZ"), 1)
 
     def test_keyword_stamp_with_date_composites_one_strip(self):
         # The single call with image AND date composites one combined strip at
-        # the derived origin (never two graphics), and the strip's ink survives
-        # flatten + dither as neither blank nor solid. The rotated raster width
-        # is byte-multiple (12 mm at 203 dpi = 96 dots), so every hex bit is a
-        # real pixel and the fraction needs no pad-bit masking.
+        # the measured origin (never two graphics), and the strip's ink
+        # survives flatten + dither as neither blank nor solid. The rotated
+        # raster is 61 dots wide against bpr 8, so each row carries 3 zero pad
+        # bits and the ink fraction needs no pad-bit masking.
         stamped = lib.stamp_document(
             _cn22_zpl_document(),
             image=_signature_b64(),
@@ -355,10 +328,8 @@ class TestCn22KeywordStamp(unittest.TestCase):
         zpl = _decode_zpl(stamped.base64)
         fields = _grf_fields(zpl)
         self.assertEqual(len(fields), 1)
-        ((fo_x, fo_y, total, _, bpr, hexdata),) = fields
-        self.assertEqual(
-            (fo_x, fo_y), self._expected_origin(_decode_zpl(_cn22_zpl_b64()))
-        )
+        ((fo_x, fo_y, total, _, _, hexdata),) = fields
+        self.assertEqual((fo_x, fo_y), (7, 303))
 
         fraction = bin(int(hexdata, 16)).count("1") / (total * 8)
         self.assertGreater(fraction, 0.005)

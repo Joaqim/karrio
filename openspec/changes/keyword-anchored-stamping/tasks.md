@@ -14,7 +14,7 @@
 
 ## 3. PostNord CN22 seed
 
-- [ ] 3.1 Measure the CN22 keyword geometry and offset against the vendored form — cross-checked against the PDF seed's strip on the same CN22 layout — set the postnord seed's keyword and `keyword_placement`, and verify task 1.5 plus `TestDefaultRegistry`/`TestCn22Seed` pass on the pinned literals
+- [x] 3.1 Measure the CN22 keyword geometry and offset against the vendored form — cross-checked against the PDF seed's strip on the same CN22 layout — set the postnord seed's keyword and `keyword_placement`, and verify task 1.5 plus `TestDefaultRegistry`/`TestCn22Seed` pass on the pinned literals
 
 ## 4. Verification
 
