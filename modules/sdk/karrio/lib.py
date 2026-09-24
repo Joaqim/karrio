@@ -9,6 +9,7 @@ import karrio.core.utils as utils
 import karrio.core.units as units
 import karrio.core.models as models
 import karrio.core.errors as exceptions
+import karrio.core.utils.stamping as stamping
 from karrio.core.utils.logger import logger
 T = typing.TypeVar("T")
 S = typing.TypeVar("S")
@@ -39,6 +40,7 @@ StrEnum = utils.StrEnum
 identity = utils.identity
 typed = utils.typed
 sort_events = utils.sort_events_chronologically
+StampPlacement = stamping.StampPlacement
 
 
 # -----------------------------------------------------------
@@ -1044,6 +1046,25 @@ def to_buffer(
     **kwargs,
 ):
     return utils.to_buffer(base64_string, **kwargs)
+
+
+def stamp_document(
+    document: models.ShippingDocument,
+    image: str = None,
+    placement: stamping.StampPlacement = None,
+    layer: str = "overlay",
+) -> models.ShippingDocument:
+    """Composite a base64 PNG onto a returned carrier document.
+
+    See ``karrio.core.utils.stamping.stamp_document`` for the per-format
+    behaviour.
+    """
+    return stamping.stamp_document(
+        document,
+        image=image,
+        placement=placement,
+        layer=layer,
+    )
 
 
 def decode(byte: bytes):
