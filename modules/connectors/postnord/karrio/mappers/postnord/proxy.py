@@ -101,9 +101,22 @@ class Proxy(proxy.Proxy):
         return f"{self.settings.server_url}{path}?{query}"
 
     def create_shipment(self, request: lib.Serializable) -> lib.Deserializable[str]:
+        # Format is selected by endpoint path: /labels/zpl for ZPL, else
+        # /labels/pdf (default). Both take the identical ediInstruction body and
+        # return the identical ediLabelResponse. The physical size travels as the
+        # labelType query param; an unset label_size is dropped by _url so
+        # PostNord defaults to standard.
+        label_type = (request.ctx.get("label_type") or "PDF").upper()
+        label_path = (
+            "/rest/shipment/v3/edi/labels/zpl"
+            if label_type == "ZPL"
+            else "/rest/shipment/v3/edi/labels/pdf"
+        )
+
         response = lib.request(
             url=self._url(
-                "/rest/shipment/v3/edi/labels/pdf",
+                label_path,
+                labelType=self.settings.connection_config.label_size.state,
                 locale=request.ctx.get("locale"),
             ),
             data=lib.to_json(request.serialize()),

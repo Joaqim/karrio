@@ -1,13 +1,17 @@
 """Karrio PostNord shipment (Booking EDI) API implementation.
 
 Booking and label retrieval happen in one call against
-``/rest/shipment/v3/edi/labels/pdf``. The request body is an ``ediInstruction``
+``/rest/shipment/v3/edi/labels/pdf`` or ``/labels/zpl`` (selected by the
+resolved label type). The request body is an ``ediInstruction``
 (``ShipmentRequestType``) with ``updateIndicator`` ``"Original"``; the
 response is an ``ediLabelResponse`` carrying a ``bookingResponse`` (ids,
-tracking urls, per-item errors) and one or more ``labelPrintout`` entries
-carrying base64 PDF data.
+tracking urls, per-item errors) and one or more ``labelPrintout`` entries.
+PDF printouts carry base64 data; ZPL printouts carry raw UTF-8 ZPL text
+with ``printout.encoding`` set to ``"none"`` (observed on the live
+endpoint; the swagger documents base64 only).
 """
 
+import base64
 import uuid
 import datetime
 import karrio.schemas.postnord.shipment_request as postnord_req
@@ -75,10 +79,12 @@ def _extract_details(
             for p in printouts
             if p.printout and p.printout.labelFormat
         ),
-        "PDF",
+        # ZPL responses have been observed without labelFormat; fall back to
+        # the requested type rather than assuming PDF.
+        ctx.get("label_type", "PDF"),
     )
     label_data = [
-        p.printout.data
+        _printout_base64(p.printout)
         for p in printouts
         if p.printout and p.printout.data
     ]
@@ -131,6 +137,21 @@ def _first_item_id(
     )
 
 
+def _printout_base64(printout: postnord_res.PrintoutType) -> str:
+    """Return the printout data as base64 regardless of transport encoding.
+
+    The swagger documents only ``encoding`` ``"base64"``, so an absent
+    encoding defaults to base64 passthrough. ZPL printouts carry raw UTF-8
+    ZPL text with ``encoding`` ``"none"`` (observed on the live endpoint,
+    undocumented); any non-base64 encoding is treated as raw text and
+    encoded here. The downstream bundling helpers expect base64 inputs.
+    """
+    if (printout.encoding or "base64").lower() == "base64":
+        return printout.data
+
+    return base64.b64encode(printout.data.encode("utf-8")).decode("utf-8")
+
+
 def shipment_request(
     payload: models.ShipmentRequest,
     settings: provider_utils.Settings,
@@ -140,6 +161,14 @@ def shipment_request(
     packages = lib.to_packages(payload.parcels)
     service = provider_units.ShippingService.map(payload.service).value_or_key
 
+    # File format is selected by endpoint path in the proxy; resolve
+    # payload.label_type -> connection default -> PDF and thread it via ctx.
+    label_type = lib.identity(
+        provider_units.LabelType.map(
+            payload.label_type or settings.connection_config.label_type.state
+        ).value
+        or provider_units.LabelType.PDF.value
+    )
     options = lib.to_shipping_options(
         payload.options,
         package_options=packages.options,
@@ -277,6 +306,7 @@ def shipment_request(
         lib.to_dict,
         dict(
             shipment_id=shipment_id,
+            label_type=label_type,
             locale=locale,
         ),
     )
