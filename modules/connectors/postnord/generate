@@ -6,6 +6,8 @@ touch "${LIB_MODULES}/__init__.py"
 # Rating (universal RatingMixin + dict-parsed transit) and error parsing are
 # dict-parsed, so no rate/error codegen lines; only the EDI POST ops below use
 # generated schemas.
+kcli codegen generate "${SCHEMAS}/pickup_request.json" "${LIB_MODULES}/pickup_request.py"
+kcli codegen generate "${SCHEMAS}/pickup_response.json" "${LIB_MODULES}/pickup_response.py"
 kcli codegen generate "${SCHEMAS}/shipment_request.json" "${LIB_MODULES}/shipment_request.py"
 kcli codegen generate "${SCHEMAS}/shipment_response.json" "${LIB_MODULES}/shipment_response.py"
 # Tracking (Track & Trace v7) and the transit/service-point GET endpoints are

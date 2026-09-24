@@ -35,6 +35,26 @@ class Mapper(mapper.Mapper):
         self, payload: models.ShipmentCancelRequest
     ) -> lib.Serializable[str]:
         return provider.shipment_cancel_request(payload, self.settings)
+    
+    def create_manifest_request(
+        self, payload: models.ManifestRequest
+    ) -> lib.Serializable:
+        return provider.manifest_request(payload, self.settings)
+
+    def create_pickup_request(
+        self, payload: models.PickupRequest
+    ) -> lib.Serializable:
+        return provider.pickup_request(payload, self.settings)
+
+    def create_pickup_update_request(
+        self, payload: models.PickupUpdateRequest
+    ) -> lib.Serializable:
+        return provider.pickup_update_request(payload, self.settings)
+
+    def create_cancel_pickup_request(
+        self, payload: models.PickupCancelRequest
+    ) -> lib.Serializable:
+        return provider.cancel_pickup_request(payload, self.settings)
 
 
     def parse_cancel_shipment_response(
@@ -61,3 +81,23 @@ class Mapper(mapper.Mapper):
         self, response: lib.Deserializable[str]
     ) -> typing.Tuple[typing.List[models.TrackingDetails], typing.List[models.Message]]:
         return provider.parse_tracking_response(response, self.settings)
+    
+    def parse_manifest_response(
+        self, response: lib.Deserializable[str]
+    ) -> typing.Tuple[models.ManifestDetails, typing.List[models.Message]]:
+        return provider.parse_manifest_response(response, self.settings)
+
+    def parse_pickup_response(
+        self, response: lib.Deserializable[str]
+    ) -> typing.Tuple[models.PickupDetails, typing.List[models.Message]]:
+        return provider.parse_pickup_response(response, self.settings)
+
+    def parse_pickup_update_response(
+        self, response: lib.Deserializable[str]
+    ) -> typing.Tuple[models.PickupDetails, typing.List[models.Message]]:
+        return provider.parse_pickup_update_response(response, self.settings)
+
+    def parse_cancel_pickup_response(
+        self, response: lib.Deserializable[str]
+    ) -> typing.Tuple[models.ConfirmationDetails, typing.List[models.Message]]:
+        return provider.parse_cancel_pickup_response(response, self.settings)
