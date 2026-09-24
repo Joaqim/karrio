@@ -186,6 +186,29 @@ class TestShipmentPurchase(TestShipmentFixture):
             ).exists()
         )
 
+    def test_purchase_shipment_tracker_inherits_language(self):
+        """The purchase-created tracker inherits the shipment's options.language."""
+        self.shipment.options = {"language": "sv"}
+        self.shipment.save()
+        url = reverse(
+            "karrio.server.manager:shipment-purchase",
+            kwargs=dict(pk=self.shipment.pk),
+        )
+
+        with patch("karrio.server.core.gateway.utils.identity") as mock:
+            mock.return_value = CREATED_SHIPMENT_RESPONSE
+            response = self.client.post(url, SHIPMENT_PURCHASE_DATA)
+
+        self.assertResponseNoErrors(response)
+
+        tracker = models.Tracking.objects.get(
+            tracking_number=CREATED_SHIPMENT_RESPONSE[0].tracking_number
+        )
+        self.assertEqual(
+            tracker.options,
+            {"123456789012": {"carrier": "canadapost"}, "language": "sv"},
+        )
+
     def test_cancel_shipment(self):
         url = reverse(
             "karrio.server.manager:shipment-cancel",
