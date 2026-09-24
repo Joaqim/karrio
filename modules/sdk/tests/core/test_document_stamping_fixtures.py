@@ -198,7 +198,7 @@ class TestStampRealZplForm(unittest.TestCase):
         for operand in (fo_x, fo_y):
             self.assertTrue(0 <= operand <= 32000, operand)
 
-    def test_real_signature_keeps_ink_through_flatten_and_dither(self):
+    def test_real_signature_keeps_ink_through_flatten_and_binarization(self):
         raster = stamping._build_zpl_raster(self.request)
 
         self.assertEqual(raster.mode, "1")
@@ -206,7 +206,8 @@ class TestStampRealZplForm(unittest.TestCase):
         black = raster.histogram()[0]
         fraction = black / (264 * 96)
         # The real signature is sparse anti-aliased ink: it survives the
-        # white-flatten and Floyd-Steinberg dither as neither blank nor solid.
+        # white-flatten and ink-threshold binarization as neither blank nor
+        # solid.
         self.assertGreater(fraction, 0.005)
         self.assertLess(fraction, 0.30)
 
