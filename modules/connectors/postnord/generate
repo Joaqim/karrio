@@ -3,3 +3,9 @@ LIB_MODULES=./karrio/schemas/postnord
 find "${LIB_MODULES}" -name "*.py" -exec rm -r {} \;
 touch "${LIB_MODULES}/__init__.py"
 
+# Rating (universal RatingMixin + dict-parsed transit) and error parsing are
+# dict-parsed, so no rate/error codegen lines; only the EDI POST ops below use
+# generated schemas.
+kcli codegen generate "${SCHEMAS}/shipment_request.json" "${LIB_MODULES}/shipment_request.py"
+kcli codegen generate "${SCHEMAS}/shipment_response.json" "${LIB_MODULES}/shipment_response.py"
+
