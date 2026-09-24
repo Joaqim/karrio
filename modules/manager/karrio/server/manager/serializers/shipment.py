@@ -971,7 +971,16 @@ def create_shipment_tracker(shipment: typing.Optional[models.Shipment], context)
                 status=TrackerStatus.pending.value,
                 estimated_delivery=estimated_delivery,
                 events=utils.default_tracking_event(event_at=shipment.updated_at),
-                options={shipment.tracking_number: dict(carrier=rate_provider)},
+                options={
+                    shipment.tracking_number: dict(carrier=rate_provider),
+                    # Inherit the booking locale so scheduled polls keep the
+                    # shipment's tracking language.
+                    **(
+                        {"language": (shipment.options or {}).get("language")}
+                        if (shipment.options or {}).get("language")
+                        else {}
+                    ),
+                },
                 meta=_tracker_meta,
                 info=dict(
                     source="api",
