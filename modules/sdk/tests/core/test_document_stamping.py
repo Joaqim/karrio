@@ -904,6 +904,42 @@ class TestKeywordResolution(unittest.TestCase):
         self.assertEqual(fo_x, int(round(((160 * 25.4 / 203) + 10.0) / 25.4 * 203)))
         self.assertEqual(fo_y, int(round(((240 * 25.4 / 203) + 0.0) / 25.4 * 203)))
 
+    def test_keyword_derived_negative_anchor_raises(self):
+        # A placement DERIVED from the form obeys the same anchor validation
+        # as a consumer-supplied one, so a field origin left of the label edge
+        # (^FO-5,35 -> -0.625 mm at 203 dpi) must surface as a rejected
+        # anchor, never an out-of-spec stamp.
+        with self.assertRaises(ValueError) as ctx:
+            lib.stamp_document(
+                _keyword_zpl_document(
+                    "^XA^FO-5,35^FDDate and Sender's signature^FS^XZ"
+                ),
+                image=_signature_png_b64(),
+                placement=stamping.StampPlacement(width=60.0, height=20.0, dpi=203),
+                keyword=_KEYWORD,
+            )
+
+        self.assertIn("non-negative", str(ctx.exception))
+
+    def test_keyword_derived_operand_overflow_raises(self):
+        # The extent side of the same clause: an origin near the operand
+        # ceiling (^FO31600,35) with a 60x20 mm geometry at 203 dpi resolves
+        # the x extent to 31600 + 480 = 32080 dots, outside the ZPL 0-32000
+        # operand range.
+        with self.assertRaises(ValueError) as ctx:
+            lib.stamp_document(
+                _keyword_zpl_document(
+                    "^XA^FO31600,35^FDDate and Sender's signature^FS^XZ"
+                ),
+                image=_signature_png_b64(),
+                placement=stamping.StampPlacement(width=60.0, height=20.0, dpi=203),
+                keyword=_KEYWORD,
+            )
+
+        message = str(ctx.exception)
+        self.assertIn("32080", message)
+        self.assertIn("operand range", message)
+
     def test_keyword_with_no_placement_and_no_seed_raises_naming_the_source(self):
         # Spec scenario "A keyword with unresolvable geometry fails explicitly":
         # no geometry-only placement and no registry seed for the key, so the
@@ -937,6 +973,21 @@ class TestKeywordResolution(unittest.TestCase):
         message = str(ctx.exception)
         self.assertIn("PDF", message)
         self.assertIn("keyword", message.lower())
+
+    def test_keyword_miss_propagates_through_stamp_document(self):
+        # Spec scenario "A keyword that matches no field fails explicitly",
+        # end to end: the locator's miss error survives the resolution
+        # threading and reaches the caller naming the keyword, with no
+        # document returned.
+        with self.assertRaises(ValueError) as ctx:
+            lib.stamp_document(
+                _keyword_zpl_document(_INLINE_KEYWORD_STREAM),
+                image=_signature_png_b64(),
+                placement=stamping.StampPlacement(width=60.0, height=20.0, dpi=203),
+                keyword="no such field text",
+            )
+
+        self.assertIn("no such field text", str(ctx.exception))
 
 
 class TestPaperVariantDetection(unittest.TestCase):
