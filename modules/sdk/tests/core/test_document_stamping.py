@@ -1039,22 +1039,52 @@ class TestRegistryKey(unittest.TestCase):
         self.assertEqual(stamping._registry_key(None, None, "PDF", "*"), "*/*/PDF/*")
 
 
+# The archived probe measurement of the PostNord CN22 signature strip on the
+# A4 page (probe2b, cross-validated against the independently measured ZPL
+# form at sub-dot precision: PRDs/KEYWORD_ANCHORED_STAMPING.md appendix B):
+# a vertical strip spanning page x 53.34-60.96 mm, y 91.44-140.55 mm. Encoded
+# per StampPlacement semantics -- width/height are the pre-rotation extent and
+# the rotated extent's top-left anchors at (x, y) -- that strip is the probe
+# anchor with a pre-rotation 49.11 x 7.62 extent at rotation 90 (revision 3).
+_CN22_PROBE_ANCHOR_MM = (53.34, 91.44)
+_CN22_PROBE_EXTENT_MM = (49.11, 7.62)
+
+# The fixture page's A4 height in millimetres (mediabox 841.8898 pt), used to
+# flip the top-anchored probe y into bottom-left PDF points.
+_CN22_PAGE_HEIGHT_MM = 297.0
+
+
 class TestDefaultRegistry(unittest.TestCase):
     def setUp(self):
         self.maxDiff = None
 
     def test_cn22_seed_resolves_to_the_documented_anchor(self):
+        # The oracle literals come from the probe measurement alone, never from
+        # the seed object: the revision-2 oracles asserted the seed's own
+        # numbers back at it, a circular check that enshrined an axis-swapped
+        # strip rendering ~20 mm off the label, so a seed change without a
+        # re-measurement must break here.
         placement = stamping._default_registry("postnord/cn22/PDF/A4")
 
         self.assertIsNotNone(placement)
-        # Revision 2 re-expresses the same physical strip under corner-anchored
-        # rotation: the rotated extent's top-left, converted from the original
-        # centre-pivot anchor (53.3, 91.4) by (x + (w-h)/2, y + (h-w)/2).
-        self.assertAlmostEqual(placement.x, 32.55, places=2)
-        self.assertAlmostEqual(placement.y, 112.15, places=2)
-        self.assertAlmostEqual(placement.width, 7.6, places=1)
-        self.assertAlmostEqual(placement.height, 49.1, places=1)
+        self.assertAlmostEqual(placement.x, _CN22_PROBE_ANCHOR_MM[0], places=2)
+        self.assertAlmostEqual(placement.y, _CN22_PROBE_ANCHOR_MM[1], places=2)
+        self.assertAlmostEqual(placement.width, _CN22_PROBE_EXTENT_MM[0], places=2)
+        self.assertAlmostEqual(placement.height, _CN22_PROBE_EXTENT_MM[1], places=2)
         self.assertEqual(placement.rotation, 90)
+
+        # The rendered extent spelled out from the placement's own values as
+        # independent arithmetic: under rotation 90 the pre-rotation extent
+        # rotates clockwise, so the rendered rectangle is height wide and width
+        # tall hanging down-right from the anchor. The bounds are the probe's
+        # measured page rectangle, so the axis-swapped revision-2 encoding
+        # (width 7.6, height 49.1) fails here as loudly as at the literals.
+        rendered_x = (placement.x, placement.x + placement.height)
+        rendered_y = (placement.y, placement.y + placement.width)
+        self.assertAlmostEqual(rendered_x[0], 53.34, places=2)
+        self.assertAlmostEqual(rendered_x[1], 60.96, places=2)
+        self.assertAlmostEqual(rendered_y[0], 91.44, places=2)
+        self.assertAlmostEqual(rendered_y[1], 140.55, places=2)
 
     def test_unseeded_key_misses(self):
         self.assertIsNone(stamping._default_registry("acme/unknown/PDF/A4"))
@@ -1088,10 +1118,10 @@ class TestCn22Seed(unittest.TestCase):
         # so overlays are isolated by the measured strip's vertical band rather
         # than by _overlay_cms's first-cm-per-stream read (which the carrier's
         # own transform would shadow). The band is an independent literal: the
-        # revision-2 strip spans y 112.15-119.75 mm from the top of an A4 page,
-        # which is 502.4-524.0 pt in bottom-left PDF coordinates; the band adds
-        # margin so it brackets both sub-anchors' translations while excluding
-        # any anchor displaced from the measured strip.
+        # probe strip's translations land at 582.7 pt (date overlay) and
+        # 513.1 pt (signature, one 69.6 pt date split lower), so the band
+        # brackets both while excluding the carrier's own image transform at
+        # 151.7 pt and any anchor displaced from the measured strip.
         stamped = lib.stamp_document(
             _pdf_document(),
             image=_signature_png_b64(),
@@ -1100,7 +1130,21 @@ class TestCn22Seed(unittest.TestCase):
             doc_type="cn22",
         )
 
-        band = _cms_in_y_band(stamped.base64, 502.0, 527.0)
+        # For rotation 90 the merged overlay's translation equals its anchor:
+        # _rotated_corner_extents(w, h, 90) yields (min_x, max_y) = (0, 0), so
+        # the cm's e/f are the anchor itself. The expected values are computed
+        # from the probe literals and the A4 page height, never read from the
+        # seed object.
+        anchor_x_pt = _CN22_PROBE_ANCHOR_MM[0] * 72.0 / 25.4
+        anchor_y_pt = (
+            _CN22_PAGE_HEIGHT_MM * 72.0 / 25.4 - _CN22_PROBE_ANCHOR_MM[1] * 72.0 / 25.4
+        )
+        date_width_pt = (
+            _CN22_PROBE_EXTENT_MM[0] * 72.0 / 25.4 * stamping.DATE_STRIP_FRACTION
+        )
+        signature_y_pt = anchor_y_pt - date_width_pt
+
+        band = _cms_in_y_band(stamped.base64, 505.0, 590.0)
         self.assertEqual(len(band), 2)
         # Paint order labels the two overlays. Under clockwise rotation the
         # strip reads downward from its top-left anchor, so the date leads the
@@ -1109,9 +1153,18 @@ class TestCn22Seed(unittest.TestCase):
         date_cm, signature_cm = band
         self.assertGreater(date_cm[5], signature_cm[5])
 
+        # Each overlay lands at its probe-computed anchor translation: the
+        # date at the strip's top-left and the signature one date-split below.
+        self.assertAlmostEqual(date_cm[4], anchor_x_pt, places=1)
+        self.assertAlmostEqual(date_cm[5], anchor_y_pt, places=1)
+        self.assertAlmostEqual(signature_cm[4], anchor_x_pt, places=1)
+        self.assertAlmostEqual(signature_cm[5], signature_y_pt, places=1)
+
         # Each overlay's linear part encodes a clockwise 90-degree rotation: a
         # zero diagonal with b < 0 < c (same pattern the group-6 rotation tests
-        # assert), confirming the seed's rotation=90 threaded through.
+        # assert). This is what discriminates the corrected rotation=90
+        # encoding from an upright rotation=0 encoding of the same strip
+        # rectangle, which would carry the identity scale on the diagonal.
         for cm in band:
             self.assertAlmostEqual(cm[0], 0.0, places=6)
             self.assertAlmostEqual(cm[3], 0.0, places=6)

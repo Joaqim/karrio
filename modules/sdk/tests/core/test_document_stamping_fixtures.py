@@ -98,10 +98,14 @@ _ZPL_PLACEMENT = stamping.StampPlacement(
     x=5.0, y=100.0, width=33.0, height=12.0, rotation=90, dpi=203
 )
 
-# The revision-2 seed strip's vertical band on the A4 CN22 PDF: the rotated
-# extent spans y 112.15-119.75 mm from the page top, and the overlay's anchor
-# translation sits at 524.0 pt in bottom-left PDF coordinates.
-_CN22_BAND_PT = (515.0, 530.0)
+# The probe-measured CN22 signature strip's anchor band on the A4 PDF
+# (revision 3, PRDs/KEYWORD_ANCHORED_STAMPING.md appendix B): the strip's
+# rotated extent anchors top-left at page 53.34, 91.44 mm, so the
+# single-image overlay's translation sits at 582.7 pt in bottom-left PDF
+# coordinates (841.9 pt page height minus the anchor's 259.2 pt). The band
+# brackets that translation while excluding the carrier's own image transform
+# at 151.7 pt.
+_CN22_BAND_PT = (575.0, 590.0)
 
 
 class TestVendoredFixtures(unittest.TestCase):
@@ -234,10 +238,11 @@ class TestStampRealPdfForm(unittest.TestCase):
         )
         request = stamping.StampRequest(
             image=_signature_b64(),
-            # The revision-2 seed anchor, for consistency with the registry
-            # tests; any valid placement exercises the text layer the same way.
+            # A neutral valid placement: the test is seed-independent, so any
+            # on-page placement exercises the text layer the same way and
+            # future seed revisions never touch it.
             placement=stamping.StampPlacement(
-                x=32.55, y=112.15, width=7.6, height=49.1, rotation=90
+                x=100.0, y=100.0, width=40.0, height=20.0
             ),
         )
 
@@ -249,9 +254,14 @@ class TestStampRealPdfForm(unittest.TestCase):
 
     def test_registry_seed_composites_the_real_signature_clockwise(self):
         # Placement omitted: the default registry resolves the measured
-        # postnord/cn22/PDF/A4 seed and composites the real signature inside
-        # the seed strip's band, with the clockwise 90-degree linear part
-        # (zero diagonal, b < 0 < c) that matches the ZPL form's ^FWR axis.
+        # postnord/cn22/PDF/A4 seed and composites the real signature at the
+        # probe-measured anchor. For rotation 90 the merged overlay's
+        # translation equals its anchor (_rotated_corner_extents yields
+        # (0, 0)), so the expected values are computed from the probe literals
+        # and the A4 page height, never read from the seed object.
+        anchor_x_pt = 53.34 * 72.0 / 25.4
+        anchor_y_pt = 297.0 * 72.0 / 25.4 - 91.44 * 72.0 / 25.4
+
         stamped = lib.stamp_document(
             models.ShippingDocument(
                 category="customs_declaration", format="PDF", base64=_cn22_pdf_b64()
@@ -265,6 +275,11 @@ class TestStampRealPdfForm(unittest.TestCase):
 
         self.assertEqual(len(band), 1)
         (cm,) = band
+        self.assertAlmostEqual(cm[4], anchor_x_pt, places=1)
+        self.assertAlmostEqual(cm[5], anchor_y_pt, places=1)
+        # The clockwise 90-degree linear part (zero diagonal, b < 0 < c) that
+        # matches the ZPL form's ^FWR axis; this discriminates the rotation=90
+        # encoding from an upright rotation=0 encoding of the same rectangle.
         self.assertAlmostEqual(cm[0], 0.0, places=6)
         self.assertAlmostEqual(cm[3], 0.0, places=6)
         self.assertLess(cm[1], 0.0)
