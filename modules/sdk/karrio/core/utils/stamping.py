@@ -8,6 +8,7 @@ the stamped content — that responsibility belongs to the consumer.
 """
 
 import io
+import re
 import math
 import base64
 import typing
@@ -255,9 +256,8 @@ def _merge_overlay(
 
     if rotation:
         min_x, max_y = _rotated_corner_extents(width, height, rotation)
-        transformation = (
-            transformation.rotate(-rotation)
-            .translate(anchor[0] - min_x, anchor[1] - max_y)
+        transformation = transformation.rotate(-rotation).translate(
+            anchor[0] - min_x, anchor[1] - max_y
         )
     else:
         transformation = transformation.translate(x, y)
@@ -472,6 +472,49 @@ def _splice_zpl_field(stream: str, field: str) -> str:
     return f"{stream[:index]}{field}{stream[index:]}"
 
 
+# A caret command token: two leading uppercase/alphanumeric characters then the
+# parameters up to the next caret. ZPL field data cannot contain a raw caret
+# (carets are hex-escaped via ^FH), so an ^FD token's parameters are exactly
+# its field's text, spanning physical lines when the generator wrapped them.
+_ZPL_COMMAND_PATTERN = re.compile(r"\^([A-Z][A-Z0-9])([^^]*)")
+
+
+def _locate_zpl_field(stream: str, keyword: str) -> typing.Tuple[float, float]:
+    """Return the ``^FO`` origin (dots) of the first field whose text matches.
+
+    The scan walks command tokens rather than lines because carrier streams mix
+    inline and newline-separated styles and an ``^FD`` block's text may span
+    physical lines. Each ``^FO`` token updates the running origin with its first
+    two operands parsed as floats (generators emit float operands such as
+    ``^FO385,488.3333333333333``); the first ``^FD`` block whose text contains
+    ``keyword`` resolves to the nearest preceding ``^FO``. Zero matches raise
+    naming the keyword.
+    """
+    origin: typing.Optional[typing.Tuple[float, float]] = None
+
+    for command in _ZPL_COMMAND_PATTERN.finditer(stream):
+        name, parameters = command.group(1), command.group(2)
+
+        if name == "FO":
+            operands = parameters.split(",")
+            try:
+                origin = (float(operands[0]), float(operands[1]))
+            except (IndexError, ValueError):
+                continue
+        elif name == "FD" and keyword in parameters:
+            if origin is None:
+                raise ValueError(
+                    "The ZPL field matching the stamp keyword "
+                    f"'{keyword}' has no preceding ^FO origin"
+                )
+            return origin
+
+    raise ValueError(
+        f"No ZPL field matching the stamp keyword '{keyword}' was found "
+        "in the document"
+    )
+
+
 def stamp_zpl(document_b64: str, request: StampRequest) -> str:
     """Composite the request image onto a base64 ZPL stream, returning base64.
 
@@ -518,15 +561,12 @@ def stamp_zpl(document_b64: str, request: StampRequest) -> str:
     hexdata, total, bytes_per_row = _encode_grf(raster)
 
     if request.graphic_name:
-        download = (
-            f"~DY{request.graphic_name},A,G,{total},{bytes_per_row},{hexdata}"
-        )
+        download = f"~DY{request.graphic_name},A,G,{total},{bytes_per_row},{hexdata}"
         field = f"^FO{x_dots},{y_dots}^XG{request.graphic_name},1,1^FS"
         result = f"{download}\n{_splice_zpl_field(stream, field)}"
     else:
         field = (
-            f"^FO{x_dots},{y_dots}^GFA,{total},{total},"
-            f"{bytes_per_row},{hexdata}^FS"
+            f"^FO{x_dots},{y_dots}^GFA,{total},{total}," f"{bytes_per_row},{hexdata}^FS"
         )
         result = _splice_zpl_field(stream, field)
 
