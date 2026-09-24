@@ -7,6 +7,7 @@ import unittest
 import pypdf
 import PIL.Image
 import PIL.ImageDraw
+import PIL.ImageFont
 from pypdf.generic import (
     ArrayObject,
     BooleanObject,
@@ -148,6 +149,18 @@ def _grf_fields(zpl: str):
 def _solid_black_png_b64(width: int = 400, height: int = 140) -> str:
     """An opaque solid-black PNG: flattens to pure black at any density."""
     image = PIL.Image.new("RGBA", (width, height), (0, 0, 0, 255))
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return _b64(buffer.getvalue())
+
+
+def _faint_stroke_png_b64(width: int = 400, height: int = 140) -> str:
+    """A semi-transparent signature stroke: flattens to gray ~115 on white."""
+    image = PIL.Image.new("RGBA", (width, height), (255, 255, 255, 0))
+    draw = PIL.ImageDraw.Draw(image)
+    draw.line(
+        (20, height // 2, width - 20, height // 2), fill=(0, 0, 0, 140), width=3
+    )
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")
     return _b64(buffer.getvalue())
@@ -1469,7 +1482,7 @@ class TestZplKeywordLocator(unittest.TestCase):
         self.assertIn("no such field text", str(ctx.exception))
 
 
-class TestZplDitherContinuity(unittest.TestCase):
+class TestZplRasterContinuity(unittest.TestCase):
     def setUp(self):
         self.maxDiff = None
 
@@ -1482,7 +1495,7 @@ class TestZplDitherContinuity(unittest.TestCase):
 
         width, height = raster.size
         pixels = raster.load()
-        # A solid-black stamp must survive flatten + resize + Floyd-Steinberg as a
+        # A solid-black stamp must survive flatten + resample + binarization as a
         # fully connected black run: at least one row is black (value 0) across
         # its entire width. The oracle is the raster's own pixels, not the GRF
         # encoder, so an inverted set-bit convention or a lost stroke fails here.
@@ -1496,6 +1509,171 @@ class TestZplDitherContinuity(unittest.TestCase):
 
     def test_stroke_stays_connected_at_300_dpi(self):
         self._assert_connected_black_row(300)
+
+
+class TestZplDateRenderFidelity(unittest.TestCase):
+    """Render-contract oracles for the date stamp and the raster binarization.
+
+    Expected bounds derive from the spec'd contract — the glyph-height fraction
+    of the placement's short axis, rendered font metrics measured independently
+    in the test, and the geometry literals of ``_zpl_placement`` (480 x 160
+    dots at 203 dpi) — never from the production pipeline's output.
+    """
+
+    # The spec'd contract value, pinned as a literal so a constant change
+    # without a spec change fails here rather than tracking it silently.
+    DATE_FONT_HEIGHT_FRACTION = 0.30
+
+    DATE = "2026-09-22"
+
+    def setUp(self):
+        self.maxDiff = None
+
+    def _raster(self, date: str = DATE) -> "PIL.Image.Image":
+        request = stamping.StampRequest(
+            image=_signature_png_b64(), placement=_zpl_placement(), date=date
+        )
+
+        return stamping._build_zpl_raster(request)
+
+    @staticmethod
+    def _ink_band(raster, x_start: int, x_stop: int):
+        pixels = raster.load()
+        width, height = raster.size
+        rows = [
+            y
+            for y in range(height)
+            if any(pixels[x, y] == 0 for x in range(x_start, x_stop))
+        ]
+        cols = [
+            x
+            for x in range(x_start, x_stop)
+            if any(pixels[x, y] == 0 for y in range(height))
+        ]
+        return rows, cols
+
+    def test_date_glyphs_render_within_the_fraction_height(self):
+        # The date's ink band must sit strictly inside the strip's short axis and
+        # within the proportional glyph-height bound (em size plus antialiasing),
+        # not stretched edge-to-edge: 160 dots tall is the shipped defect.
+        raster = self._raster()
+        width, height = raster.size
+
+        rows, cols = self._ink_band(raster, 0, width // 2)
+
+        self.assertTrue(rows)
+        bound = int(round(height * self.DATE_FONT_HEIGHT_FRACTION)) + 2
+        band = rows[-1] - rows[0] + 1
+        self.assertLessEqual(band, bound)
+        self.assertGreater(rows[0], 0)
+        self.assertLess(rows[-1], height - 1)
+
+    def test_date_preserves_its_natural_aspect(self):
+        # The ink band's width/height ratio stays within tolerance of the ratio
+        # Pillow itself measures for the same string at the contract font size —
+        # an independent metric render, not a re-run of the pipeline. The shipped
+        # stretch (~3x horizontal, ~10x vertical) collapses the ratio far below.
+        raster = self._raster()
+        width, height = raster.size
+
+        font_size = int(round(height * self.DATE_FONT_HEIGHT_FRACTION))
+        ruler = PIL.ImageDraw.Draw(PIL.Image.new("RGBA", (1, 1)))
+        left, top, right, bottom = ruler.textbbox(
+            (0, 0), self.DATE, font=PIL.ImageFont.load_default(size=font_size)
+        )
+        natural = (right - left) / max(bottom - top, 1)
+
+        rows, cols = self._ink_band(raster, 0, width // 2)
+        observed = (cols[-1] - cols[0] + 1) / (rows[-1] - rows[0] + 1)
+
+        self.assertGreater(observed, natural * 0.7)
+        self.assertLess(observed, natural * 1.4)
+
+    def test_date_region_carries_no_isolated_speckle_pixels(self):
+        # Threshold binarization, not error diffusion: no single-pixel ink dots
+        # isolated from the glyph strokes. The shipped Floyd-Steinberg dither
+        # scatters them across the date half (152 on the CN22 geometry).
+        raster = self._raster()
+        width, height = raster.size
+        pixels = raster.load()
+
+        isolated = [
+            (x, y)
+            for y in range(height)
+            for x in range(0, width // 2)
+            if pixels[x, y] == 0
+            and all(
+                pixels[nx, ny] != 0
+                for nx in range(max(0, x - 1), min(width, x + 2))
+                for ny in range(max(0, y - 1), min(height, y + 2))
+                if (nx, ny) != (x, y)
+            )
+        ]
+
+        self.assertEqual(isolated, [])
+
+    def test_a_long_date_shrinks_to_fit_the_date_sub_rectangle(self):
+        # A caller-owned locale string wider than the date half at the contract
+        # height shrinks its glyphs to fit rather than distorting or running
+        # into the signature half; the shipped pipeline stretches to the full
+        # 160-dot height regardless of the string.
+        raster = self._raster(date="22 september 2026, 14:35:07")
+        width, height = raster.size
+
+        rows, cols = self._ink_band(raster, 0, width // 2)
+
+        self.assertTrue(rows)
+        bound = int(round(height * self.DATE_FONT_HEIGHT_FRACTION)) + 2
+        band = rows[-1] - rows[0] + 1
+        self.assertLessEqual(band, bound)
+        self.assertGreaterEqual(band, 6)
+        self.assertLessEqual(cols[-1], width // 2 - 1)
+
+    def test_faint_signature_strokes_survive_as_connected_ink(self):
+        # A semi-transparent stroke (flattens to gray ~115) survives binarization
+        # as one connected run spanning the stroke's length; under error
+        # diffusion the same stroke renders as scattered fragments.
+        request = stamping.StampRequest(
+            image=_faint_stroke_png_b64(), placement=_zpl_placement()
+        )
+
+        raster = stamping._build_zpl_raster(request)
+        width, height = raster.size
+        pixels = raster.load()
+
+        longest = 0
+        for y in range(height):
+            run = best = 0
+            for x in range(width):
+                run = run + 1 if pixels[x, y] == 0 else 0
+                best = max(best, run)
+            longest = max(longest, best)
+
+        self.assertGreaterEqual(longest, int(width * 0.8))
+
+    def test_pdf_date_overlay_scales_uniformly(self):
+        # The PDF date overlay's horizontal and vertical scale factors into the
+        # placement rectangle are equal, so the text carries no aspect
+        # distortion. The shipped pipeline scales the ink-trimmed date image
+        # (wide and short) into the sub-rectangle, yielding sx/sy far from 1.
+        upright = _overlay_cms(
+            stamping.stamp_pdf(
+                _sentinel_pdf_b64(),
+                stamping.StampRequest(
+                    image=_signature_png_b64(),
+                    placement=_placement(),
+                    date=self.DATE,
+                ),
+            )
+        )
+
+        self.assertEqual(len(upright), 2)
+        date_cm, signature_cm = upright
+        self.assertLess(date_cm[4], signature_cm[4])
+
+        ratio = date_cm[0] / date_cm[3]
+        self.assertGreater(ratio, 0.9)
+        self.assertLess(ratio, 1.1)
 
 
 class TestZplBackend(unittest.TestCase):
