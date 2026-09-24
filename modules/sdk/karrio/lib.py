@@ -41,6 +41,7 @@ identity = utils.identity
 typed = utils.typed
 sort_events = utils.sort_events_chronologically
 StampPlacement = stamping.StampPlacement
+StampSeed = stamping.StampSeed
 
 
 # -----------------------------------------------------------
@@ -1053,21 +1054,29 @@ def stamp_document(
     image: str = None,
     placement: stamping.StampPlacement = None,
     layer: str = "overlay",
+    carrier: str = None,
+    doc_type: str = None,
+    registry: stamping.RegistryLookup = None,
     date: str = None,
     graphic_name: str = None,
+    keyword: str = None,
 ) -> models.ShippingDocument:
     """Composite a base64 PNG onto a returned carrier document.
 
-    See ``karrio.core.utils.stamping.stamp_document`` for the per-format
-    behaviour.
+    See ``karrio.core.utils.stamping.stamp_document`` for the anchor
+    resolution chain and the per-format behaviour.
     """
     return stamping.stamp_document(
         document,
         image=image,
         placement=placement,
         layer=layer,
+        carrier=carrier,
+        doc_type=doc_type,
+        registry=registry,
         date=date,
         graphic_name=graphic_name,
+        keyword=keyword,
     )
 
 

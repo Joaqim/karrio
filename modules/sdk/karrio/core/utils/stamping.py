@@ -20,7 +20,10 @@ import PIL.ImageDraw
 import PIL.ImageFont
 
 import karrio.core.models as models
+import karrio.core.units as units
 import karrio.core.utils.helpers as helpers
+
+RegistryLookup = typing.Callable[[str], typing.Optional["StampPlacement"]]
 
 MM_PER_INCH: float = 25.4
 POINTS_PER_INCH: float = 72.0
@@ -57,6 +60,19 @@ OVERLAY_DPI: int = 300
 # Largest side, in pixels at OVERLAY_DPI, of the date raster the PDF backend
 # renders (about 1.7 m), bounding the allocation a single request can cause.
 MAX_DATE_RASTER_PX: int = 20000
+
+# Standard portrait page sizes in millimetres, keyed by the paper-variant
+# segment they contribute to a registry key. Detection compares a page's
+# mediabox against these on the orientation-independent (short, long) axes.
+STANDARD_PAPER_MM: typing.Dict[str, typing.Tuple[float, float]] = {
+    "A4": (210.0, 297.0),
+    "LETTER": (216.0, 279.0),
+}
+
+# Per-axis millimetre tolerance for matching a page to a standard size. A4 and
+# LETTER differ by 6 mm in width and 18 mm in height, so 3 mm separates them
+# unambiguously while absorbing sub-millimetre rendering rounding.
+PAPER_VARIANT_TOLERANCE_MM: float = 3.0
 
 
 @attr.s(auto_attribs=True)
@@ -101,6 +117,25 @@ class StampRequest:
     graphic_name: str = None
 
 
+@attr.s(auto_attribs=True)
+class StampSeed:
+    """Measured anchor data for one carrier document form.
+
+    ``placement`` is the PDF coordinate anchor. ``keyword`` and
+    ``keyword_placement`` are the ZPL anchor: the carrier form's keyword field,
+    and the strip geometry (extent, rotation, ``dpi``) whose ``x``/``y`` are
+    millimetre offsets from the located ``^FO`` origin. ``revision`` is a
+    monotonic integer bumped when a re-measurement supersedes an earlier seed,
+    so a carrier re-rendering a form is handled by shipping a higher revision
+    rather than silently moving an anchor consumers may rely on.
+    """
+
+    placement: StampPlacement = None
+    revision: int = 0
+    keyword: str = None
+    keyword_placement: StampPlacement = None
+
+
 def mm_to_points(value: float) -> float:
     """Convert a millimetre measure to PDF points (1 pt = 1/72 in)."""
     return value * POINTS_PER_INCH / MM_PER_INCH
@@ -114,6 +149,16 @@ def mm_to_dots(value: float, dpi: int) -> int:
     nearest dot: ``dots = round(mm / 25.4 * dpi)``.
     """
     return int(round(value / MM_PER_INCH * dpi))
+
+
+def dots_to_mm(value: float, dpi: int) -> float:
+    """Convert a printer-dot measure at ``dpi`` to millimetres.
+
+    The inverse of :func:`mm_to_dots`, kept float with no rounding: a located
+    ``^FO`` origin converts to millimetres for anchor arithmetic and only
+    rounds back to whole dots inside the ZPL backend.
+    """
+    return value * MM_PER_INCH / dpi
 
 
 def placement_to_pdf_rect(
@@ -532,6 +577,49 @@ def _splice_zpl_field(stream: str, field: str) -> str:
     return f"{stream[:index]}{field}{stream[index:]}"
 
 
+# A caret command token: two leading uppercase/alphanumeric characters then the
+# parameters up to the next caret. ZPL field data cannot contain a raw caret
+# (carets are hex-escaped via ^FH), so an ^FD token's parameters are exactly
+# its field's text, spanning physical lines when the generator wrapped them.
+_ZPL_COMMAND_PATTERN = re.compile(r"\^([A-Z][A-Z0-9])([^^]*)")
+
+
+def _locate_zpl_field(stream: str, keyword: str) -> typing.Tuple[float, float]:
+    """Return the ``^FO`` origin (dots) of the first field whose text matches.
+
+    The scan walks command tokens rather than lines because carrier streams mix
+    inline and newline-separated styles and an ``^FD`` block's text may span
+    physical lines. Each ``^FO`` token updates the running origin with its first
+    two operands parsed as floats (generators emit float operands such as
+    ``^FO385,488.3333333333333``); the first ``^FD`` block whose text contains
+    ``keyword`` resolves to the nearest preceding ``^FO``. Zero matches raise
+    naming the keyword.
+    """
+    origin: typing.Optional[typing.Tuple[float, float]] = None
+
+    for command in _ZPL_COMMAND_PATTERN.finditer(stream):
+        name, parameters = command.group(1), command.group(2)
+
+        if name == "FO":
+            operands = parameters.split(",")
+            try:
+                origin = (float(operands[0]), float(operands[1]))
+            except (IndexError, ValueError):
+                continue
+        elif name == "FD" and keyword in parameters:
+            if origin is None:
+                raise ValueError(
+                    "The ZPL field matching the stamp keyword "
+                    f"'{keyword}' has no preceding ^FO origin"
+                )
+            return origin
+
+    raise ValueError(
+        f"No ZPL field matching the stamp keyword '{keyword}' was found "
+        "in the document"
+    )
+
+
 def _zpl_raster_extent(placement: StampPlacement) -> typing.Tuple[int, int]:
     """Return the rotated raster's dot extent without building the raster.
 
@@ -635,23 +723,173 @@ _BACKENDS: typing.Dict[str, typing.Callable[[str, StampRequest], str]] = {
 }
 
 
+def _nearest_paper_variant(width_pt: float, height_pt: float) -> str:
+    """Return the standard paper variant nearest a mediabox, or ``*``.
+
+    The point dimensions are converted to millimetres and compared on the
+    orientation-independent (short, long) axes against ``STANDARD_PAPER_MM``,
+    so a landscape page matches the same variant as its portrait form. The
+    nearest standard within ``PAPER_VARIANT_TOLERANCE_MM`` on both axes wins;
+    a page matching no standard is inconclusive and yields ``*``.
+    """
+    short_mm, long_mm = sorted(
+        value * MM_PER_INCH / POINTS_PER_INCH for value in (width_pt, height_pt)
+    )
+
+    best: typing.Optional[typing.Tuple[str, float]] = None
+    for name, dimensions in STANDARD_PAPER_MM.items():
+        std_short, std_long = sorted(dimensions)
+        distance = max(abs(short_mm - std_short), abs(long_mm - std_long))
+        if distance <= PAPER_VARIANT_TOLERANCE_MM and (
+            best is None or distance < best[1]
+        ):
+            best = (name, distance)
+
+    return best[0] if best is not None else "*"
+
+
+def _detect_paper_variant(document_b64: str, document_format: str) -> str:
+    """Detect the paper-variant key segment from a document's first page.
+
+    Only the PDF backend carries a mediabox to measure; any other format, and
+    any first page that fails to parse, is inconclusive and yields ``*``
+    rather than raising, so paper detection never blocks a stamp.
+    """
+    if document_format != "PDF":
+        return "*"
+
+    try:
+        page = pypdf.PdfReader(helpers.to_buffer(document_b64)).pages[0]
+    except (pypdf.errors.PdfReadError, IndexError):
+        return "*"
+
+    return _nearest_paper_variant(
+        float(page.mediabox.width), float(page.mediabox.height)
+    )
+
+
+def _registry_key(
+    carrier: str,
+    doc_type: str,
+    document_format: str,
+    paper: str,
+) -> str:
+    """Compose the four-part registry lookup key.
+
+    The key is ``carrier/doc_type/format/paper`` with ``*`` for any missing
+    segment. The ``doc_type`` segment is normalized through
+    ``ShippingDocumentCategory`` so a category name and its value converge on
+    one segment; an unrecognized value such as a carrier's own form name
+    survives verbatim (``name_or_key`` returns the raw key) rather than
+    crashing the lookup.
+    """
+    category = units.ShippingDocumentCategory.map(doc_type).name_or_key
+    return "/".join(
+        str(part or "*") for part in (carrier, category, document_format, paper)
+    )
+
+
+def _resolve_keyword_placement(
+    document_b64: str, keyword: str, geometry: StampPlacement
+) -> StampPlacement:
+    """Return ``geometry`` with its position derived from the located field.
+
+    Only the position comes from the carrier form: the matched field's ``^FO``
+    origin converts from dots to millimetres at the geometry's ``dpi``, and the
+    geometry's own ``x``/``y`` (``None`` meaning 0) add as millimetre offsets.
+    Extent, rotation, and ``dpi`` stay geometry-owned, so the resolved
+    placement meets the same anchor and operand validation as a
+    consumer-supplied one.
+    """
+    stream = helpers.decode_bytes(base64.b64decode(document_b64))
+    origin_x, origin_y = _locate_zpl_field(stream, keyword)
+
+    return attr.evolve(
+        geometry,
+        x=dots_to_mm(origin_x, geometry.dpi) + (geometry.x or 0.0),
+        y=dots_to_mm(origin_y, geometry.dpi) + (geometry.y or 0.0),
+    )
+
+
+def _carrier_seeds(carrier: str) -> typing.Dict[str, StampSeed]:
+    """Return the ``stamp_seeds`` a carrier plugin declares in its metadata.
+
+    Seeds are keyed ``doc_type/FORMAT/paper``; the carrier segment comes from
+    the plugin id. Plugins load on demand, so a seed resolves without the
+    caller importing the carrier's connector first.
+    """
+    if carrier == "*":
+        return {}
+
+    # Deferred: karrio.references imports karrio.lib, which imports this module.
+    import karrio.references as references
+
+    metadata = references.collect_providers_data().get(carrier)
+
+    return (getattr(metadata, "stamp_seeds", None) or {}) if metadata else {}
+
+
+def _resolve_seed(key: str) -> typing.Optional[StampSeed]:
+    """Return the carrier seed for a composed key, paper segment relaxed.
+
+    The full four-part ``carrier/doc_type/format/paper`` key is tried first; on
+    a miss the paper segment is relaxed to ``*`` so a paper-agnostic seed still
+    resolves for a page whose paper variant was detected. A concrete paper seed
+    never leaks across variants, because the fallback relaxes only to ``*``
+    and never between two concrete variants.
+    """
+    carrier, doc_type, document_format, paper = key.split("/")
+    seeds = _carrier_seeds(carrier)
+    seed = seeds.get("/".join((doc_type, document_format, paper)))
+    if seed is None:
+        seed = seeds.get("/".join((doc_type, document_format, "*")))
+
+    return seed
+
+
+def _default_registry(key: str) -> typing.Optional[StampPlacement]:
+    """Resolve a carrier seed's placement for a composed registry key."""
+    seed = _resolve_seed(key)
+
+    return seed.placement if seed is not None else None
+
+
 def stamp_document(
     document: models.ShippingDocument,
     image: str = None,
     placement: StampPlacement = None,
     layer: str = "overlay",
+    carrier: str = None,
+    doc_type: str = None,
+    registry: RegistryLookup = None,
     date: str = None,
     graphic_name: str = None,
+    keyword: str = None,
 ) -> models.ShippingDocument:
     """Composite a base64 PNG onto a returned carrier document.
 
     The document format is detected from its bytes and dispatched to the
     matching backend; the returned document preserves the input's format and
-    shape, replacing only its ``base64`` content. A document whose format has
-    no active backend (including PNG) is rejected explicitly, as is an omitted
-    ``placement``. An optional pre-formatted ``date`` string is composited
-    preceding the signature within the placement, at the placement's
-    rotation.
+    shape, replacing only its ``base64`` content. The anchor resolves through
+    an explicit chain: a fully anchored ``placement`` (both ``x`` and ``y``
+    set) is used directly with no keyword or registry consultation, and a
+    ``keyword`` supplied alongside one raises rather than silently ignoring
+    either of the two contradictory anchors. A keyword with a geometry-only
+    placement (``x``/``y`` left ``None``) takes its position from the ZPL
+    field whose text contains the keyword and its extent and rotation from the
+    placement; a keyword with no placement takes its geometry from the
+    registry for the document's key — the injected ``registry`` lookup when
+    one is supplied, else the carrier plugin's seed — and a miss raises naming
+    what is missing. With neither placement nor keyword the registry is
+    consulted: a PDF key resolves the seed's coordinate placement, a ZPL key
+    whose seed carries a keyword resolves implicitly from the carrier form's
+    own field, and a miss raises an explicit error naming the missing key
+    rather than guessing an anchor. Keyword anchoring locates ZPL field
+    origins only: a keyword supplied against another format is rejected
+    explicitly. A document whose format has no active backend (including PNG)
+    is rejected explicitly. An optional pre-formatted ``date`` string is
+    composited preceding the signature within the placement, at the
+    placement's rotation.
 
     The utility composites pixels only: it stores nothing and makes no
     assertion about the legal validity or signature semantics of the result.
@@ -668,15 +906,73 @@ def stamp_document(
             f"'{document_format}' format; the document cannot be stamped"
         )
 
-    if placement is None:
+    if keyword and document_format != "ZPL":
         raise ValueError(
-            "No stamp placement was supplied; a StampPlacement anchoring the "
-            "image is required"
+            f"Keyword anchoring is unsupported for the '{document_format}' "
+            "format; a stamp keyword can only locate a field in a ZPL document"
         )
+
+    fully_anchored = (
+        placement is not None and placement.x is not None and placement.y is not None
+    )
+
+    if fully_anchored and keyword:
+        raise ValueError(
+            "A stamp keyword cannot be combined with a fully anchored "
+            "placement (both x and y set); supply one anchor, not two"
+        )
+
+    if fully_anchored:
+        resolved = placement
+    elif keyword:
+        geometry = placement
+        if geometry is None:
+            key = _registry_key(
+                carrier,
+                doc_type,
+                document_format,
+                _detect_paper_variant(document.base64, document_format),
+            )
+            if registry is None:
+                seed = _resolve_seed(key)
+                geometry = seed.keyword_placement if seed is not None else None
+            else:
+                # A supplied registry replaces the carrier seeds wherever they
+                # would be consulted, so a custom lookup never silently falls
+                # back to a plugin-declared anchor.
+                geometry = registry(key)
+            if geometry is None:
+                raise ValueError(
+                    "A stamp keyword was supplied without a placement and no "
+                    f"registry seed with keyword geometry resolves for key "
+                    f"'{key}'"
+                )
+        resolved = _resolve_keyword_placement(document.base64, keyword, geometry)
+    else:
+        paper = _detect_paper_variant(document.base64, document_format)
+        key = _registry_key(carrier, doc_type, document_format, paper)
+        resolved = None
+        if registry is None:
+            seed = _resolve_seed(key)
+            if seed is not None:
+                if document_format == "ZPL":
+                    if seed.keyword and seed.keyword_placement is not None:
+                        resolved = _resolve_keyword_placement(
+                            document.base64, seed.keyword, seed.keyword_placement
+                        )
+                else:
+                    resolved = seed.placement
+        else:
+            resolved = registry(key)
+        if resolved is None:
+            raise ValueError(
+                "No stamp placement was supplied and no registry seed "
+                f"resolves for key '{key}'"
+            )
 
     request = StampRequest(
         image=image,
-        placement=placement,
+        placement=resolved,
         layer=layer,
         date=date,
         graphic_name=graphic_name,

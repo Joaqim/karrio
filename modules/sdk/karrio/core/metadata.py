@@ -52,6 +52,11 @@ class PluginMetadata:
     service_levels: Any = None
     connection_configs: Any = None
 
+    # Document-stamping anchors for this carrier's forms, keyed
+    # "doc_type/FORMAT/paper" with StampSeed values (see
+    # karrio.core.utils.stamping); resolved when a stamp omits its placement.
+    stamp_seeds: Optional[Dict[str, Any]] = None
+
     # Extra metadata
     website: Optional[str] = None
     documentation: Optional[str] = None

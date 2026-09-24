@@ -10,6 +10,8 @@ import io
 import os
 import re
 import base64
+import contextlib
+from unittest import mock
 
 import pypdf
 import PIL.Image
@@ -381,3 +383,97 @@ def faint_stroke_png_b64(width: int = 400, height: int = 140) -> str:
     draw = PIL.ImageDraw.Draw(image)
     draw.line((20, height // 2, width - 20, height // 2), fill=(0, 0, 0, 140), width=3)
     return _png_b64(image)
+
+
+# The keyword the example form prints beside its signature field.
+KEYWORD = "Sender signature"
+
+# Keyword streams in the two command styles carrier generators emit: the inline
+# style runs whole fields on one line; the newline-separated style puts one
+# command per line and emits a field's ^FB block after its ^FS.
+INLINE_KEYWORD_STREAM = "^XA^FO10,20^FDSender signature^FS^XZ"
+
+LINE_KEYWORD_STREAM = "\n".join(
+    [
+        "^XA",
+        "^FO160,240",
+        "^FDTotal Weight (in kg)^FS",
+        "^FB620,1, 0,L",
+        "^FO20,35",
+        "^FDSender signature^FS",
+        "^FB680,1, 0,L",
+        "^FO665,35",
+        "^FDExample Post^FS",
+        "^XZ",
+    ]
+)
+
+FLOAT_FO_STREAM = "^FO385,488.3333333333333^FDTotal Weight (in kg)^FS"
+
+MULTILINE_FD_STREAM = "\n".join(
+    [
+        "^FO25,35",
+        "^FDI, the undersigned, certify that the particulars given ",
+        "  in this declaration are correct^FS",
+    ]
+)
+
+TWICE_KEYWORD_STREAM = "\n".join(
+    [
+        "^XA",
+        "^FO20,35",
+        "^FDSender signature^FS",
+        "^FO665,35",
+        "^FDSender signature^FS",
+        "^XZ",
+    ]
+)
+
+# A synthetic carrier seed measured against the generated forms: a vertical
+# 7.62 x 49.11 mm strip at page (53.34, 91.44) mm on the A4 PDF, and the same
+# strip as a keyword offset from the ZPL form's ^FO20,35 signature field,
+# which resolves to ^FO7,303 with a 61 x 392-dot rotated raster.
+EXAMPLE_SEED = stamping.StampSeed(
+    placement=stamping.StampPlacement(
+        x=53.34, y=91.44, width=49.11, height=7.62, rotation=90
+    ),
+    revision=1,
+    keyword=KEYWORD,
+    keyword_placement=stamping.StampPlacement(
+        x=-1.673, y=33.529, width=49.1, height=7.6, rotation=90, dpi=203
+    ),
+)
+
+
+def seeded_provider(stamp_seeds: dict, carrier: str = "acme"):
+    """Plugin metadata for a carrier declaring ``stamp_seeds``."""
+    import karrio.core.metadata as metadata
+
+    return metadata.PluginMetadata(id=carrier, label=carrier, stamp_seeds=stamp_seeds)
+
+
+@contextlib.contextmanager
+def providers(*plugins):
+    """Serve ``plugins`` as the loaded carrier providers, keyed by id."""
+    with mock.patch(
+        "karrio.references.collect_providers_data",
+        return_value={plugin.id: plugin for plugin in plugins},
+    ) as collect:
+        yield collect
+
+
+def example_providers():
+    return providers(
+        seeded_provider(
+            {
+                "customs_declaration/PDF/A4": EXAMPLE_SEED,
+                "customs_declaration/ZPL/*": EXAMPLE_SEED,
+            }
+        )
+    )
+
+
+def keyword_zpl_document(stream: str) -> models.ShippingDocument:
+    return models.ShippingDocument(
+        category="customs_declaration", format="ZPL", base64=zpl_doc_b64(stream)
+    )
