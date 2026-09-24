@@ -4,7 +4,7 @@
 - [ ] 1.2 Rewrite `TestDefaultRegistry.test_cn22_seed_resolves_to_the_documented_anchor` to assert the probe literals (53.34, 91.44, 49.11, 7.62, rotation 90) with the rendered-extent arithmetic spelled out independently of the seed object, and verify it fails red against the shipped revision-2 seed
 - [ ] 1.3 Rewrite `TestCn22Seed.test_seed_composites_at_the_measured_anchor` to assert both overlays' `cm` translations against values hand-computed from the probe numbers and the A4 page height (never read from the seed), keeping the paint-order and clockwise-linear-part assertions, and verify it fails red
 - [ ] 1.4 Rewrite the fixtures suite's `_CN22_BAND_PT` band test to assert the single overlay's translation against the probe-derived anchor, and decouple `test_real_signature_preserves_the_text_layer` onto a neutral valid placement; verify the band test fails red
-- [ ] 1.5 Correct the appendix B follow-up note in `PRDs/KEYWORD_ANCHORED_STAMPING.md` to the `rotation=90` pre-rotation 49.11 x 7.62 encoding, pointing at the new PRD
+- [x] 1.5 Correct the appendix B follow-up note in `PRDs/KEYWORD_ANCHORED_STAMPING.md` to the `rotation=90` pre-rotation 49.11 x 7.62 encoding, pointing at the new PRD
 
 ## 2. Seed correction
 
