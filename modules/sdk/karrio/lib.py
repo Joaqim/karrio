@@ -11,6 +11,7 @@ import karrio.core.models as models
 import karrio.core.errors as exceptions
 import karrio.core.utils.stamping as stamping
 from karrio.core.utils.logger import logger
+
 T = typing.TypeVar("T")
 S = typing.TypeVar("S")
 mutate_xml_object_type = utils.mutate_xml_object_type
@@ -254,7 +255,7 @@ def format_decimal(
         # Convert to float first
         float_value = float(value)
         # Round to specified decimal places
-        quant = 1.0 / (10 ** decimal_places)
+        quant = 1.0 / (10**decimal_places)
         return utils.NF.decimal(float_value, quant)
     except (ValueError, TypeError):
         return None
@@ -504,7 +505,11 @@ def to_dict_safe(response: typing.Union[str, bytes, None]) -> dict:
             return result
         return {"data": result}
     except Exception as e:
-        return {"errors": [{"message": f"Failed to parse response: {e}", "code": "parsing_error"}]}
+        return {
+            "errors": [
+                {"message": f"Failed to parse response: {e}", "code": "parsing_error"}
+            ]
+        }
 
 
 def to_json(
@@ -1059,6 +1064,7 @@ def stamp_document(
     registry: stamping.RegistryLookup = None,
     date: str = None,
     graphic_name: str = None,
+    keyword: str = None,
 ) -> models.ShippingDocument:
     """Composite a base64 PNG onto a returned carrier document.
 
@@ -1070,7 +1076,9 @@ def stamp_document(
     rejected. An optional pre-formatted ``date`` string is composited preceding
     the signature at the placement's rotation. An optional ``graphic_name`` opts
     the ZPL backend into the ``~DY`` / ``^XG`` send-once cache and is ignored by
-    the PDF backend. The utility composites pixels only and asserts nothing about
+    the PDF backend. An optional ``keyword`` anchors the placement at the
+    carrier ZPL field whose rendered text contains it (ZPL-only; rejected for
+    other formats). The utility composites pixels only and asserts nothing about
     the validity of the stamped content.
     """
     return stamping.stamp_document(
@@ -1083,6 +1091,7 @@ def stamp_document(
         registry=registry,
         date=date,
         graphic_name=graphic_name,
+        keyword=keyword,
     )
 
 

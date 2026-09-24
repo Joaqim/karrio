@@ -92,6 +92,9 @@ class StampRequest:
     ZPL backend into the send-once-per-printer cache: when set, the raster is
     downloaded once as a stored ``~DY`` object and recalled per label with
     ``^XG`` instead of inlining ``^GFA``; it is ignored by the PDF backend.
+    ``keyword`` anchors the placement at the carrier ZPL field whose rendered
+    text contains it; it is ZPL-only and is consumed entirely by placement
+    resolution, so the compositing backends never see it.
     """
 
     image: str = None
@@ -101,6 +104,7 @@ class StampRequest:
     layer: str = "overlay"
     date: str = None
     graphic_name: str = None
+    keyword: str = None
 
 
 def mm_to_points(value: float) -> float:
@@ -116,6 +120,16 @@ def mm_to_dots(value: float, dpi: int) -> int:
     nearest dot: ``dots = round(mm / 25.4 * dpi)``.
     """
     return int(round(value / MM_PER_INCH * dpi))
+
+
+def dots_to_mm(value: float, dpi: int) -> float:
+    """Convert a printer-dot measure at ``dpi`` to millimetres.
+
+    The inverse of :func:`mm_to_dots`, kept float with no rounding: a located
+    ``^FO`` origin converts to millimetres for anchor arithmetic and only
+    rounds back to whole dots inside the ZPL backend.
+    """
+    return value * MM_PER_INCH / dpi
 
 
 def placement_to_pdf_rect(
@@ -647,18 +661,46 @@ def _registry_key(
     )
 
 
+def _resolve_keyword_placement(
+    document_b64: str, keyword: str, geometry: StampPlacement
+) -> StampPlacement:
+    """Return ``geometry`` with its position derived from the located field.
+
+    Only the position comes from the carrier form: the matched field's ``^FO``
+    origin converts from dots to millimetres at the geometry's ``dpi``, and the
+    geometry's own ``x``/``y`` (``None`` meaning 0) add as millimetre offsets.
+    Extent, rotation, and ``dpi`` stay geometry-owned, so the resolved
+    placement meets the same anchor and operand validation as a
+    consumer-supplied one.
+    """
+    stream = helpers.decode_bytes(base64.b64decode(document_b64))
+    origin_x, origin_y = _locate_zpl_field(stream, keyword)
+
+    return attr.evolve(
+        geometry,
+        x=dots_to_mm(origin_x, geometry.dpi) + (geometry.x or 0.0),
+        y=dots_to_mm(origin_y, geometry.dpi) + (geometry.y or 0.0),
+    )
+
+
 @attr.s(auto_attribs=True)
 class StampSeed:
-    """A measured registry seed: a placement plus a supersession revision.
+    """A measured registry seed: anchor data plus a supersession revision.
 
-    ``revision`` is a monotonic integer that a later re-measurement bumps to
-    supersede an earlier seed, so a carrier re-rendering a form (which can
-    drift a karrio-supplied anchor) is handled by shipping a higher revision
-    rather than silently changing an anchor consumers may already rely on.
+    ``placement`` is the PDF coordinate anchor. ``keyword`` and
+    ``keyword_placement`` are the ZPL currency: the carrier form's keyword
+    field, and the strip geometry (extent, rotation, ``dpi``) whose ``x``/``y``
+    are millimetre offsets from the located ``^FO`` origin. ``revision`` is a
+    monotonic integer that a later re-measurement bumps to supersede an
+    earlier seed, so a carrier re-rendering a form (which can drift a
+    karrio-supplied anchor) is handled by shipping a higher revision rather
+    than silently changing an anchor consumers may already rely on.
     """
 
     placement: StampPlacement = None
     revision: int = 0
+    keyword: str = None
+    keyword_placement: StampPlacement = None
 
 
 # Measured PostNord CN22 anchor: a ~7.6 mm-wide x ~49 mm-tall vertical strip
@@ -682,8 +724,8 @@ _SEED_REGISTRY: typing.Dict[str, StampSeed] = {
 }
 
 
-def _default_registry(key: str) -> typing.Optional[StampPlacement]:
-    """Resolve a measured seed's placement for a composed registry key.
+def _resolve_seed(key: str) -> typing.Optional[StampSeed]:
+    """Return the registry seed for a composed key, paper segment relaxed.
 
     The full four-part ``carrier/doc_type/format/paper`` key is tried first; on
     a miss the paper segment is relaxed to ``*`` so a paper-agnostic seed still
@@ -695,6 +737,13 @@ def _default_registry(key: str) -> typing.Optional[StampPlacement]:
     if seed is None:
         carrier, doc_type, document_format, _ = key.split("/")
         seed = _SEED_REGISTRY.get("/".join((carrier, doc_type, document_format, "*")))
+
+    return seed
+
+
+def _default_registry(key: str) -> typing.Optional[StampPlacement]:
+    """Resolve a measured seed's placement for a composed registry key."""
+    seed = _resolve_seed(key)
 
     return seed.placement if seed is not None else None
 
@@ -709,15 +758,25 @@ def stamp_document(
     registry: RegistryLookup = None,
     date: str = None,
     graphic_name: str = None,
+    keyword: str = None,
 ) -> models.ShippingDocument:
     """Composite a base64 PNG onto a returned carrier document.
 
     The document format is detected from its bytes and dispatched to the
     matching backend; the returned document preserves the input's format and
-    shape, replacing only its ``base64`` content. A consumer-supplied
-    ``placement`` is used directly with no registry lookup. When ``placement``
-    is omitted, the registry hook is consulted and a miss raises an explicit
-    error naming the missing key rather than guessing an anchor. A document
+    shape, replacing only its ``base64`` content. The anchor resolves through
+    an explicit chain: a fully anchored ``placement`` (both ``x`` and ``y``
+    set) is used directly with no keyword or registry consultation, and a
+    ``keyword`` supplied alongside one raises rather than silently ignoring
+    either of the two contradictory anchors. A keyword with a geometry-only
+    placement (``x``/``y`` left ``None``) takes its position from the ZPL
+    field whose text contains the keyword and its extent and rotation from the
+    placement; a keyword with no placement takes its geometry from the
+    registry seed for the document's key, and a miss raises naming what is
+    missing. With neither placement nor keyword the registry hook is consulted
+    and a miss raises an explicit error naming the missing key rather than
+    guessing an anchor. Keyword anchoring locates ZPL field origins only: a
+    keyword supplied against another format is rejected explicitly. A document
     whose format has no active backend (including PNG) is rejected explicitly.
     An optional pre-formatted ``date`` string is composited preceding the
     signature within the placement, at the placement's rotation.
@@ -738,8 +797,43 @@ def stamp_document(
             f"'{document_format}' format; the document cannot be stamped"
         )
 
-    resolved = placement
-    if resolved is None:
+    if keyword and document_format != "ZPL":
+        raise ValueError(
+            f"Keyword anchoring is unsupported for the '{document_format}' "
+            "format; a stamp keyword can only locate a field in a ZPL document"
+        )
+
+    fully_anchored = (
+        placement is not None and placement.x is not None and placement.y is not None
+    )
+
+    if fully_anchored and keyword:
+        raise ValueError(
+            "A stamp keyword cannot be combined with a fully anchored "
+            "placement (both x and y set); supply one anchor, not two"
+        )
+
+    if fully_anchored:
+        resolved = placement
+    elif keyword:
+        geometry = placement
+        if geometry is None:
+            key = _registry_key(
+                carrier,
+                doc_type,
+                document_format,
+                _detect_paper_variant(document.base64, document_format),
+            )
+            seed = _resolve_seed(key)
+            geometry = seed.keyword_placement if seed is not None else None
+            if geometry is None:
+                raise ValueError(
+                    "A stamp keyword was supplied without a placement and no "
+                    f"registry seed with keyword geometry resolves for key "
+                    f"'{key}'"
+                )
+        resolved = _resolve_keyword_placement(document.base64, keyword, geometry)
+    else:
         paper = _detect_paper_variant(document.base64, document_format)
         key = _registry_key(carrier, doc_type, document_format, paper)
         resolved = lookup(key)
@@ -757,6 +851,7 @@ def stamp_document(
         layer=layer,
         date=date,
         graphic_name=graphic_name,
+        keyword=keyword,
     )
     stamped = _BACKENDS[document_format](document.base64, request)
 
