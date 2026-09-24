@@ -156,6 +156,18 @@ gateway_letters_z11 = karrio.gateway["postnord"].create(
     )
 )
 
+# Gateway with a non-default physical label size (labelType=small query param).
+gateway_small_label = karrio.gateway["postnord"].create(
+    dict(_settings, config=dict(label_size="small"))
+)
+
+# Gateway whose per-connection default label file format is ZPL: a request with
+# payload.label_type unset falls through to this connection default and routes
+# to the ZPL endpoint.
+gateway_zpl_label = karrio.gateway["postnord"].create(
+    dict(_settings, config=dict(label_type="ZPL"))
+)
+
 # Language-config gateway: connection-config language sets booking locale.
 gateway_with_language = karrio.gateway["postnord"].create(
     dict(_settings, config=dict(language="da"))
