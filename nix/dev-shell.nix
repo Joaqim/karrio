@@ -24,7 +24,7 @@ let
     });
   };
 
-  python = pkgs.python3.override {
+  python = pkgs.python312.override {
     self = python;
     packageOverrides = lib.composeManyExtensions (
       [ (import ./python-overlay.nix) ] ++ lib.optional withPyPDF2 allowPyPDF2
