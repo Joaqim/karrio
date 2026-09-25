@@ -194,6 +194,76 @@ class TestDHLFreightShipment(unittest.TestCase):
         document = serialized["customsInformation"]["customsDocuments"][0]
         self.assertNotIn("transportMovement", document)
 
+    def test_create_shipment_request_customs_without_service_option(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload109CustomsNO)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        self.assertFalse(
+            set(serialized.get("additionalServices") or {}) & CustomsServiceKeys
+        )
+
+    def test_create_shipment_request_customs_services(self):
+        cases = [
+            (
+                {"dhl_freight_sweden_customs_handling_standard": True},
+                {"customsHandlingStandard": True},
+            ),
+            (
+                {"dhl_freight_sweden_customs_handling_full_service": True},
+                {"customsHandlingFullService": True},
+            ),
+            (
+                {"dhl_freight_sweden_customs_own_declaration": "26SE000000000000A1"},
+                {"customsCustomersOwnDeclaration": {"customsId": "26SE000000000000A1"}},
+            ),
+            (
+                {"dhl_freight_sweden_customs_joint_declaration": "SFID-0001"},
+                {"customsJointDeclaration": {"sfid": "SFID-0001"}},
+            ),
+        ]
+
+        for options, expected in cases:
+            with self.subTest(options=options):
+                request = gateway.mapper.create_shipment_request(
+                    models.ShipmentRequest(
+                        **{**ShipmentPayload109CustomsNO, "options": options}
+                    )
+                )
+                serialized = lib.to_dict(request.serialize())
+
+                self.assertEqual(serialized["additionalServices"], expected)
+
+    def test_create_shipment_request_customs_services_unset_flags(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(
+                **{
+                    **ShipmentPayload109CustomsNO,
+                    "options": {
+                        "dhl_freight_sweden_customs_handling_standard": False,
+                        "dhl_freight_sweden_customs_handling_full_service": False,
+                    },
+                }
+            )
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        self.assertFalse(
+            set(serialized.get("additionalServices") or {}) & CustomsServiceKeys
+        )
+
+    def test_create_shipment_request_voec_number_selects_voec_service(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload109CustomsVOEC)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        self.assertEqual(
+            serialized["additionalServices"],
+            {"voecSupplyVAT": {"vatId": "VOEC2012345"}},
+        )
+
     def test_create_shipment_request_payer_from_customs_incoterm(self):
         request = gateway.mapper.create_shipment_request(
             models.ShipmentRequest(**ShipmentPayload202Customs)
@@ -902,6 +972,22 @@ CustomsDocumentNO = {
     "invoiceCurrency": "SEK",
     "invoiceAmount": 2500.0,
     "eori": "SE5560000001",
+}
+
+ShipmentPayload109CustomsVOEC = {
+    **ShipmentPayload109CustomsNO,
+    "customs": {
+        **CustomsNO,
+        "options": {**CustomsNO["options"], "voec_number": "VOEC2012345"},
+    },
+}
+
+CustomsServiceKeys = {
+    "customsHandlingStandard",
+    "customsHandlingFullService",
+    "customsCustomersOwnDeclaration",
+    "customsJointDeclaration",
+    "voecSupplyVAT",
 }
 
 ShipmentPayload202InvoiceNotCommercial = {
