@@ -66,7 +66,7 @@ The document type applies `commercial_invoice` literally, replacing `commercial_
 ### Callers may declare customs maximally
 
 Callers may attach customs data and customs options to every shipment; the connectors own the known criteria for when customs is not required and drop it with a warning rather than failing (user decision 2026-09-25).
-DHL Freight Sweden applies this within the EU VAT area; applying the same principle to PostNord is a follow-up.
+Both connectors apply this within the EU VAT area with the same definition, implemented connector-locally in each; a shared SDK helper is a candidate for the shipment-advisors follow-up or an upstream `EUCountry` fix.
 
 ## Risks / Trade-offs
 
