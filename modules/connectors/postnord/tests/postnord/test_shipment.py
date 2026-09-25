@@ -478,6 +478,7 @@ class TestPostNordShipment(unittest.TestCase):
         # line's (SEK), not the second line's (EUR).
         payload = {
             **ShipmentPayload,
+            "service": "postnord_tracked_letter",
             "customs": {
                 "content_type": "merchandise",
                 "commodities": [
@@ -512,6 +513,7 @@ class TestPostNordShipment(unittest.TestCase):
         # entirely rather than emitted as unitless/amountless structs.
         payload = {
             **ShipmentPayload,
+            "service": "postnord_tracked_letter",
             "customs": {
                 "content_type": "merchandise",
                 "commodities": [
@@ -875,7 +877,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
 
     def test_parse_shipment_response_printout_composition(self):
         # Non-zero printoutComposition kinds are carried into meta as the
-        # composed document kinds. The parcel service keeps the by-id fetch
+        # composed document kinds. A tracked letter keeps the by-id fetch
         # gated off, so exactly one HTTP call is made.
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
             mock.return_value = CustomsBookingResponse
@@ -1296,6 +1298,184 @@ class TestPostNordCustomsDocument(unittest.TestCase):
         self.assertEqual(details.docs.extra_documents, [])
 
 
+class TestPostNordCustomsInvoice(unittest.TestCase):
+    def setUp(self):
+        self.maxDiff = None
+
+    def _invoice(self, payload: dict) -> dict:
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        return lib.to_dict(request.serialize())["shipment"][0]["customsInvoice"]
+
+    def _field_errors(self, payload: dict) -> dict:
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            shipment, messages = (
+                karrio.Shipment.create(models.ShipmentRequest(**payload))
+                .from_(gateway)
+                .parse()
+            )
+            mock.assert_not_called()
+        self.assertIsNone(shipment)
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0].code, "SHIPPING_SDK_FIELD_ERROR")
+        return messages[0].details
+
+    def test_create_shipment_customs_invoice_request(self):
+        # A parcel product with customs data carries customsInvoice built
+        # from the unified payload, and no CN22 or CN23 branch.
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**CustomsInvoiceShipmentPayload)
+        )
+        self.assertEqual(
+            lib.to_dict(request.serialize()), CustomsInvoiceShipmentRequest
+        )
+
+    def test_create_shipment_customs_invoice_for_parcel_products(self):
+        for service in [
+            "postnord_mypack_home",
+            "postnord_mypack_collect",
+            "postnord_parcel",
+            "postnord_pallet",
+        ]:
+            with self.subTest(service=service):
+                request = gateway.mapper.create_shipment_request(
+                    models.ShipmentRequest(
+                        **{**CustomsInvoiceShipmentPayload, "service": service}
+                    )
+                )
+                shipment = lib.to_dict(request.serialize())["shipment"][0]
+                self.assertIn("customsInvoice", shipment)
+                self.assertNotIn("customsDeclarationCN22", shipment)
+                self.assertNotIn("customsDeclarationCN23", shipment)
+
+    def test_create_shipment_customs_invoice_keeps_leading_zero_postal_code(self):
+        invoice = self._invoice(CustomsInvoiceShipmentPayload)
+        self.assertEqual(invoice["buyer"]["postalCode"], "0154")
+
+    def test_create_shipment_customs_invoice_number_falls_back_to_reference(self):
+        payload = {
+            **CustomsInvoiceShipmentPayload,
+            "customs": {
+                key: value
+                for key, value in CustomsInvoiceShipmentPayload["customs"].items()
+                if key != "invoice"
+            },
+        }
+        invoice = self._invoice(payload)
+        self.assertEqual(invoice["invoice"]["invoiceNo"], "ORDER-7788")
+
+    def test_create_shipment_customs_invoice_without_number_or_reference(self):
+        payload = {
+            key: value
+            for key, value in CustomsInvoiceShipmentPayload.items()
+            if key != "reference"
+        }
+        payload["customs"] = {
+            key: value
+            for key, value in CustomsInvoiceShipmentPayload["customs"].items()
+            if key != "invoice"
+        }
+        self.assertEqual(
+            self._field_errors(payload),
+            {
+                "customs.invoice": (
+                    "invoice number is required for a PostNord customs invoice; "
+                    "send customs.invoice or a shipment reference"
+                )
+            },
+        )
+
+    def test_create_shipment_customs_invoice_without_seller_vat_number(self):
+        payload = {
+            **CustomsInvoiceShipmentPayload,
+            "shipper": {
+                key: value
+                for key, value in CustomsInvoiceShipmentPayload["shipper"].items()
+                if key != "federal_tax_id"
+            },
+        }
+        self.assertEqual(
+            self._field_errors(payload),
+            {
+                "shipper.federal_tax_id": (
+                    "shipper VAT number is required for a PostNord customs invoice"
+                )
+            },
+        )
+
+    def test_create_shipment_customs_invoice_without_party_contacts(self):
+        # Contact name falls back to the company name, so only a party with
+        # neither person nor company name lacks one.
+        payload = {
+            **CustomsInvoiceShipmentPayload,
+            "shipper": {
+                **CustomsInvoiceShipmentPayload["shipper"],
+                "person_name": None,
+                "company_name": None,
+            },
+            "recipient": {
+                **CustomsInvoiceShipmentPayload["recipient"],
+                "phone_number": None,
+            },
+        }
+        self.assertEqual(
+            self._field_errors(payload),
+            {
+                "shipper.person_name": (
+                    "contact name is required for a PostNord customs invoice"
+                ),
+                "recipient.phone_number": (
+                    "contact phone number is required for a PostNord customs invoice"
+                ),
+            },
+        )
+
+    def test_create_shipment_customs_invoice_without_line_tariff_or_origin(self):
+        commodities = CustomsInvoiceShipmentPayload["customs"]["commodities"]
+        payload = {
+            **CustomsInvoiceShipmentPayload,
+            "customs": {
+                **CustomsInvoiceShipmentPayload["customs"],
+                "commodities": [
+                    {k: v for k, v in commodities[0].items() if k != "hs_code"},
+                    {k: v for k, v in commodities[1].items() if k != "origin_country"},
+                ],
+            },
+        }
+        self.assertEqual(
+            self._field_errors(payload),
+            {
+                "customs.commodities[0].hs_code": (
+                    "HS tariff number is required for a PostNord customs invoice line"
+                ),
+                "customs.commodities[1].origin_country": (
+                    "country of origin is required for a PostNord customs invoice line"
+                ),
+            },
+        )
+
+    def test_create_shipment_customs_invoice_commercial_type(self):
+        invoice = self._invoice(CustomsInvoiceShipmentPayload)
+        self.assertEqual(invoice["type"], "COMMERCIAL")
+
+    def test_create_shipment_customs_invoice_proforma_type(self):
+        # The flag applies literally: false and omitted both declare a
+        # proforma invoice, even for merchandise.
+        customs = CustomsInvoiceShipmentPayload["customs"]
+        omitted = {k: v for k, v in customs.items() if k != "commercial_invoice"}
+        for label, customs_payload in [
+            ("false", {**customs, "commercial_invoice": False}),
+            ("omitted", omitted),
+        ]:
+            with self.subTest(commercial_invoice=label):
+                self.assertEqual(customs_payload["content_type"], "merchandise")
+                invoice = self._invoice(
+                    {**CustomsInvoiceShipmentPayload, "customs": customs_payload}
+                )
+                self.assertEqual(invoice["type"], "PROFORMA")
+
+
 class TestPostNordProductGroups(unittest.TestCase):
     def test_letter_services_pinned(self):
         self.assertEqual(
@@ -1460,8 +1640,11 @@ ShipmentRequest = {
     ],
 }
 
+# CN22 is sent for letters and International Parcel; a tracked letter
+# exercises the CN22 branch without triggering the export-letter fetch.
 CustomsShipmentPayload = {
     **ShipmentPayload,
+    "service": "postnord_tracked_letter",
     "customs": {
         "content_type": "merchandise",
         "commodities": [
@@ -1497,6 +1680,10 @@ CustomsShipmentRequest = {
     "shipment": [
         {
             **ShipmentRequest["shipment"][0],
+            "service": {
+                "basicServiceCode": "34",
+                "additionalServiceCode": ["A5"],
+            },
             "customsDeclarationCN22": {
                 "countryOfOrigin": "SE",
                 "categoryOfItem": {"categoryType": ["SALE OF GOODS"]},
@@ -1560,6 +1747,7 @@ CustomsRegistrationShipmentRequest = {
 def _customs_payload(lines: int) -> dict:
     return {
         **ShipmentPayload,
+        "service": "postnord_tracked_letter",
         "customs": {
             "content_type": "merchandise",
             "commodities": [
@@ -1584,6 +1772,146 @@ ExportLetterCustomsPayload = {
     "recipient": {**ShipmentPayload["recipient"], "country_code": "US"},
     "service": "postnord_export_letter",
     "customs": CustomsShipmentPayload["customs"],
+}
+
+# Parcel product from Sweden to Norway with customs: the payload shape that
+# selects the customsInvoice branch instead of CN22.
+CustomsInvoiceShipmentPayload = {
+    **ShipmentPayload,
+    "shipper": {**ShipmentPayload["shipper"], "federal_tax_id": "SE556123471101"},
+    "recipient": {
+        "address_line1": "Karl Johans gate 22",
+        "city": "Oslo",
+        "postal_code": "0154",
+        "country_code": "NO",
+        "person_name": "Kari Receiver",
+        "company_name": "Receiver AS",
+        "phone_number": "+4791234567",
+        "email": "receiver@example.com",
+    },
+    "customs": {
+        "content_type": "merchandise",
+        "commercial_invoice": True,
+        "invoice": "INV-2026-001",
+        "invoice_date": "2026-09-25",
+        "commodities": [
+            {
+                "title": "Wool socks",
+                "quantity": 2,
+                "weight": 0.4,
+                "weight_unit": "KG",
+                "value_amount": 300.0,
+                "value_currency": "SEK",
+                "hs_code": "6115950000",
+                "origin_country": "SE",
+            },
+            {
+                "description": "Knitted cap",
+                "quantity": 1,
+                "weight": 0.1,
+                "weight_unit": "KG",
+                "value_amount": 200.0,
+                "value_currency": "SEK",
+                "hs_code": "6505003000",
+                "origin_country": "SE",
+            },
+        ],
+        "options": {"eori_number": "SE556000123401"},
+    },
+}
+
+CustomsInvoiceShipmentRequest = {
+    **ShipmentRequest,
+    "shipment": [
+        {
+            **ShipmentRequest["shipment"][0],
+            "parties": {
+                **ShipmentRequest["shipment"][0]["parties"],
+                "consignee": {
+                    "issuerCode": "Z12",
+                    "party": {
+                        "nameIdentification": {
+                            "name": "Kari Receiver",
+                            "companyName": "Receiver AS",
+                        },
+                        "address": {
+                            "streets": ["Karl Johans gate 22"],
+                            "postalCode": "0154",
+                            "city": "Oslo",
+                            "countryCode": "NO",
+                        },
+                        "contact": {
+                            "contactName": "Kari Receiver",
+                            "emailAddress": "receiver@example.com",
+                            "phoneNo": "+4791234567",
+                            "smsNo": "+4791234567",
+                        },
+                    },
+                },
+            },
+            "customsInvoice": {
+                "declarationType": "invoiceExportDeclaration",
+                "type": "COMMERCIAL",
+                "seller": {
+                    "partyIdentification": {
+                        "partyId": "00000000",
+                        "partyIdType": "160",
+                    },
+                    "vatNo": "SE556123471101",
+                    "name": "ACME Sender AB",
+                    "streets": ["Sandhamnsgatan 61"],
+                    "city": "Stockholm",
+                    "postalCode": "11528",
+                    "countryCode": "SE",
+                    "contacts": {
+                        "name": "John Sender",
+                        "phoneNo": "+46701234567",
+                        "emailAddress": "sender@example.com",
+                    },
+                    "eoriNo": "SE556000123401",
+                },
+                "buyer": {
+                    "name": "Receiver AS",
+                    "streets": ["Karl Johans gate 22"],
+                    "city": "Oslo",
+                    "postalCode": "0154",
+                    "countryCode": "NO",
+                    "contacts": {
+                        "name": "Kari Receiver",
+                        "phoneNo": "+4791234567",
+                        "emailAddress": "receiver@example.com",
+                    },
+                },
+                "invoice": {
+                    "invoiceNo": "INV-2026-001",
+                    "shippingDate": "2026-09-25",
+                    "reasonForExportation": "1000",
+                },
+                "detailedDescription": [
+                    {
+                        "quantity": 2,
+                        "hsTariffNumber": "6115950000",
+                        "content": "Wool socks",
+                        "countryOfOrigin": "SE",
+                        "netWeight": {"value": 0.4, "unit": "KGM"},
+                        "grossWeight": {"value": 0.4, "unit": "KGM"},
+                        "itemValue": {"amount": 300.0, "currency": "SEK"},
+                    },
+                    {
+                        "quantity": 1,
+                        "hsTariffNumber": "6505003000",
+                        "content": "Knitted cap",
+                        "countryOfOrigin": "SE",
+                        "netWeight": {"value": 0.1, "unit": "KGM"},
+                        "grossWeight": {"value": 0.1, "unit": "KGM"},
+                        "itemValue": {"amount": 200.0, "currency": "SEK"},
+                    },
+                ],
+                "totalGrossWeight": {"value": 0.5, "unit": "KGM"},
+                "invoiceTotal": {"amount": 500.0, "currency": "SEK"},
+            },
+        }
+    ],
 }
 
 ShipmentCancelRequest = {
