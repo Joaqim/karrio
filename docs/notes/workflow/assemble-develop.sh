@@ -28,6 +28,7 @@ force=0
 BRANCHES=(
   fix-core-small
   fix-state-code-normalization
+  fix-fedex-state-code-countries
   fix-dashboard-carrier-options
   chore-sdk-pypdf
   feat-tracker-locale
