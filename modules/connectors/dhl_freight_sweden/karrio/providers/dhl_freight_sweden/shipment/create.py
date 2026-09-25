@@ -6,6 +6,7 @@ import karrio.schemas.dhl_freight_sweden.print_request as dhl_freight_sweden_pri
 import karrio.schemas.dhl_freight_sweden.print_response as dhl_freight_sweden_report
 
 import base64
+import datetime
 import typing
 import karrio.lib as lib
 import karrio.core.models as models
@@ -70,6 +71,8 @@ def _customs_omitted_message(
     countries: dict,
     settings: provider_utils.Settings,
 ) -> models.Message:
+    dropped_services = countries.get("dropped_services") or []
+
     return models.Message(
         carrier_name=settings.carrier_name,
         carrier_id=settings.carrier_id,
@@ -79,6 +82,11 @@ def _customs_omitted_message(
             "Customs data was not sent: the shipment from "
             f"{countries['shipper_country_code']} to "
             f"{countries['recipient_country_code']} stays within the EU VAT area"
+            + lib.identity(
+                f"; dropped customs services: {', '.join(dropped_services)}"
+                if any(dropped_services)
+                else ""
+            )
         ),
         details=countries,
     )
@@ -180,7 +188,6 @@ def shipment_request(
     customs_options = lib.to_customs_info(
         payload.customs, option_type=provider_units.CustomsOption
     ).options
-    _check_customs_service_identifiers(options, customs_options)
     page_type = provider_units.PageType.map(
         options.dhl_freight_sweden_label_page_type.state
         or settings.connection_config.label_page_type.state
@@ -196,10 +203,26 @@ def shipment_request(
             ]
         )
     )
-    customs_omitted = has_customs_data and all(
+    # Callers may send customs data maximally; within the EU VAT area no
+    # customs declaration is required, so customs information and the priced
+    # customs services are dropped instead of validated.
+    within_eu_vat_area = all(
         provider_units.in_eu_vat_area(address.country_code, address.postal_code)
         for address in (shipper, recipient)
     )
+    requested_customs_services = _customs_services(options, customs_options)
+    customs_services = lib.identity(
+        {} if within_eu_vat_area else requested_customs_services
+    )
+    customs_omitted = within_eu_vat_area and any(
+        [
+            has_customs_data,
+            payload.customs and payload.customs.options,
+            requested_customs_services,
+        ]
+    )
+    if not within_eu_vat_area:
+        _check_customs_service_identifiers(options, customs_options)
     customs = lib.identity(
         _customs_information(
             payload.customs,
@@ -210,7 +233,7 @@ def shipment_request(
             payload.reference,
             shipping_date,
         )
-        if has_customs_data and not customs_omitted
+        if has_customs_data and not within_eu_vat_area
         else None
     )
 
@@ -287,37 +310,7 @@ def shipment_request(
                 if options.dhl_freight_sweden_insurance.state is not None
                 else None
             ),
-            customsHandlingStandard=lib.identity(
-                True
-                if options.dhl_freight_sweden_customs_handling_standard.state
-                else None
-            ),
-            customsHandlingFullService=lib.identity(
-                True
-                if options.dhl_freight_sweden_customs_handling_full_service.state
-                else None
-            ),
-            customsCustomersOwnDeclaration=lib.identity(
-                dhl_freight_sweden_req.CustomsCustomersOwnDeclarationType(
-                    customsId=options.dhl_freight_sweden_customs_own_declaration_id.state
-                )
-                if options.dhl_freight_sweden_customs_own_declaration.state
-                else None
-            ),
-            customsJointDeclaration=lib.identity(
-                dhl_freight_sweden_req.CustomsJointDeclarationType(
-                    sfid=options.dhl_freight_sweden_customs_joint_declaration_id.state
-                )
-                if options.dhl_freight_sweden_customs_joint_declaration.state
-                else None
-            ),
-            voecSupplyVAT=lib.identity(
-                dhl_freight_sweden_req.VoecSupplyVATType(
-                    vatId=customs_options.voec_number.state
-                )
-                if customs_options.voec_number.state
-                else None
-            ),
+            **customs_services,
         ),
         customsInformation=customs,
     )
@@ -336,6 +329,11 @@ def shipment_request(
                 dict(
                     shipper_country_code=shipper.country_code,
                     recipient_country_code=recipient.country_code,
+                    **lib.identity(
+                        dict(dropped_services=list(requested_customs_services))
+                        if requested_customs_services
+                        else {}
+                    ),
                 )
                 if customs_omitted
                 else None
@@ -400,7 +398,7 @@ def _customs_information(
     # The API requires at least one customs document whenever the customs
     # information section is present, so the document is always emitted.
     # DHL records a missing invoice date as 0001-01-01 (booking 2906745548),
-    # so it falls back to the shipping date.
+    # so it falls back to the shipping date, then the booking date.
     document = dhl_freight_sweden_req.CustomsDocumentType(
         id=invoice_number,
         type=lib.identity(
@@ -413,7 +411,11 @@ def _customs_information(
             if destination_country and destination_country != origin_country
             else None
         ),
-        invoiceDate=lib.fdate(customs.invoice_date) or shipping_date,
+        invoiceDate=lib.identity(
+            lib.fdate(customs.invoice_date)
+            or shipping_date
+            or datetime.date.today().isoformat()
+        ),
         invoiceCurrency=declaration_currency,
         invoiceAmount=duty.declared_value if duty else None,
         eori=customs_options.eori_number.state or None,
@@ -463,6 +465,46 @@ def _customs_commodity(
         ),
         numberOfUnits=commodity.quantity,
     )
+
+
+def _customs_services(
+    options: units.ShippingOptions,
+    customs_options: units.CustomsOptions,
+) -> typing.Dict[str, typing.Any]:
+    """Selected DHL customs services keyed by transport-instruction field."""
+    services = dict(
+        customsHandlingStandard=lib.identity(
+            True if options.dhl_freight_sweden_customs_handling_standard.state else None
+        ),
+        customsHandlingFullService=lib.identity(
+            True
+            if options.dhl_freight_sweden_customs_handling_full_service.state
+            else None
+        ),
+        customsCustomersOwnDeclaration=lib.identity(
+            dhl_freight_sweden_req.CustomsCustomersOwnDeclarationType(
+                customsId=options.dhl_freight_sweden_customs_own_declaration_id.state
+            )
+            if options.dhl_freight_sweden_customs_own_declaration.state
+            else None
+        ),
+        customsJointDeclaration=lib.identity(
+            dhl_freight_sweden_req.CustomsJointDeclarationType(
+                sfid=options.dhl_freight_sweden_customs_joint_declaration_id.state
+            )
+            if options.dhl_freight_sweden_customs_joint_declaration.state
+            else None
+        ),
+        voecSupplyVAT=lib.identity(
+            dhl_freight_sweden_req.VoecSupplyVATType(
+                vatId=customs_options.voec_number.state
+            )
+            if customs_options.voec_number.state
+            else None
+        ),
+    )
+
+    return {key: value for key, value in services.items() if value is not None}
 
 
 def _check_customs_service_identifiers(
