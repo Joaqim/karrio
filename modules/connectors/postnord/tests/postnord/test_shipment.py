@@ -10,6 +10,7 @@ import karrio.sdk as karrio
 import karrio.lib as lib
 import karrio.core.models as models
 import karrio.schemas.postnord.shipment_response as postnord_res
+import karrio.providers.postnord.units as provider_units
 
 from .fixture import (
     _settings,
@@ -1293,6 +1294,39 @@ class TestPostNordCustomsDocument(unittest.TestCase):
         details, messages = parsed_response
         self.assertEqual(messages, [])
         self.assertEqual(details.docs.extra_documents, [])
+
+
+class TestPostNordProductGroups(unittest.TestCase):
+    def test_letter_services_pinned(self):
+        self.assertEqual(
+            {service.value for service in provider_units.LETTER_SERVICES},
+            {"04", "34", "UX", "86", "LX", "RR", "RK", "RL", "RE", "RQ", "VV", "AF"},
+        )
+        self.assertEqual(provider_units.INTERNATIONAL_PARCEL_SERVICE.value, "91")
+
+    def test_every_service_classifies_into_one_customs_structure(self):
+        # Letters and International Parcel keep CN22; every other service,
+        # including ones added later, is a parcel product sending an invoice.
+        for service in provider_units.ShippingService:
+            with self.subTest(service=service.name):
+                is_cn22 = lib.identity(
+                    service in provider_units.LETTER_SERVICES
+                    or service == provider_units.INTERNATIONAL_PARCEL_SERVICE
+                )
+                self.assertEqual(
+                    provider_units.customs_structure(service.value),
+                    lib.identity(
+                        provider_units.CustomsStructure.cn22
+                        if is_cn22
+                        else provider_units.CustomsStructure.customs_invoice
+                    ),
+                )
+
+    def test_unknown_service_code_is_parcel_product(self):
+        self.assertEqual(
+            provider_units.customs_structure("99"),
+            provider_units.CustomsStructure.customs_invoice,
+        )
 
 
 if __name__ == "__main__":
