@@ -23,8 +23,8 @@
 
 ## 5. Server persistence
 
-- [ ] 5.1 Merge the messages returned by shipment creation into `shipment.messages` in `buy_shipment_label` (`modules/manager/karrio/server/manager/serializers/shipment.py`), de-duplicated by carrier id, code, and message, and verify a Django test in the manager module that purchases a shipment through the API with a patched gateway returning a warning at shipment creation and asserts the purchased shipment's messages include it once alongside stored rate messages
-- [ ] 5.2 Run `karrio test --failfast karrio.server.manager.tests` and `karrio.server.core.tests` in the nix dev shell, and verify both pass
+- [x] 5.1 Merge the messages returned by shipment creation into `shipment.messages` in `buy_shipment_label` (`modules/manager/karrio/server/manager/serializers/shipment.py`), de-duplicated by carrier id, code, and message, and verify a Django test in the manager module that purchases a shipment through the API with a patched gateway returning a warning at shipment creation and asserts the purchased shipment's messages include it once alongside stored rate messages
+- [x] 5.2 Run `karrio test --failfast karrio.server.manager.tests` and `karrio.server.core.tests` in the nix dev shell, and verify both pass
 
 ## 6. Documentation, review, and integration
 
