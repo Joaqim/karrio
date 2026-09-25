@@ -161,9 +161,10 @@ class ShippingOption(lib.Enum):
     # Access code (int) for home-delivery doorstep delivery.
     dhl_freight_sweden_doorstep_access_code = lib.OptionEnum("doorstepDelivery", int)
 
-    # Customs services each carry a DHL fee, so they are only sent when set.
-    # Own declaration carries the customs identifier (MRN) and joint
-    # declaration the joint-declaration identifier (SFID).
+    # Customs services each carry a DHL fee, so they are only sent when their
+    # selector is true. Own declaration carries the customs identifier (MRN)
+    # and joint declaration the joint-declaration identifier (SFID) in
+    # separate options, so a selector without its identifier fails fast.
     dhl_freight_sweden_customs_handling_standard = lib.OptionEnum(
         "customsHandlingStandard", bool
     )
@@ -171,11 +172,15 @@ class ShippingOption(lib.Enum):
         "customsHandlingFullService", bool
     )
     dhl_freight_sweden_customs_own_declaration = lib.OptionEnum(
-        "customsCustomersOwnDeclaration", str
+        "customsCustomersOwnDeclaration", bool
+    )
+    dhl_freight_sweden_customs_own_declaration_id = lib.OptionEnum(
+        "customsId", str
     )
     dhl_freight_sweden_customs_joint_declaration = lib.OptionEnum(
-        "customsJointDeclaration", str
+        "customsJointDeclaration", bool
     )
+    dhl_freight_sweden_customs_joint_declaration_id = lib.OptionEnum("sfid", str)
 
     # Driver instructions (maxLength 140 characters each per the
     # transport-instruction spec).

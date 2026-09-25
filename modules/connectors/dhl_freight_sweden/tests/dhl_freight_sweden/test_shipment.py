@@ -215,11 +215,17 @@ class TestDHLFreightShipment(unittest.TestCase):
                 {"customsHandlingFullService": True},
             ),
             (
-                {"dhl_freight_sweden_customs_own_declaration": "26SE000000000000A1"},
+                {
+                    "dhl_freight_sweden_customs_own_declaration": True,
+                    "dhl_freight_sweden_customs_own_declaration_id": "26SE000000000000A1",
+                },
                 {"customsCustomersOwnDeclaration": {"customsId": "26SE000000000000A1"}},
             ),
             (
-                {"dhl_freight_sweden_customs_joint_declaration": "SFID-0001"},
+                {
+                    "dhl_freight_sweden_customs_joint_declaration": True,
+                    "dhl_freight_sweden_customs_joint_declaration_id": "SFID-0001",
+                },
                 {"customsJointDeclaration": {"sfid": "SFID-0001"}},
             ),
         ]
@@ -243,6 +249,8 @@ class TestDHLFreightShipment(unittest.TestCase):
                     "options": {
                         "dhl_freight_sweden_customs_handling_standard": False,
                         "dhl_freight_sweden_customs_handling_full_service": False,
+                        "dhl_freight_sweden_customs_own_declaration": False,
+                        "dhl_freight_sweden_customs_joint_declaration": False,
                     },
                 }
             )
@@ -332,19 +340,47 @@ class TestDHLFreightShipment(unittest.TestCase):
                 "EORI",
             ),
             (
-                ShipmentPayload109OwnDeclarationWithoutId,
-                "dhl_freight_sweden_customs_own_declaration",
+                _with_options(
+                    ShipmentPayload109CustomsNO,
+                    {"dhl_freight_sweden_customs_own_declaration": True},
+                ),
+                "dhl_freight_sweden_customs_own_declaration_id",
                 "customs identifier",
             ),
             (
-                ShipmentPayload109JointDeclarationWithoutSfid,
-                "dhl_freight_sweden_customs_joint_declaration",
+                _with_options(
+                    ShipmentPayload109CustomsNO,
+                    {
+                        "dhl_freight_sweden_customs_own_declaration": True,
+                        "dhl_freight_sweden_customs_own_declaration_id": " ",
+                    },
+                ),
+                "dhl_freight_sweden_customs_own_declaration_id",
+                "customs identifier",
+            ),
+            (
+                _with_options(
+                    ShipmentPayload109CustomsNO,
+                    {"dhl_freight_sweden_customs_joint_declaration": True},
+                ),
+                "dhl_freight_sweden_customs_joint_declaration_id",
+                "SFID",
+            ),
+            (
+                _with_options(
+                    ShipmentPayload109CustomsNO,
+                    {
+                        "dhl_freight_sweden_customs_joint_declaration": True,
+                        "dhl_freight_sweden_customs_joint_declaration_id": " ",
+                    },
+                ),
+                "dhl_freight_sweden_customs_joint_declaration_id",
                 "SFID",
             ),
         ]
 
         for payload, field, label in cases:
-            with self.subTest(field=field):
+            with self.subTest(field=field, options=payload["options"]):
                 with patch(
                     "karrio.mappers.dhl_freight_sweden.proxy.lib.request"
                 ) as mock:
@@ -361,20 +397,18 @@ class TestDHLFreightShipment(unittest.TestCase):
                 self.assertEqual(set(messages[0].details), {field})
                 self.assertIn(label, messages[0].message)
 
-    def test_shipment_customs_service_empty_identifier_selects_no_service(self):
-        # The SDK strips empty-string options before mapping, so an empty
-        # identifier is indistinguishable from an unset option.
+    def test_shipment_customs_identifier_without_selector_selects_no_service(self):
         with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
             mock.side_effect = [BookingResponse102, PrintResponse]
             karrio.Shipment.create(
                 models.ShipmentRequest(
-                    **{
-                        **ShipmentPayload109CustomsNO,
-                        "options": {
-                            "dhl_freight_sweden_customs_own_declaration": "",
-                            "dhl_freight_sweden_customs_joint_declaration": "",
+                    **_with_options(
+                        ShipmentPayload109CustomsNO,
+                        {
+                            "dhl_freight_sweden_customs_own_declaration_id": "26SE000000000000A1",
+                            "dhl_freight_sweden_customs_joint_declaration_id": "SFID-0001",
                         },
-                    }
+                    )
                 )
             ).from_(gateway)
 
@@ -870,6 +904,10 @@ _parcel = {
 }
 
 
+def _with_options(payload: dict, options: dict) -> dict:
+    return {**payload, "options": options}
+
+
 def _payload(service: str, recipient: dict, options: typing.Optional[dict] = None) -> dict:
     return {
         "service": service,
@@ -1045,16 +1083,6 @@ ShipmentPayload109StandardWithoutEORI = {
     **ShipmentPayload109CustomsNO,
     "customs": {**CustomsNO, "options": {}},
     "options": {"dhl_freight_sweden_customs_handling_standard": True},
-}
-
-ShipmentPayload109OwnDeclarationWithoutId = {
-    **ShipmentPayload109CustomsNO,
-    "options": {"dhl_freight_sweden_customs_own_declaration": " "},
-}
-
-ShipmentPayload109JointDeclarationWithoutSfid = {
-    **ShipmentPayload109CustomsNO,
-    "options": {"dhl_freight_sweden_customs_joint_declaration": " "},
 }
 
 CustomsServiceKeys = {
