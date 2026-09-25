@@ -463,7 +463,7 @@ def _customs_commodity(
             if commodity.weight is not None
             else None
         ),
-        numberOfUnits=commodity.quantity,
+        numberOfUnits=quantity,
     )
 
 
