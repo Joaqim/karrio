@@ -9,7 +9,8 @@ A single, region-neutral extension point lets such conventions ship as independe
 
 ## What Changes
 
-- Add a `shipment_advisors` field to `PluginMetadata`: a list of advisor callables, each receiving the unified request and a carrier context (carrier name and connection settings) and returning a list of unified `Message` objects.
+- Add a `shipment_advisors` field to `PluginMetadata`: a list of advisor callables, each receiving the unified request and a non-secret carrier context (carrier name, carrier id, account country code, test mode, and the connection's non-credential configuration) and returning a list of unified `Message` objects.
+- Advisors never receive connection credentials; shipper identity and addresses come from the unified request itself.
 - Collect advisors from every discovered plugin, including plugins that register no carrier or address validator, alongside the existing metadata collection in `modules/sdk/karrio/references.py`.
 - Run the collected advisors in the SDK when rates are fetched and when a shipment is created, and append their messages to the response messages for each carrier gateway involved.
 - Advisors are advisory only: their messages cannot block the operation, cannot alter the request or the carrier response, and any level above warning is reported as warning.
