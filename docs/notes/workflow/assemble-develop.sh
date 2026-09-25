@@ -33,9 +33,11 @@ BRANCHES=(
   chore-sdk-pypdf
   feat-tracker-locale
   feat-dhl-freight-se-connector
+  feat-dhl-freight-se-customs
   docs-vendored-carrier-specs
   feat-document-stamping
   feat-postnord-cn22-stamping
+  feat-postnord-customs-invoice
   dev-nix-flake
   docs-openspec
 )

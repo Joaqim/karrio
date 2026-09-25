@@ -11,8 +11,8 @@ The layout dates from the 2026-09-24 history rework; the previous linear `develo
 
 ## Branches
 
-The upstream-bound branches are `fix-core-small`, `fix-state-code-normalization` (upstream pull request #1141), `fix-fedex-state-code-countries`, `fix-dashboard-carrier-options`, `chore-sdk-pypdf`, `feat-tracker-locale`, `feat-dhl-freight-se-connector`, `docs-vendored-carrier-specs`, `feat-document-stamping` (on `chore-sdk-pypdf`) and `feat-postnord-connector` (on `feat-tracker-locale`).
-Open their upstream pull requests in dependency order: `chore-sdk-pypdf` before `feat-document-stamping`, and `feat-tracker-locale` before `feat-postnord-connector`.
+The upstream-bound branches are `fix-core-small`, `fix-state-code-normalization` (upstream pull request #1141), `fix-fedex-state-code-countries`, `fix-dashboard-carrier-options`, `chore-sdk-pypdf`, `feat-tracker-locale`, `feat-dhl-freight-se-connector`, `docs-vendored-carrier-specs`, `feat-document-stamping` (on `chore-sdk-pypdf`), `feat-postnord-connector` (on `feat-tracker-locale`), `feat-dhl-freight-se-customs` (on `feat-dhl-freight-se-connector`) and `feat-postnord-customs-invoice` (on `feat-postnord-connector`).
+Open their upstream pull requests in dependency order: `chore-sdk-pypdf` before `feat-document-stamping`, `feat-tracker-locale` before `feat-postnord-connector` before `feat-postnord-customs-invoice`, and `feat-dhl-freight-se-connector` before `feat-dhl-freight-se-customs`.
 `feat-postnord-connector` is not in `BRANCHES` itself; it reaches `develop` through `feat-postnord-cn22-stamping`, which contains it.
 `fix-fedex-smartpost-declared-value` (#1142) was closed unmerged on 2026-09-25; its FedEx failure is fixed by `fix-fedex-state-code-countries` (#1143).
 
