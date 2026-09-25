@@ -39,10 +39,12 @@ Selecting CN23 and applying value thresholds such as PostNord Sweden's SEK 2 000
 | `invoice.shippingDate` | `customs.invoice_date`, passed through unchanged (PostNord expects `YYYY-MM-DD`) |
 | `invoice.reasonForExportation` | always `1000` (permanent export, covering sale, gift, and sample) |
 | `detailedDescription[]` | per commodity: `quantity`, `hs_code` as `hsTariffNumber`, `title` (else `description`) as `content`, `origin_country` as `countryOfOrigin`, `weight` × `quantity` in KGM as both `netWeight` and `grossWeight`, `value_amount` × `quantity` and `value_currency` as `itemValue` |
-| `totalGrossWeight` | sum of the line weights in KGM |
+| `totalNetWeight` | sum of the line weights in KGM |
+| `totalGrossWeight` | sum of the parcel weights in KGM, which include packaging; the sum of the line weights only when no parcel weight is given |
 | `invoiceTotal` | sum of the line values, rounded to two decimals, in the currency of the first commodity that sets one |
 
-Commodity `value_amount` and `weight` are per unit, so each line carries them multiplied by `quantity` and the totals sum the lines; the CN22 lines and totals are built the same way.
+Commodity `value_amount` and `weight` are per unit, so each line carries them multiplied by `quantity`, and the value and net-weight totals sum the lines.
+The CN22 is built the same way: its `totalValue` sums the line values and its `totalGrossWeight` follows the same parcel-weight rule as the invoice.
 Postal codes are sent as strings, so a Norwegian `0154` keeps its leading zero.
 
 ## Fail-fast errors
@@ -193,7 +195,8 @@ The resulting `customsInvoice` element, with the fixture's connection `customer_
       "itemValue": {"amount": 200.0, "currency": "SEK"}
     }
   ],
-  "totalGrossWeight": {"value": 0.5, "unit": "KGM"},
+  "totalNetWeight": {"value": 0.5, "unit": "KGM"},
+  "totalGrossWeight": {"value": 1.5, "unit": "KGM"},
   "invoiceTotal": {"amount": 500.0, "currency": "SEK"}
 }
 ```
