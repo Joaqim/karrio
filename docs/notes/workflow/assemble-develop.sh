@@ -36,6 +36,7 @@ BRANCHES=(
   feat-dhl-freight-se-customs
   docs-vendored-carrier-specs
   feat-document-stamping
+  feat-postnord-connector
   feat-postnord-cn22-stamping
   feat-postnord-customs-invoice
   dev-nix-flake

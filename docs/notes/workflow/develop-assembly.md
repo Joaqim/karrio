@@ -13,7 +13,7 @@ The layout dates from the 2026-09-24 history rework; the previous linear `develo
 
 The upstream-bound branches are `fix-core-small`, `fix-state-code-normalization` (upstream pull request #1141), `fix-fedex-state-code-countries`, `fix-dashboard-carrier-options`, `chore-sdk-pypdf`, `feat-tracker-locale`, `feat-dhl-freight-se-connector`, `docs-vendored-carrier-specs`, `feat-document-stamping` (on `chore-sdk-pypdf`), `feat-postnord-connector` (on `feat-tracker-locale`), `feat-dhl-freight-se-customs` (on `feat-dhl-freight-se-connector`) and `feat-postnord-customs-invoice` (on `feat-postnord-connector`).
 Open their upstream pull requests in dependency order: `chore-sdk-pypdf` before `feat-document-stamping`, `feat-tracker-locale` before `feat-postnord-connector` before `feat-postnord-customs-invoice`, and `feat-dhl-freight-se-connector` before `feat-dhl-freight-se-customs`.
-`feat-postnord-connector` is not in `BRANCHES` itself; it reaches `develop` through `feat-postnord-cn22-stamping`, which contains it.
+`feat-postnord-connector` is listed in `BRANCHES` before `feat-postnord-cn22-stamping`, which contains it, so the PostNord stack is merged into `develop` explicitly rather than only transitively.
 `fix-fedex-smartpost-declared-value` (#1142) was closed unmerged on 2026-09-25; its FedEx failure is fixed by `fix-fedex-state-code-countries` (#1143).
 
 The fork-only branches are `feat-postnord-cn22-stamping`, `dev-nix-flake` and `docs-openspec`.
