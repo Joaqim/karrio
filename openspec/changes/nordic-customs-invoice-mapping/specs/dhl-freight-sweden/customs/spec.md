@@ -15,6 +15,11 @@ Shipment creation that includes unified customs data SHALL send a customs docume
 - **WHEN** a shipment from Sweden to Norway is created with customs data carrying an invoice number, invoice date, declared value, currency, and EORI number
 - **THEN** the transport instruction carries one customs document with those values, transport movement Export, and the EORI on the document
 
+#### Scenario: Commodity net weight is sent in kilograms
+
+- **WHEN** a customs commodity carries its weight in pounds or ounces
+- **THEN** its customs commodity line carries the net weight converted to kilograms
+
 #### Scenario: Missing EORI is sent as-is when no rule requires it
 
 - **WHEN** customs data carries no EORI number and no selected customs service requires one
