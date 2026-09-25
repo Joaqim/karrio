@@ -13,6 +13,7 @@ The layout dates from the 2026-09-24 history rework; the previous linear `develo
 
 The upstream-bound branches are `fix-core-small`, `fix-state-code-normalization` (upstream pull request #1141), `fix-fedex-state-code-countries`, `fix-dashboard-carrier-options`, `chore-sdk-pypdf`, `feat-tracker-locale`, `feat-dhl-freight-se-connector`, `docs-vendored-carrier-specs`, `feat-document-stamping` (on `chore-sdk-pypdf`) and `feat-postnord-connector` (on `feat-tracker-locale`).
 Open their upstream pull requests in dependency order: `chore-sdk-pypdf` before `feat-document-stamping`, and `feat-tracker-locale` before `feat-postnord-connector`.
+`feat-postnord-connector` is not in `BRANCHES` itself; it reaches `develop` through `feat-postnord-cn22-stamping`, which contains it.
 `fix-fedex-smartpost-declared-value` is upstream-bound but held out of `BRANCHES` pending a deployed FedEx test.
 
 The fork-only branches are `feat-postnord-cn22-stamping`, `dev-nix-flake` and `docs-openspec`.
@@ -27,7 +28,8 @@ It stays on the fork until both parents land upstream.
 2. Put the PRD commit first, then one commit per logical capability, in the format `type(scope): summary`.
 3. Verify outside nix in `python:3.12-slim-bookworm`, matching upstream CI, and inside the nix dev shell; see [nix-dev-shell-worktrees.md](nix-dev-shell-worktrees.md) for the per-worktree `.envrc`.
 4. If the branch is new, add it to `BRANCHES` in `assemble-develop.sh` on `docs-openspec`.
-5. Regenerate and deploy:
+5. Regenerate and deploy from the main checkout.
+   Without `-r`, the script takes the repository from the current directory, so running it from a worktree roots the target worktree inside that worktree; from elsewhere, pass `-r /home/joaqim/projects/karrio`.
 
    ```bash
    docs/notes/workflow/assemble-develop.sh -f           # builds develop-next in .worktrees/develop-next

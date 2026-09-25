@@ -17,6 +17,12 @@ Both shells use Python 3.12, matching upstream CI and the `python:3.12-slim-book
 On entry the shell hook resolves the source root with `git rev-parse --show-toplevel`, falling back to `$PWD`, and exports it as `KARRIO_DEV_ROOT`.
 `PYTHONPATH` is set to that root's `modules/sdk`, `modules/soap`, `modules/cli` and every connector and plugin directory that contains a `karrio` package.
 Any `PYTHONPATH` inherited from the calling environment is discarded, so a module missing from the worktree fails to import instead of resolving to another checkout's sources.
+The hook runs once, in the directory `nix develop` is started from, so `cd` into the worktree before running `nix develop`; a `cd` inside `--command` does not move `PYTHONPATH`:
+
+```bash
+cd /home/joaqim/projects/karrio/.worktrees/<branch>
+nix develop 'git+file:///home/joaqim/projects/karrio?ref=dev-nix-flake#upstream' --command python -m unittest discover -v -f modules/connectors/<carrier>/tests
+```
 
 ## Why worktrees need their own .envrc
 
