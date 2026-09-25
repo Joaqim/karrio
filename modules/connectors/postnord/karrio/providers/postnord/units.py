@@ -292,6 +292,25 @@ class CustomsStructure(lib.StrEnum):
     customs_invoice = "customsInvoice"
 
 
+class CustomsInvoiceType(lib.StrEnum):
+    """``customsInvoice.type``; selected literally by ``commercial_invoice``."""
+
+    commercial = "COMMERCIAL"
+    proforma = "PROFORMA"
+
+
+class CustomsDeclarationType(lib.StrEnum):
+    """``customsInvoice.declarationType`` values used by the connector."""
+
+    invoice_export_declaration = "invoiceExportDeclaration"
+
+
+class ExportReason(lib.StrEnum):
+    """``invoice.reasonForExportation`` procedure codes (booking.swagger.json)."""
+
+    permanent_export = "1000"
+
+
 def customs_structure(basic_service_code: str) -> CustomsStructure:
     """Select the booking customs branch for a basicServiceCode."""
     if (

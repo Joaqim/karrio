@@ -342,6 +342,186 @@ def _customs_declaration(
     )
 
 
+def _customs_invoice_errors(
+    shipper: units.ComputedAddress,
+    recipient: units.ComputedAddress,
+    customs: models.Customs,
+    invoice_number: typing.Optional[str],
+) -> typing.Dict[str, str]:
+    """Collect the customs invoice fields the booking swagger requires.
+
+    Seller ``vatNo``, ``invoice.invoiceNo``, seller and buyer
+    ``contacts.name``/``phoneNo``, and per-line ``hsTariffNumber`` and
+    ``countryOfOrigin`` are required by booking.swagger.json and cannot be
+    derived when absent from the unified payload.
+    """
+    required = "is required for a PostNord customs invoice"
+    party_errors = {
+        f"{role}.{field}": message
+        for role, address in (("shipper", shipper), ("recipient", recipient))
+        for field, message, value in (
+            ("person_name", f"contact name {required}", address.contact),
+            ("phone_number", f"contact phone number {required}", address.phone_number),
+        )
+        if not value
+    }
+    line_errors = {
+        f"customs.commodities[{index}].{field}": f"{label} {required} line"
+        for index, commodity in enumerate(customs.commodities)
+        for field, label in (
+            ("hs_code", "HS tariff number"),
+            ("origin_country", "country of origin"),
+        )
+        if not getattr(commodity, field)
+    }
+
+    return {
+        **(
+            {"shipper.federal_tax_id": f"shipper VAT number {required}"}
+            if not shipper.tax_id
+            else {}
+        ),
+        **(
+            {
+                "customs.invoice": (
+                    f"invoice number {required}; "
+                    "send customs.invoice or a shipment reference"
+                )
+            }
+            if not invoice_number
+            else {}
+        ),
+        **party_errors,
+        **line_errors,
+    }
+
+
+def _invoice_party(
+    address: units.ComputedAddress, **identification
+) -> postnord_req.BuyerType:
+    """Map a unified address onto a customs invoice seller or buyer."""
+    return postnord_req.BuyerType(
+        name=address.company_name or address.person_name,
+        streets=[_ for _ in [address.address_line1, address.address_line2] if _],
+        city=address.city,
+        postalCode=address.postal_code,
+        countryCode=address.country_code,
+        contacts=postnord_req.ContactType(
+            name=address.contact,
+            phoneNo=address.phone_number,
+            emailAddress=address.email,
+        ),
+        **identification,
+    )
+
+
+def _customs_invoice_line(
+    commodity: models.Commodity,
+) -> postnord_req.CustomsInvoiceDetailedDescriptionType:
+    weight = units.Weight(commodity.weight, commodity.weight_unit).KG
+    weight_element = lib.identity(
+        postnord_req.TotalGrossWeightType(value=weight, unit="KGM") if weight else None
+    )
+
+    return postnord_req.CustomsInvoiceDetailedDescriptionType(
+        quantity=commodity.quantity,
+        hsTariffNumber=commodity.hs_code,
+        content=commodity.title or commodity.description,
+        countryOfOrigin=commodity.origin_country,
+        netWeight=weight_element,
+        grossWeight=weight_element,
+        itemValue=lib.identity(
+            postnord_req.GoodsValueType(
+                amount=commodity.value_amount,
+                currency=commodity.value_currency,
+            )
+            if commodity.value_amount
+            else None
+        ),
+    )
+
+
+def _customs_invoice(
+    customs: models.Customs,
+    options: units.CustomsOptions,
+    shipper: units.ComputedAddress,
+    recipient: units.ComputedAddress,
+    invoice_number: typing.Optional[str],
+    settings: provider_utils.Settings,
+) -> postnord_req.CustomsInvoiceType:
+    """Map unified customs data onto the booking's customs invoice branch.
+
+    PostNord takes a customs invoice instead of CN22/CN23 for parcel
+    products. The shipper is the seller and the recipient the buyer;
+    ``commercial_invoice`` selects COMMERCIAL or PROFORMA literally. Line
+    values and weights are taken per commodity and summed as the CN22
+    totals are. Registration numbers are passed through without the CN22
+    completeness rule, which the sandbox did not apply to customs invoices.
+    """
+    errors = _customs_invoice_errors(shipper, recipient, customs, invoice_number)
+    if errors:
+        raise lib.exceptions.FieldError(errors)
+
+    currency = next(
+        (c.value_currency for c in customs.commodities if c.value_currency), None
+    )
+    total_gross_weight = lib.to_decimal(
+        sum(
+            units.Weight(c.weight, c.weight_unit).KG or 0
+            for c in customs.commodities
+        ),
+        0.001,
+    )
+
+    return postnord_req.CustomsInvoiceType(
+        declarationType=provider_units.CustomsDeclarationType.invoice_export_declaration.value,
+        type=lib.identity(
+            provider_units.CustomsInvoiceType.commercial.value
+            if customs.commercial_invoice
+            else provider_units.CustomsInvoiceType.proforma.value
+        ),
+        voec=options.voec_number.state or None,
+        ioss=options.ioss_number.state or None,
+        seller=_invoice_party(
+            shipper,
+            partyIdentification=lib.identity(
+                postnord_req.PartyIdentificationType(
+                    partyId=settings.customer_number,
+                    partyIdType="160",
+                )
+                if settings.customer_number
+                else None
+            ),
+            vatNo=shipper.tax_id,
+            eoriNo=options.eori_number.state or None,
+        ),
+        buyer=_invoice_party(recipient, vatNo=recipient.tax_id),
+        invoice=postnord_req.InvoiceType(
+            invoiceNo=invoice_number,
+            shippingDate=customs.invoice_date,
+            reasonForExportation=provider_units.ExportReason.permanent_export.value,
+        ),
+        detailedDescription=[
+            _customs_invoice_line(commodity) for commodity in customs.commodities
+        ],
+        totalGrossWeight=lib.identity(
+            postnord_req.TotalGrossWeightType(value=total_gross_weight, unit="KGM")
+            if total_gross_weight
+            else None
+        ),
+        invoiceTotal=lib.identity(
+            postnord_req.GoodsValueType(
+                amount=lib.to_money(
+                    sum(c.value_amount or 0 for c in customs.commodities)
+                ),
+                currency=currency,
+            )
+            if any(c.value_amount for c in customs.commodities)
+            else None
+        ),
+    )
+
+
 def shipment_request(
     payload: models.ShipmentRequest,
     settings: provider_utils.Settings,
@@ -409,14 +589,17 @@ def shipment_request(
     # performed via this id (see shipment/cancel.py).
     shipment_id = payload.reference or uuid.uuid4().hex[:12].upper()
 
-    # The customs declaration rides the booking EDI as the CN22 branch of the
-    # shipment entry; without customs data the branch is absent so the request
-    # shape is unchanged. Registration options convert through the provider
-    # CustomsOption enum so voec_number/ioss_number survive the typed-options
-    # filtering (see units.CustomsOption); commodity lines keep flowing from
-    # the raw customs model because the Products wrapper normalizes missing
-    # quantity/weight_unit and would change line emission.
-    if payload.customs and payload.customs.commodities:
+    # Customs data rides the booking EDI in the shipment entry: letters and
+    # International Parcel as the CN22 branch, parcel products as the customs
+    # invoice branch; without customs data neither branch is present so the
+    # request shape is unchanged. Registration options convert through the
+    # provider CustomsOption enum so voec_number/ioss_number survive the
+    # typed-options filtering (see units.CustomsOption); commodity lines keep
+    # flowing from the raw customs model because the Products wrapper
+    # normalizes missing quantity/weight_unit and would change line emission.
+    has_customs = bool(payload.customs and payload.customs.commodities)
+    customs_structure = provider_units.customs_structure(service)
+    if has_customs:
         provider_units.enforce_customs_option_placement(payload.options)
 
     customs_options = lib.to_customs_info(
@@ -429,7 +612,20 @@ def shipment_request(
             total_gross_weight=packages.weight.KG,
             country_of_origin=shipper.country_code,
         )
-        if payload.customs and payload.customs.commodities
+        if has_customs and customs_structure == provider_units.CustomsStructure.cn22
+        else None
+    )
+    customs_invoice = lib.identity(
+        _customs_invoice(
+            payload.customs,
+            options=customs_options,
+            shipper=shipper,
+            recipient=recipient,
+            invoice_number=payload.customs.invoice or payload.reference,
+            settings=settings,
+        )
+        if has_customs
+        and customs_structure == provider_units.CustomsStructure.customs_invoice
         else None
     )
 
@@ -544,6 +740,7 @@ def shipment_request(
                     for package in packages
                 ],
                 customsDeclarationCN22=customs_declaration,
+                customsInvoice=customs_invoice,
             )
         ],
     )
@@ -559,6 +756,8 @@ def shipment_request(
             # The proxy gates the implicit by-id customs document fetch on the
             # resolved service code and on the declaration having been embedded.
             basic_service_code=service,
-            customs_declared=customs_declaration is not None,
+            customs_declared=(
+                customs_declaration is not None or customs_invoice is not None
+            ),
         ),
     )
