@@ -9,8 +9,11 @@
 # owns assemble-develop.sh, so the report does not depend on which checkout
 # runs it or on how stale that checkout's copy of the script is.
 #
-# Exit status: 0 when develop contains every BRANCHES tip, 1 when it does not,
-# 2 when a required ref is missing or another error occurs.
+# A branch whose tip is an ancestor of upstream/main has no commits of its own;
+# it is reported as empty and ignored for staleness and order checks.
+#
+# Exit status: 0 when develop contains every non-empty BRANCHES tip, 1 when it
+# does not, 2 when a required ref is missing or another error occurs.
 set -euo pipefail
 
 owner=docs-openspec
@@ -22,8 +25,8 @@ while (($#)); do
   case "$1" in
   --fetch) fetch=1 ;;
   -r) start=${2:?-r needs a path}; shift ;;
-  -h | --help) sed -n '2,13p' "$0"; exit 0 ;;
-  *) sed -n '2,13p' "$0" >&2; exit 2 ;;
+  -h | --help) sed -n '2,16p' "$0"; exit 0 ;;
+  *) sed -n '2,16p' "$0" >&2; exit 2 ;;
   esac
   shift
 done
@@ -51,6 +54,7 @@ mapfile -t BRANCHES < <(
 
 status=0
 problems=()
+declare -A empty=()
 
 compare() {
   local ahead behind
@@ -71,7 +75,10 @@ for b in "${BRANCHES[@]}"; do
     status=2
     continue
   fi
-  if g merge-base --is-ancestor "$b" develop; then
+  if g merge-base --is-ancestor "$b" upstream/main; then
+    in=empty
+    empty[$b]=1
+  elif g merge-base --is-ancestor "$b" develop; then
     in=contained
   else
     in=MISSING
@@ -86,7 +93,9 @@ for b in "${BRANCHES[@]}"; do
 done
 
 for ((i = 0; i < ${#BRANCHES[@]}; i++)); do
+  [[ -z "${empty[${BRANCHES[i]}]:-}" ]] || continue
   for ((j = i + 1; j < ${#BRANCHES[@]}; j++)); do
+    [[ -z "${empty[${BRANCHES[j]}]:-}" ]] || continue
     [[ "$(sha "${BRANCHES[j]}")" != "$(sha "${BRANCHES[i]}")" ]] || continue
     if g merge-base --is-ancestor "${BRANCHES[j]}" "${BRANCHES[i]}" 2>/dev/null; then
       problems+=("order: ${BRANCHES[j]} is a parent of ${BRANCHES[i]} but is listed after it")
