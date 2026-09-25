@@ -5,7 +5,7 @@ title: Nix dev shell in upstream-bound worktrees
 # Nix dev shell in upstream-bound worktrees
 
 The `dev-nix-flake` branch provides two dev shells for the SDK, CLI, connectors and plugins.
-Neither shell provides `karrio.server`; Django tests still run in the worktree's `.venv` created by `bin/activate-env`.
+Neither shell provides `karrio.server`; Django tests run through the overlay harness described in [Server tests in upstream-bound worktrees](#server-tests-in-upstream-bound-worktrees).
 
 ## The two shells
 
@@ -68,3 +68,27 @@ The `develop` checkout's `.envrc` is tracked, so the exclude entry does not affe
 The `git+file` reference reads the committed tip of `dev-nix-flake`, not its working tree, so uncommitted flake edits are invisible to worktrees.
 nix-direnv caches the evaluated shell and does not notice a new commit on that branch.
 Run `nix-direnv-reload` in each worktree after `dev-nix-flake` changes.
+
+## Server tests in upstream-bound worktrees
+
+Worktrees have no `.venv` of their own, and the main checkout's venv at `.venv/karrio` holds editable installs that resolve `karrio` to the main checkout's sources.
+`server-tests-overlay.sh` and `server-tests-run.py` in this directory run the Django suites against a worktree's sources with that venv's third-party packages:
+
+```bash
+notes=/home/joaqim/projects/karrio/.worktrees/docs-openspec/docs/notes/workflow
+worktree=/home/joaqim/projects/karrio/.worktrees/<branch>
+"$notes/server-tests-overlay.sh" "$worktree" python "$notes/server-tests-run.py" test --failfast karrio.server.manager.tests
+"$notes/server-tests-overlay.sh" "$worktree" python "$notes/server-tests-run.py" test --failfast karrio.server.core.tests
+```
+
+The overlay script derives the main checkout from the worktree's git common directory and changes into the worktree before running the command.
+It puts the worktree's `apps/api` and every module, connector, plugin, and `ee` module directory containing `karrio`, `karrio_cli`, or `pysoap` (so `modules/soap` is included) on `PYTHONPATH`.
+It puts the main venv first on `PATH` and sets `VIRTUAL_ENV`, so `python` is the venv's interpreter.
+Upstream-based branches import `PyPDF2`, which the venv lacks, so the script resolves `PyPDF2` 3.0.1 from the `#upstream` dev shell and exposes it through a directory in `$XDG_CACHE_HOME/karrio-server-tests/pypdf2` that symlinks only that package, not the shell's whole site-packages.
+WeasyPrint needs native libraries the venv does not bundle, so `LD_LIBRARY_PATH` points at `glib`, `pango`, `harfbuzz`, and `fontconfig` built from the flake's locked nixpkgs through `nix build --inputs-from`.
+`KARRIO_VENV` and `KARRIO_DEV_FLAKE` override the venv and the flake reference, which default to `<main checkout>/.venv/karrio` and the committed `dev-nix-flake` branch.
+
+`PYTHONPATH` alone does not isolate the worktree, because the venv's `.pth` files register editable-install finders, path hooks, and `sys.path` entries that can resolve parts of the `karrio` namespace packages to the main checkout's sources.
+`server-tests-run.py` removes the `__editable__` finders and path hooks and any `sys.path` entry under the main checkout outside the worktree and the venv, then runs the `karrio` CLI in-process.
+After the command finishes it lists every loaded `karrio` module whose file lies under the main checkout but outside the worktree, and exits with status 3 if there is any, so a passing run proves the suites exercised the worktree's code.
+A clean run ends with `karrio modules loaded from outside the worktree: 0`.
