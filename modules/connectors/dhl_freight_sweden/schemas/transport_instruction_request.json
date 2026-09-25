@@ -88,7 +88,15 @@
     "preAdvice": true,
     "tailLiftUnloading": false,
     "doorstepDelivery": { "accessCode": "9999" },
-    "insurance": { "value": 5000.0, "currency": "SEK" }
+    "insurance": { "value": 5000.0, "currency": "SEK" },
+    "customsHandlingStandard": true,
+    "customsHandlingFullService": false,
+    "customsCustomersOwnDeclaration": {
+      "customsId": "26SE000000000000A1",
+      "customsClearanceInstruction": "Declared by own agent"
+    },
+    "customsJointDeclaration": { "sfid": "SFID-0001" },
+    "voecSupplyVAT": { "vatId": "VOEC2012345" }
   },
   "customsInformation": {
     "customsDocuments": [
