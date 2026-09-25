@@ -598,6 +598,40 @@ class TestPostNordShipment(unittest.TestCase):
         self.assertEqual(
             declaration["totalValue"], {"amount": 35.0, "currency": "SEK"}
         )
+
+    def test_create_shipment_customs_gross_weight_from_parcels(self):
+        # Total gross weight includes packaging: the sum of the parcel
+        # weights (1.5 kg + 500 g), not the 0.7 kg of commodity lines.
+        payload = {
+            **QuantityThreeCN22Payload,
+            "parcels": [
+                *ShipmentPayload["parcels"],
+                {"weight": 500, "weight_unit": "G"},
+            ],
+        }
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        declaration = lib.to_dict(request.serialize())["shipment"][0][
+            "customsDeclarationCN22"
+        ]
+        self.assertEqual(
+            declaration["totalGrossWeight"], {"value": 2.0, "unit": "KGM"}
+        )
+
+    def test_create_shipment_customs_gross_weight_falls_back_to_lines(self):
+        # Without any parcel weight the commodity line weights are the only
+        # derivable gross weight.
+        payload = {
+            **QuantityThreeCN22Payload,
+            "parcels": [{"length": 30.0, "width": 20.0, "height": 10.0, "dimension_unit": "CM"}],
+        }
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        declaration = lib.to_dict(request.serialize())["shipment"][0][
+            "customsDeclarationCN22"
+        ]
         self.assertEqual(
             declaration["totalGrossWeight"], {"value": 0.7, "unit": "KGM"}
         )
@@ -1764,7 +1798,22 @@ class TestPostNordCustomsInvoice(unittest.TestCase):
             ],
         )
         self.assertEqual(invoice["invoiceTotal"], {"amount": 35.0, "currency": "SEK"})
-        self.assertEqual(invoice["totalGrossWeight"], {"value": 0.7, "unit": "KGM"})
+        # Net weight sums the commodity lines; gross weight is the parcel's
+        # 1.5 kg, which includes packaging.
+        self.assertEqual(invoice["totalNetWeight"], {"value": 0.7, "unit": "KGM"})
+        self.assertEqual(invoice["totalGrossWeight"], {"value": 1.5, "unit": "KGM"})
+
+    def test_create_shipment_customs_invoice_gross_weight_falls_back_to_lines(self):
+        invoice = self._invoice(
+            {
+                **CustomsInvoiceShipmentPayload,
+                "parcels": [
+                    {"length": 30.0, "width": 20.0, "height": 10.0, "dimension_unit": "CM"}
+                ],
+            }
+        )
+        self.assertEqual(invoice["totalNetWeight"], {"value": 0.5, "unit": "KGM"})
+        self.assertEqual(invoice["totalGrossWeight"], {"value": 0.5, "unit": "KGM"})
 
     def test_create_shipment_customs_invoice_commercial_type(self):
         invoice = self._invoice(CustomsInvoiceShipmentPayload)
@@ -2022,7 +2071,7 @@ CustomsShipmentRequest = {
                         "rowNo": 2,
                     },
                 ],
-                "totalGrossWeight": {"value": 1.8, "unit": "KGM"},
+                "totalGrossWeight": {"value": 1.5, "unit": "KGM"},
                 "totalValue": {"amount": 65.0, "currency": "SEK"},
             },
         }
@@ -2254,7 +2303,8 @@ CustomsInvoiceShipmentRequest = {
                         "itemValue": {"amount": 200.0, "currency": "SEK"},
                     },
                 ],
-                "totalGrossWeight": {"value": 0.5, "unit": "KGM"},
+                "totalNetWeight": {"value": 0.5, "unit": "KGM"},
+                "totalGrossWeight": {"value": 1.5, "unit": "KGM"},
                 "invoiceTotal": {"amount": 500.0, "currency": "SEK"},
             },
         }

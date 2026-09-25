@@ -118,7 +118,7 @@ CN22 mapping:
 |---------------|------------|
 | `customs.content_type` | `categoryOfItem.categoryType` (see below) |
 | `customs.commodities[]` | `detailedDescription[]`: `title` (or `description`) as `content`, `quantity`, `grossWeight` in KGM, `value`, `hs_code` as `hsTariffNumber`, `origin_country` as `countryCode`, 1-based `rowNo` |
-| commodity weights | `totalGrossWeight` in KGM: sum of the line weights |
+| parcel weights | `totalGrossWeight` in KGM: sum of the parcel weights (including packaging), else sum of the commodity line weights |
 | commodity values | `totalValue`: sum of the line values, currency of the first commodity that sets one |
 | `shipper.country_code` | `countryOfOrigin` |
 | `customs.options.eori_number` / `voec_number` / `ioss_number` | `EORIorPersonalIdNumber` / `voec` / `ioss` |
@@ -142,7 +142,8 @@ Customs invoice mapping:
 | `customs.options.voec_number` / `ioss_number` | `voec` / `ioss` |
 | `customs.invoice` (or the shipment `reference`), `customs.invoice_date` | `invoice.invoiceNo`, `invoice.shippingDate` |
 | `customs.commodities[]` | `detailedDescription[]`: `quantity`, `hs_code`, `title` (or `description`), `origin_country`, weight in KGM as `netWeight` and `grossWeight`, `itemValue` |
-| commodity weights and values | `totalGrossWeight`, `invoiceTotal` (currency of the first commodity that sets one) |
+| commodity weights and values | `totalNetWeight` (sum of the line weights), `invoiceTotal` (sum of the line values, currency of the first commodity that sets one) |
+| parcel weights | `totalGrossWeight`: sum of the parcel weights (including packaging), else sum of the commodity line weights |
 
 A customs invoice is rejected with a field error before any call when the shipper has no tax id, when neither `customs.invoice` nor `reference` is set, when the shipper or recipient lacks a contact name or phone number, or when a commodity lacks `hs_code` or `origin_country`.
 Registration numbers are optional on the customs invoice.
