@@ -346,6 +346,27 @@ def enforce_customs_declaration_lines(
     raise lib.exceptions.FieldError({field: explanation})
 
 
+def enforce_cn22_registration_numbers(options: units.CustomsOptions) -> None:
+    """Raise a FieldError when a CN22 carries none of EORI, VOEC, or IOSS.
+
+    PostNord rejects such a declaration with SACUS-BR-24062502 ("Customs
+    CN22/CN23 should have either EORI, VOEC, IOSS"), observed live. The
+    sandbox did not apply the rule to customs invoices, so this guard is
+    scoped to the CN22 branch.
+    """
+    if any(options[key].state for key in CustomsOption.__members__):
+        return
+
+    raise lib.exceptions.FieldError(
+        {
+            "customs.options": (
+                "a CN22 declaration requires at least one of "
+                "eori_number, voec_number, or ioss_number"
+            )
+        }
+    )
+
+
 def enforce_customs_option_placement(options: dict) -> None:
     """Raise a FieldError when customs option keys sit in shipment options.
 

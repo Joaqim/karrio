@@ -358,20 +358,75 @@ class TestPostNordShipment(unittest.TestCase):
         self.assertNotIn("EORIorPersonalIdNumber", declaration)
         self.assertNotIn("ioss", declaration)
 
-    def test_create_shipment_customs_registration_numbers_empty_send_nothing(self):
-        # Option-state truthiness: an empty-string or None option emits no
-        # element, so the request is identical to one without options.
-        payload = {
-            **CustomsShipmentPayload,
-            "customs": {
-                **CustomsShipmentPayload["customs"],
-                "options": {"eori_number": "", "voec_number": None},
-            },
-        }
-        request = gateway.mapper.create_shipment_request(
-            models.ShipmentRequest(**payload)
-        )
-        self.assertEqual(lib.to_dict(request.serialize()), CustomsShipmentRequest)
+    def test_create_shipment_customs_registration_numbers_empty_reject(self):
+        # Option-state truthiness: empty-string or None options count as
+        # absent, and a CN22 without EORI, VOEC, or IOSS is rejected before
+        # submission, as PostNord rejects it (SACUS-BR-24062502).
+        for label, options in [
+            ("empty", {"eori_number": "", "voec_number": None}),
+            ("absent", {}),
+        ]:
+            with self.subTest(options=label):
+                with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+                    shipment, messages = (
+                        karrio.Shipment.create(
+                            models.ShipmentRequest(
+                                **{
+                                    **CustomsShipmentPayload,
+                                    "customs": {
+                                        **CustomsShipmentPayload["customs"],
+                                        "options": options,
+                                    },
+                                }
+                            )
+                        )
+                        .from_(gateway)
+                        .parse()
+                    )
+                    mock.assert_not_called()
+                self.assertIsNone(shipment)
+                self.assertEqual(len(messages), 1)
+                self.assertEqual(messages[0].code, "SHIPPING_SDK_FIELD_ERROR")
+                self.assertEqual(
+                    messages[0].details,
+                    {
+                        "customs.options": (
+                            "a CN22 declaration requires at least one of "
+                            "eori_number, voec_number, or ioss_number"
+                        )
+                    },
+                )
+
+    def test_create_shipment_customs_registration_numbers_any_one_suffices(self):
+        # Any single registration number satisfies the CN22 rule and the
+        # request carries only that number.
+        for key, element in [
+            ("eori_number", "EORIorPersonalIdNumber"),
+            ("voec_number", "voec"),
+            ("ioss_number", "ioss"),
+        ]:
+            with self.subTest(option=key):
+                payload = {
+                    **CustomsShipmentPayload,
+                    "customs": {
+                        **CustomsShipmentPayload["customs"],
+                        "options": {key: "REG123"},
+                    },
+                }
+                request = gateway.mapper.create_shipment_request(
+                    models.ShipmentRequest(**payload)
+                )
+                declaration = lib.to_dict(request.serialize())["shipment"][0][
+                    "customsDeclarationCN22"
+                ]
+                expected = {
+                    k: v
+                    for k, v in CustomsShipmentRequest["shipment"][0][
+                        "customsDeclarationCN22"
+                    ].items()
+                    if k != "EORIorPersonalIdNumber"
+                }
+                self.assertEqual(declaration, {**expected, element: "REG123"})
 
     def test_create_shipment_customs_registration_numbers_misplaced_reject(self):
         # Registration keys under shipment-level options are dropped by the
@@ -481,6 +536,7 @@ class TestPostNordShipment(unittest.TestCase):
             "service": "postnord_tracked_letter",
             "customs": {
                 "content_type": "merchandise",
+                "options": {"eori_number": "SE556000123401"},
                 "commodities": [
                     {
                         "title": "Sticker sheet",
@@ -516,6 +572,7 @@ class TestPostNordShipment(unittest.TestCase):
             "service": "postnord_tracked_letter",
             "customs": {
                 "content_type": "merchandise",
+                "options": {"eori_number": "SE556000123401"},
                 "commodities": [
                     {
                         "title": "Undeclared weight item",
@@ -1672,6 +1729,7 @@ CustomsShipmentPayload = {
                 "origin_country": "CN",
             },
         ],
+        "options": {"eori_number": "SE556000123401"},
     },
 }
 
@@ -1685,6 +1743,7 @@ CustomsShipmentRequest = {
                 "additionalServiceCode": ["A5"],
             },
             "customsDeclarationCN22": {
+                "EORIorPersonalIdNumber": "SE556000123401",
                 "countryOfOrigin": "SE",
                 "categoryOfItem": {"categoryType": ["SALE OF GOODS"]},
                 "detailedDescription": [
@@ -1761,6 +1820,7 @@ def _customs_payload(lines: int) -> dict:
                 }
                 for index in range(1, lines + 1)
             ],
+            "options": {"eori_number": "SE556000123401"},
         },
     }
 

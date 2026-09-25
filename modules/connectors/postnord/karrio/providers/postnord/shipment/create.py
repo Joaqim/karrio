@@ -293,13 +293,13 @@ def _customs_declaration(
     (``CN22CategoryType.lookup``), with unknown values passing through
     verbatim.
     Registration numbers are per-request passthrough from ``customs.options``
-    converted with the provider ``CustomsOption`` enum: absent options send
-    nothing and PostNord's own completeness rule (SACUS-BR-24062502 wants
-    EORI, VOEC, or IOSS) remains the authority.
+    converted with the provider ``CustomsOption`` enum; a declaration with
+    none of them is rejected locally, matching PostNord's SACUS-BR-24062502.
     """
     provider_units.enforce_customs_declaration_lines(
         len(customs.commodities), field="customs.commodities"
     )
+    provider_units.enforce_cn22_registration_numbers(options)
 
     currency = next(
         (c.value_currency for c in customs.commodities if c.value_currency), None
