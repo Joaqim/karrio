@@ -2,8 +2,8 @@
 
 ## 1. Branch setup
 
-- [ ] 1.1 Run `docs/notes/workflow/develop-status.sh` and create worktree `.worktrees/feat-shipment-advisors` on a new branch `feat-shipment-advisors` from `upstream/main` with `git -c submodule.recurse=false worktree add`, and verify the worktree HEAD equals `upstream/main`
-- [ ] 1.2 Register `feat-shipment-advisors` in BRANCHES of `docs/notes/workflow/assemble-develop.sh` on docs-openspec immediately after `feat-tracker-locale` (upstream-bound, no fork dependencies), update `develop-assembly.md`'s branch listing, commit on docs-openspec, and verify `develop-status.sh` lists the branch as not yet contained
+- [x] 1.1 Run `docs/notes/workflow/develop-status.sh` and create worktree `.worktrees/feat-shipment-advisors` on a new branch `feat-shipment-advisors` from `upstream/main` with `git -c submodule.recurse=false worktree add`, and verify the worktree HEAD equals `upstream/main`
+- [x] 1.2 Register `feat-shipment-advisors` in BRANCHES of `docs/notes/workflow/assemble-develop.sh` on docs-openspec immediately after `feat-tracker-locale` (upstream-bound, no fork dependencies), update `develop-assembly.md`'s branch listing, commit on docs-openspec, and verify `develop-status.sh` lists the branch as not yet contained
 
 ## 2. Plugin metadata and registry
 
