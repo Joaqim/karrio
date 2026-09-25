@@ -261,6 +261,47 @@ ENTRY_CODE_MAX_LENGTH = 50
 # and enforced before submission.
 CUSTOMS_DECLARATION_MAX_LINES = 13
 
+# PostNord takes a customs invoice instead of CN22/CN23 for parcel products,
+# while letters and International Parcel carry CN22/CN23. The letter set is
+# the closed group; every other service, including ones added later, is a
+# parcel product. VV (insured value) and AF (Danish delivery receipt) are
+# letter-mail variants.
+LETTER_SERVICES = frozenset(
+    {
+        ShippingService.postnord_tracked,
+        ShippingService.postnord_tracked_letter,
+        ShippingService.postnord_export_letter,
+        ShippingService.postnord_varubrev_first_class,
+        ShippingService.postnord_expressbrev,
+        ShippingService.postnord_rek,
+        ShippingService.postnord_rek_retur,
+        ShippingService.postnord_rek_extra,
+        ShippingService.postnord_rekommanderet_brev,
+        ShippingService.postnord_rekommanderet_quickbrev,
+        ShippingService.postnord_varde,
+        ShippingService.postnord_afleveringsattest,
+    }
+)
+INTERNATIONAL_PARCEL_SERVICE = ShippingService.postnord_postpaket_utrikes
+
+
+class CustomsStructure(lib.StrEnum):
+    """Booking customs branch, named by its ``shipmentCustomsv2`` element."""
+
+    cn22 = "customsDeclarationCN22"
+    customs_invoice = "customsInvoice"
+
+
+def customs_structure(basic_service_code: str) -> CustomsStructure:
+    """Select the booking customs branch for a basicServiceCode."""
+    if (
+        basic_service_code in LETTER_SERVICES
+        or basic_service_code == INTERNATIONAL_PARCEL_SERVICE
+    ):
+        return CustomsStructure.cn22
+
+    return CustomsStructure.customs_invoice
+
 
 def enforce_customs_declaration_lines(
     lines: int, field: str, item_id: typing.Optional[str] = None
