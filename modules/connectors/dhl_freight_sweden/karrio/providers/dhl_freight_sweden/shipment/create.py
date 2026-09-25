@@ -22,6 +22,12 @@ class DeclarationCurrencyError(errors.ShippingSDKDetailedError):
     code = "SHIPPING_SDK_FIELD_ERROR"
 
 
+class CustomsServiceIdentifierError(errors.ShippingSDKDetailedError):
+    """Raised when a selected customs service lacks its required identifier."""
+
+    code = "SHIPPING_SDK_FIELD_ERROR"
+
+
 class ServicePointDetailsError(errors.ShippingSDKDetailedError):
     """Raised when an access point party is missing service point details."""
 
@@ -143,6 +149,7 @@ def shipment_request(
     customs_options = lib.to_customs_info(
         payload.customs, option_type=provider_units.CustomsOption
     ).options
+    _check_customs_service_identifiers(options, customs_options)
     page_type = provider_units.PageType.map(
         options.dhl_freight_sweden_label_page_type.state
         or settings.connection_config.label_page_type.state
@@ -367,6 +374,49 @@ def _customs_information(
             for commodity in commodities
         ],
     )
+
+
+def _check_customs_service_identifiers(
+    options: units.ShippingOptions,
+    customs_options: units.CustomsOptions,
+) -> None:
+    def is_blank(value: typing.Optional[str]) -> bool:
+        return not (value or "").strip()
+
+    own_declaration = options.dhl_freight_sweden_customs_own_declaration.state
+    joint_declaration = options.dhl_freight_sweden_customs_joint_declaration.state
+    missing = {
+        field: label
+        for field, label, is_missing in [
+            (
+                "customs.options.eori_number",
+                "the EORI number for standard customs handling",
+                bool(options.dhl_freight_sweden_customs_handling_standard.state)
+                and is_blank(customs_options.eori_number.state),
+            ),
+            (
+                "dhl_freight_sweden_customs_own_declaration",
+                "the customs identifier (MRN) for customer's own declaration",
+                own_declaration is not None and is_blank(own_declaration),
+            ),
+            (
+                "dhl_freight_sweden_customs_joint_declaration",
+                "the joint-declaration identifier (SFID) for joint declaration",
+                joint_declaration is not None and is_blank(joint_declaration),
+            ),
+        ]
+        if is_missing
+    }
+
+    if any(missing):
+        raise CustomsServiceIdentifierError(
+            "The selected customs services require "
+            f"{'; '.join(missing.values())}",
+            details={
+                field: dict(code="required", message=label)
+                for field, label in missing.items()
+            },
+        )
 
 
 def _service_point_party(
