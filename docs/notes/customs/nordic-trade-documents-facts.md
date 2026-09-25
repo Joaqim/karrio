@@ -218,6 +218,30 @@ No DHL invoice template for Sweden exports was found (W).
 Messages persist on `Shipment.messages` and do not fail the purchase when a shipment is returned (S `modules/core/karrio/server/core/gateway.py:309-315, 424`).
 `EUCountry` stores Greece as `EL` and neither `Country` nor `EUCountry` has `AX` or `XI`; no postcode-based territory detection exists (S `modules/sdk/karrio/core/units.py:1936, 2882-2894`).
 
+## Cross-connector survey (non-DHL connectors)
+
+Surveyed 2026-09-25 on `develop` at 2c83eed7b; all claims are S unless tagged.
+No connector renders CN22 or CN23 itself; postal connectors that carry customs data (usps_international, canadapost, and probably colissimo) rely on the carrier printing the form into the label.
+No connector or SDK component emits a karrio-authored advisory; every `level="warning"` message is parsed from a carrier response (for example `ups/error.py:65`, `fedex/error.py:74-82`, `australiapost/error.py:17`, `seko/error.py:77-85`).
+
+| Concern | Observed handling |
+|---|---|
+| Whether customs is required | about 20 inline `shipper.country_code != recipient.country_code` checks (for example `fedex/.../shipment/create.py:163`, `purolator/.../create.py:122`, `sendle/.../create.py:77`), or simply `if payload.customs`; FedEx treats IN to IN as international; only UPS rating consults `EUCountry` (`ups/.../rate.py:147`); none handle EU-internal or special territories |
+| Documents-only exemption | ups, fedex, purolator, tnt, sapient, eshipper use `Packages.is_document`; dpd_meta uses `content_type == "documents"` |
+| Invoice source ladder | UPS `FormType` 07 user forms, 03 UPS-generated, 01 paper (`ups/.../shipment/create.py:528-538`); FedEx ETD with `doc_files`, `doc_references`, or `POST_SHIPMENT_UPLOAD_REQUESTED` (`fedex/.../shipment/create.py:386-419`); seko takes the first commercial_invoice PDF from `doc_files` (`seko/.../create.py:124-135`) |
+| `customs.commercial_invoice` meaning | invoice type in dhl_express and dhl_freight_sweden; `IsCommercialShipment` in landmark (`landmark/.../create.py:174,350`); sent as `commercial_value` in australiapost (`australiapost/.../create.py:232`); ignored elsewhere |
+| Returned trade documents | FedEx requests a commercial invoice on every shipment (`fedex/.../create.py:704-722`); easyship, parcelone, purolator, easypost discard carrier documents; asendia exposes customs and invoice URLs in `meta` only (`asendia/.../create.py:73-74`); usps domestic maps the postage `receiptImage` into `docs.invoice` (`usps/.../create.py:48,89`) |
+
+Shared SDK pieces are `lib.to_customs_info`, `Packages.is_document`, `ShippingOption.paperless_trade` / `doc_files` / `doc_references`, `UploadDocumentType`, `ShippingDocumentCategory` (redefined locally by ups, fedex, dpd_meta), and `EUCountry`; none decides whether customs is required (S `modules/sdk/karrio/core/units.py:143-170, 975, 1218-1220, 1388, 2882`).
+
+## Plugin extension points
+
+`PluginMetadata` registers carrier plugins (Mapper, Proxy, Settings) and LSP plugins (address validation, for example `plugins/googlegeocoding`); any other plugin is typed unknown, and only `system_config` and data fields such as `stamp_seeds` are collected from it (S `modules/sdk/karrio/core/metadata.py:19-98, 199-234`; `modules/sdk/karrio/references.py:42-196`).
+Plugins are discovered through the `karrio.plugins` entry-point group, the `karrio.plugins.*` namespace, the legacy `karrio.mappers.*` namespace, and a `KARRIO_PLUGINS` directory (S `modules/sdk/karrio/core/plugins.py:83-135, 518-548`).
+Neither the SDK `Shipment.create` nor the server `Shipments.create` exposes a hook list, so no plugin can add messages or options during rating or purchase (S `modules/sdk/karrio/api/interface.py:375, 441-507`; `modules/core/karrio/server/core/gateway.py:267-430`).
+EE shipping rules run only at rate selection, have no origin-country condition, and offer `select_service`, `block_service`, and an untyped `extensions` action (S `packages/types/graphql/ee/types.ts:3437-3487`; the `ee/insiders` source was not checked out).
+Invoice rendering from a stored `DocumentTemplate` already exists behind `options.invoice_template` (S `modules/manager/karrio/server/manager/serializers/shipment.py:666-805`).
+
 ## Open questions
 
 - PostNord NO rules for Norwegian shippers exporting (no official source found).
