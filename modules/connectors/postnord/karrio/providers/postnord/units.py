@@ -285,6 +285,48 @@ LETTER_SERVICES = frozenset(
 INTERNATIONAL_PARCEL_SERVICE = ShippingService.postnord_postpaket_utrikes
 
 
+# Same EU VAT area definition as the DHL Freight Sweden connector. The SDK
+# EUCountry enum lists Greece under its VAT prefix EL, so the ISO code GR is
+# added. Special fiscal territories outside the EU VAT area (Tullverket, EU
+# customs and fiscal territories) either carry their own country code (AX,
+# IC, GP, GF, MQ, RE, YT), which is absent from EUCountry, or are identified
+# by postal-code range within a member state.
+EU_VAT_AREA_COUNTRIES: typing.FrozenSet[str] = frozenset(
+    [*(country.name for country in units.EUCountry), "GR"]
+)
+NON_EU_VAT_POSTAL_RANGES: typing.Tuple[typing.Tuple[str, int, int], ...] = (
+    ("FI", 22000, 22999),  # Åland
+    ("ES", 35000, 35999),  # Canary Islands (Las Palmas)
+    ("ES", 38000, 38999),  # Canary Islands (Santa Cruz de Tenerife)
+    ("ES", 51000, 51999),  # Ceuta
+    ("ES", 52000, 52999),  # Melilla
+    ("DE", 78266, 78266),  # Büsingen
+    ("DE", 27498, 27498),  # Heligoland
+    ("IT", 23041, 23041),  # Livigno
+    ("IT", 22061, 22061),  # Campione d'Italia
+)
+
+# Warning code shared with the DHL Freight Sweden connector.
+CUSTOMS_OMITTED_INTRA_EU = "customs_omitted_intra_eu"
+
+
+def in_eu_vat_area(
+    country_code: typing.Optional[str],
+    postal_code: typing.Optional[str],
+) -> bool:
+    """Whether an address lies inside the EU VAT area."""
+    country = (country_code or "").upper()
+    postal = str(postal_code or "").replace(" ", "")
+    postal_number = int(postal) if postal.isdigit() else None
+
+    return country in EU_VAT_AREA_COUNTRIES and not any(
+        country == range_country
+        and postal_number is not None
+        and low <= postal_number <= high
+        for range_country, low, high in NON_EU_VAT_POSTAL_RANGES
+    )
+
+
 class CustomsStructure(lib.StrEnum):
     """Booking customs branch, named by its ``shipmentCustomsv2`` element."""
 
