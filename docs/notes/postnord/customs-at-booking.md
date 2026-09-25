@@ -38,11 +38,11 @@ Selecting CN23 and applying value thresholds such as PostNord Sweden's SEK 2 000
 | `invoice.invoiceNo` | `customs.invoice`, else the shipment `reference` |
 | `invoice.shippingDate` | `customs.invoice_date`, passed through unchanged (PostNord expects `YYYY-MM-DD`) |
 | `invoice.reasonForExportation` | always `1000` (permanent export, covering sale, gift, and sample) |
-| `detailedDescription[]` | per commodity: `quantity`, `hs_code` as `hsTariffNumber`, `title` (else `description`) as `content`, `origin_country` as `countryOfOrigin`, `weight` in KGM as both `netWeight` and `grossWeight`, `value_amount` and `value_currency` as `itemValue` |
-| `totalGrossWeight` | sum of commodity weights in KGM |
-| `invoiceTotal` | sum of commodity `value_amount`, rounded to two decimals, in the currency of the first commodity that sets one |
+| `detailedDescription[]` | per commodity: `quantity`, `hs_code` as `hsTariffNumber`, `title` (else `description`) as `content`, `origin_country` as `countryOfOrigin`, `weight` × `quantity` in KGM as both `netWeight` and `grossWeight`, `value_amount` × `quantity` and `value_currency` as `itemValue` |
+| `totalGrossWeight` | sum of the line weights in KGM |
+| `invoiceTotal` | sum of the line values, rounded to two decimals, in the currency of the first commodity that sets one |
 
-Commodity `value_amount` and `weight` are sent per line as given, without multiplying by `quantity`, the same way the CN22 builder treats them.
+Commodity `value_amount` and `weight` are per unit, so each line carries them multiplied by `quantity` and the totals sum the lines; the CN22 lines and totals are built the same way.
 Postal codes are sent as strings, so a Norwegian `0154` keeps its leading zero.
 
 ## Fail-fast errors
@@ -124,9 +124,9 @@ This payload is the `CustomsInvoiceShipmentPayload` fixture in `modules/connecto
             {
                 "title": "Wool socks",
                 "quantity": 2,
-                "weight": 0.4,
+                "weight": 0.2,
                 "weight_unit": "KG",
-                "value_amount": 300.0,
+                "value_amount": 150.0,
                 "value_currency": "SEK",
                 "hs_code": "6115950000",
                 "origin_country": "SE",
