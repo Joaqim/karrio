@@ -18,6 +18,8 @@ Facts and sources are collated in `docs/notes/customs/nordic-trade-documents-fac
 - Verify in the PostNord sandbox, before implementation, that a booking accepts `customsInvoice` for parcel products and whether a single booking accepts CN23 together with `customsInvoice`.
 - DHL Freight Sweden: map `customs.options.eori_number` to `CustomsDocument.eori` and `customs.options.voec_number` to the `voecSupplyVAT` service.
 - DHL Freight Sweden: expose the customs services (`customsHandlingStandard`, `customsHandlingFullService`, `customsCustomersOwnDeclaration` with `customsId`, `customsJointDeclaration` with `sfid`) as explicit connector options that are never selected implicitly, because each carries a DHL fee.
+- **BREAKING** for DHL Freight Sweden consumers who send an invoice number with `commercial_invoice` false: the document type becomes ProformaInvoice instead of CommercialInvoice, because the flag is applied literally.
+- **BREAKING** for PostNord consumers booking letters or International Parcel with customs data but no EORI, VOEC, or IOSS: the booking fails fast instead of being rejected by PostNord with `SACUS-BR-24062502`.
 - **BREAKING** for PostNord consumers booking parcel products with customs data: the booking carries `customsInvoice` instead of CN22, and the composed customs document kind changes accordingly.
 
 Out of scope: CN22 versus CN23 selection and value thresholds; advisory warnings about consumer duties (printing, attaching, emailing invoices), which belong to the separate shipment-advisors change and the Nordic conventions plugin; karrio-rendered invoice templates; connectors other than PostNord and DHL Freight Sweden.
@@ -37,4 +39,5 @@ Out of scope: CN22 versus CN23 selection and value thresholds; advisory warnings
 - `modules/connectors/postnord/karrio/providers/postnord/shipment/create.py` (customs builder), `units.py` (product-group classification, options), and tests under `modules/connectors/postnord/tests/postnord/`; the generated schema already contains `customsInvoice` and `customsDeclarationCN23`, so no regeneration is expected.
 - `modules/connectors/dhl_freight_sweden/karrio/providers/dhl_freight_sweden/shipment/create.py`, `units.py`, and tests; schema regeneration only if the generated transport-instruction types lack the customs service objects.
 - Consumer-visible: PostNord booking payloads and returned document kinds for parcels with customs; new DHL Freight Sweden options.
-- Delivered on a feature branch off `upstream/main` in the fork and assembled into `develop`; upstream submission follows the connectors' own upstream path.
+- Delivered on feature branches off the connector branches `feat-postnord-connector` and `feat-dhl-freight-se-connector` in the fork, assembled into `develop`; neither connector exists on `upstream/main` yet, so upstream submission follows the connectors' own path.
+- Verification needs one approved PostNord production booking (then cancelled), because sandbox bookings never reach PostNord's print subsystem.

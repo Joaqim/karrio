@@ -21,7 +21,17 @@ Parcel products are all PostNord services that are neither letter services nor I
 #### Scenario: Customs invoice is built from unified data
 
 - **WHEN** a customs invoice is sent
-- **THEN** it names the shipper as seller and the recipient as buyer, carries the invoice number from `customs.invoice` (or the shipment reference when absent) and the date from `customs.invoice_date`, lists the commodities as its detailed description with quantity, value, currency, weight, HS code, and country of origin, and states the invoice total and total gross weight derived from the commodities
+- **THEN** it names the shipper as seller (with the shipper tax identifier as VAT number, the PostNord customer number as party identification, and the EORI when present) and the recipient as buyer, carries the invoice number from `customs.invoice` (or the shipment reference when absent) and the date from `customs.invoice_date` as PostNord's invoice shipping date, lists the commodities as its detailed description with quantity, value, currency, net and gross weight, HS code, and country of origin, and states the invoice total and total gross weight derived from the commodities
+
+#### Scenario: Seller VAT number is required
+
+- **WHEN** a customs invoice would be sent and the shipper carries no tax identifier
+- **THEN** the operation fails with a field error naming the shipper VAT number and no request is sent to PostNord
+
+#### Scenario: Customs invoice declares permanent export by default
+
+- **WHEN** a customs invoice is sent
+- **THEN** its reason for exportation is PostNord's procedure code 1000 (permanent export, covering sale, gift, and sample)
 
 #### Scenario: Customs invoice uses PostNord's invoice export declaration
 
