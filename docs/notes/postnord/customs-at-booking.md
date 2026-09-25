@@ -22,6 +22,13 @@ Every other service is a parcel product and sends a customs invoice (`customsInv
 The letter set is `LETTER_SERVICES` in `karrio/providers/postnord/units.py`, so a service added later is a parcel product unless it is added there.
 Selecting CN23 and applying value thresholds such as PostNord Sweden's SEK 2 000 are not implemented.
 
+## Shipments within the EU VAT area
+
+When both the shipper and the recipient are inside the EU VAT area, the booking carries no CN22, CN23, or customs invoice, the standalone customs document is not fetched, and none of the fail-fast checks below run.
+Callers may therefore attach customs data to every shipment; when they do and the shipment stays inside the EU VAT area, the response carries a warning message with code `customs_omitted_intra_eu` ("Customs data was not sent: the shipment from SE to PL stays within the EU VAT area"), the same code the DHL Freight Sweden connector uses.
+The definition matches the DHL Freight Sweden connector and is implemented connector-locally as `in_eu_vat_area` in `karrio/providers/postnord/units.py`: the SDK's `EUCountry` members plus `GR`, excluding Åland (`AX`, or `FI` 22000–22999), the Canary Islands (`IC`, or `ES` 35000–35999 and 38000–38999), Ceuta (`ES` 51000–51999), Melilla (`ES` 52000–52999), Büsingen (`DE` 78266), Heligoland (`DE` 27498), Livigno (`IT` 23041), Campione d'Italia (`IT` 22061), and the French overseas departments (`GP`, `GF`, `MQ`, `RE`, `YT`).
+A parcel from Sweden to Mariehamn (`FI` 22100) therefore still carries a customs invoice.
+
 ## Customs invoice field sources
 
 | PostNord field | Unified source |
@@ -49,7 +56,7 @@ Postal codes are sent as strings, so a Norwegian `0154` keeps its leading zero.
 
 ## Fail-fast errors
 
-These checks run before any request is sent, and each failure returns a `SHIPPING_SDK_FIELD_ERROR` message whose details name every missing field at once.
+These checks run before any request is sent for shipments leaving the EU VAT area, and each failure returns a `SHIPPING_SDK_FIELD_ERROR` message whose details name every missing field at once.
 
 | Condition | Details key | Message |
 |---|---|---|
