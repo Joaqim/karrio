@@ -10,6 +10,7 @@ Both requests carry the ``client-key`` header. Product codes serialize as
 strings on the wire (e.g. "102", "SPI").
 """
 
+import datetime
 import typing
 import unittest
 from unittest.mock import patch
@@ -167,6 +168,51 @@ class TestDHLFreightShipment(unittest.TestCase):
         self.assertNotIn("customsInformation", booking)
         self.assertIsNotNone(details)
         self.assertEqual(lib.to_dict(messages), [IntraEUCustomsWarning])
+
+    def test_shipment_intra_eu_drops_customs_services_without_failing(self):
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            mock.side_effect = [BookingResponse102, PrintResponse]
+            details, messages = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(
+                        **{
+                            **ShipmentPayload202CustomsPL,
+                            "customs": {**Customs, "options": {"voec_number": "VOEC2012345"}},
+                            "options": {
+                                "dhl_freight_sweden_customs_handling_standard": True,
+                                "dhl_freight_sweden_customs_own_declaration": True,
+                            },
+                        }
+                    )
+                )
+                .from_(gateway)
+                .parse()
+            )
+
+        booking = lib.to_dict(mock.call_args_list[0].kwargs["data"])
+        self.assertNotIn("customsInformation", booking)
+        self.assertFalse(set(booking.get("additionalServices") or {}) & CustomsServiceKeys)
+        self.assertIsNotNone(details)
+        self.assertEqual(lib.to_dict(messages), [IntraEUCustomsServicesWarning])
+
+    def test_shipment_intra_eu_customs_options_only_warns(self):
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            mock.side_effect = [BookingResponse102, PrintResponse]
+            _, messages = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(
+                        **_with_options(
+                            ShipmentPayload102,
+                            {"dhl_freight_sweden_customs_handling_full_service": True},
+                        )
+                    )
+                )
+                .from_(gateway)
+                .parse()
+            )
+
+        self.assertEqual([message.code for message in messages], ["customs_omitted_intra_eu"])
+        self.assertIn("customsHandlingFullService", messages[0].message)
 
     def test_shipment_without_customs_has_no_intra_eu_warning(self):
         with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
@@ -367,6 +413,41 @@ class TestDHLFreightShipment(unittest.TestCase):
         self.assertEqual(document["id"], "ORDER-2026-042")
         self.assertEqual(document["invoiceDate"], "2026-09-30")
         self.assertEqual(serialized["shippingDate"], "2026-09-30")
+
+    def test_create_shipment_request_customs_invoice_date_chain(self):
+        no_shipping_date = {
+            key: value
+            for key, value in ShipmentPayload109CustomsNoInvoice.items()
+            if key != "options"
+        }
+        cases = [
+            (
+                "explicit",
+                {
+                    **ShipmentPayload109CustomsNoInvoice,
+                    "customs": {
+                        **ShipmentPayload109CustomsNoInvoice["customs"],
+                        "invoice_date": "2026-09-08",
+                    },
+                },
+                "2026-09-08",
+            ),
+            ("shipping date", ShipmentPayload109CustomsNoInvoice, "2026-09-30"),
+            ("booking date", no_shipping_date, "2026-09-25"),
+        ]
+
+        for label, payload, expected in cases:
+            with self.subTest(label), patch(
+                "karrio.providers.dhl_freight_sweden.shipment.create.datetime"
+            ) as clock:
+                clock.date.today.return_value = datetime.date(2026, 9, 25)
+                request = gateway.mapper.create_shipment_request(
+                    models.ShipmentRequest(**payload)
+                )
+                serialized = lib.to_dict(request.serialize())
+
+                document = serialized["customsInformation"]["customsDocuments"][0]
+                self.assertEqual(document["invoiceDate"], expected)
 
     def test_shipment_customs_without_invoice_or_reference_surfaces_field_error(self):
         with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
@@ -1187,6 +1268,23 @@ IntraEUCustomsWarning = {
         "within the EU VAT area"
     ),
     "details": {"shipper_country_code": "SE", "recipient_country_code": "PL"},
+}
+
+IntraEUCustomsServicesWarning = {
+    **IntraEUCustomsWarning,
+    "message": (
+        "Customs data was not sent: the shipment from SE to PL stays "
+        "within the EU VAT area; dropped customs services: "
+        "customsHandlingStandard, customsCustomersOwnDeclaration, voecSupplyVAT"
+    ),
+    "details": {
+        **IntraEUCustomsWarning["details"],
+        "dropped_services": [
+            "customsHandlingStandard",
+            "customsCustomersOwnDeclaration",
+            "voecSupplyVAT",
+        ],
+    },
 }
 
 ShipmentPayload102Customs = {
