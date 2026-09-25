@@ -38,7 +38,9 @@ if ! has nix_direnv_version || ! nix_direnv_version "3.1.1"; then
   source_url "https://raw.githubusercontent.com/nix-community/nix-direnv/3.1.1/direnvrc" "sha256-p+fzQdrms/hDa7g+soShAybJNo4bN4SIAeSfqNKgD5I="
 fi
 
-use flake "git+file:///home/joaqim/projects/karrio?ref=dev-nix-flake#upstream"
+if ! use flake "git+file:///home/joaqim/projects/karrio?ref=dev-nix-flake#upstream" --accept-flake-config; then
+  echo "nix flake could not be built; check dev-nix-flake and run nix-direnv-reload" >&2
+fi
 
 dotenv_if_exists
 ```
