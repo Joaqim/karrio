@@ -259,18 +259,16 @@ def shipment_request(
             ),
             customsCustomersOwnDeclaration=lib.identity(
                 dhl_freight_sweden_req.CustomsCustomersOwnDeclarationType(
-                    customsId=options.dhl_freight_sweden_customs_own_declaration.state
+                    customsId=options.dhl_freight_sweden_customs_own_declaration_id.state
                 )
                 if options.dhl_freight_sweden_customs_own_declaration.state
-                is not None
                 else None
             ),
             customsJointDeclaration=lib.identity(
                 dhl_freight_sweden_req.CustomsJointDeclarationType(
-                    sfid=options.dhl_freight_sweden_customs_joint_declaration.state
+                    sfid=options.dhl_freight_sweden_customs_joint_declaration_id.state
                 )
                 if options.dhl_freight_sweden_customs_joint_declaration.state
-                is not None
                 else None
             ),
             voecSupplyVAT=lib.identity(
@@ -383,8 +381,6 @@ def _check_customs_service_identifiers(
     def is_blank(value: typing.Optional[str]) -> bool:
         return not (value or "").strip()
 
-    own_declaration = options.dhl_freight_sweden_customs_own_declaration.state
-    joint_declaration = options.dhl_freight_sweden_customs_joint_declaration.state
     missing = {
         field: label
         for field, label, is_missing in [
@@ -395,14 +391,18 @@ def _check_customs_service_identifiers(
                 and is_blank(customs_options.eori_number.state),
             ),
             (
-                "dhl_freight_sweden_customs_own_declaration",
+                "dhl_freight_sweden_customs_own_declaration_id",
                 "the customs identifier (MRN) for customer's own declaration",
-                own_declaration is not None and is_blank(own_declaration),
+                bool(options.dhl_freight_sweden_customs_own_declaration.state)
+                and is_blank(options.dhl_freight_sweden_customs_own_declaration_id.state),
             ),
             (
-                "dhl_freight_sweden_customs_joint_declaration",
+                "dhl_freight_sweden_customs_joint_declaration_id",
                 "the joint-declaration identifier (SFID) for joint declaration",
-                joint_declaration is not None and is_blank(joint_declaration),
+                bool(options.dhl_freight_sweden_customs_joint_declaration.state)
+                and is_blank(
+                    options.dhl_freight_sweden_customs_joint_declaration_id.state
+                ),
             ),
         ]
         if is_missing
