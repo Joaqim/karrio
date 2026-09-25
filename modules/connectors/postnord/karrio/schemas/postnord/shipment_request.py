@@ -135,7 +135,7 @@ class BuyerType:
     name: typing.Optional[str] = None
     streets: typing.Optional[typing.List[str]] = None
     city: typing.Optional[str] = None
-    postalCode: typing.Optional[int] = None
+    postalCode: typing.Optional[str] = None
     countryCode: typing.Optional[str] = None
     contacts: typing.Optional[ContactType] = jstruct.JStruct[ContactType]
     eoriNo: typing.Optional[str] = None
