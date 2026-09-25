@@ -62,7 +62,29 @@ def parse_shipment_response(
             _response.ctx["customs_printout_error"], settings
         )
 
+    if _response.ctx.get("customs_omitted"):
+        messages.append(
+            _customs_omitted_message(_response.ctx["customs_omitted"], settings)
+        )
+
     return shipment, messages
+
+
+def _customs_omitted_message(
+    countries: dict,
+    settings: provider_utils.Settings,
+) -> models.Message:
+    return models.Message(
+        carrier_name=settings.carrier_name,
+        carrier_id=settings.carrier_id,
+        code=provider_units.CUSTOMS_OMITTED_INTRA_EU,
+        level="warning",
+        message=(
+            "Customs data was not sent: the shipment from "
+            f"{countries['shipper_country_code']} to "
+            f"{countries['recipient_country_code']} stays within the EU VAT area"
+        ),
+    )
 
 
 def _extract_details(
@@ -635,7 +657,21 @@ def shipment_request(
     # typed-options filtering (see units.CustomsOption); commodity lines keep
     # flowing from the raw customs model because the Products wrapper
     # normalizes missing quantity/weight_unit and would change line emission.
-    has_customs = bool(payload.customs and payload.customs.commodities)
+    # Callers may send customs data maximally; within the EU VAT area no
+    # customs declaration is required, so every customs structure and its
+    # fail-fast checks are dropped and the omission is reported as a warning.
+    within_eu_vat_area = all(
+        provider_units.in_eu_vat_area(address.country_code, address.postal_code)
+        for address in (shipper, recipient)
+    )
+    customs_omitted = within_eu_vat_area and bool(
+        payload.customs
+        and (payload.customs.commodities or payload.customs.options)
+    )
+    has_customs = lib.identity(
+        bool(payload.customs and payload.customs.commodities)
+        and not within_eu_vat_area
+    )
     customs_structure = provider_units.customs_structure(service)
     if has_customs:
         provider_units.enforce_customs_option_placement(payload.options)
@@ -797,6 +833,14 @@ def shipment_request(
             basic_service_code=service,
             customs_declared=(
                 customs_declaration is not None or customs_invoice is not None
+            ),
+            customs_omitted=lib.identity(
+                dict(
+                    shipper_country_code=shipper.country_code,
+                    recipient_country_code=recipient.country_code,
+                )
+                if customs_omitted
+                else None
             ),
         ),
     )

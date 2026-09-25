@@ -110,6 +110,8 @@ Each point is a dict with `id`, `name`, `type`, `address`, `coordinates`, `openi
 ### At booking
 
 When a shipment carries `customs` with at least one commodity, the booking embeds one customs structure selected by the service.
+When both the shipper and the recipient are inside the EU VAT area, no customs structure is sent, no customs document is fetched, and none of the customs field checks below apply; a caller-supplied `customs` block is reported as a `customs_omitted_intra_eu` warning message instead.
+The EU VAT area follows the DHL Freight Sweden connector's definition (`in_eu_vat_area` in `units.py`): Greece is accepted as `GR` or `EL`, and special fiscal territories such as Åland (`AX`, or `FI` 22000–22999), the Canary Islands, Ceuta, Melilla, Büsingen, Heligoland, Livigno, Campione d'Italia, and the French overseas departments are outside it.
 Letter services (`LETTER_SERVICES` in `units.py`) and International Parcel (91) send a CN22 declaration (`customsDeclarationCN22`); every other service is a parcel product and sends a customs invoice (`customsInvoice`).
 
 CN22 mapping:
