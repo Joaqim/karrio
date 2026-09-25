@@ -13,7 +13,12 @@ A plugin SHALL be able to declare shipment advisors through an optional `shipmen
 #### Scenario: Advisor-only plugin is collected
 
 - **WHEN** a plugin whose metadata declares only `shipment_advisors`, with no carrier mapper, proxy, settings, or address validator, is installed
-- **THEN** its advisors are collected and the plugin is not reported as an unknown or invalid plugin
+- **THEN** its advisors are collected and the plugin reports the plugin type `advisor` rather than `unknown`
+
+#### Scenario: Carrier plugin with advisors reports both types
+
+- **WHEN** a carrier plugin also declares `shipment_advisors`
+- **THEN** its plugin types include both `carrier` and `advisor`
 
 #### Scenario: Plugins without advisors are unaffected
 
@@ -22,12 +27,24 @@ A plugin SHALL be able to declare shipment advisors through an optional `shipmen
 
 ### Requirement: Advisors run during rating and shipment creation
 
-The SDK SHALL invoke every collected advisor once per carrier gateway when rates are fetched and when a shipment is created, passing the unified request and a carrier context, and SHALL append the messages each advisor returns to the response messages.
+The SDK SHALL invoke every collected advisor once per carrier gateway that produced a result when rates are fetched and when a shipment is created, passing the unified request as sent to that carrier and a carrier context, and SHALL append the messages each advisor returns to the response messages.
+Advisors SHALL NOT run for a gateway whose operation was aborted or failed, nor for a rate gateway that returned no rates.
+For return shipments the request passed to advisors is the one with shipper and recipient swapped as sent to the carrier.
 
 #### Scenario: Advisor message appears on a shipment response
 
 - **WHEN** a shipment is created through a carrier gateway and an installed advisor returns one warning message for that request
 - **THEN** the shipment response carries that warning in its messages alongside the carrier's own messages, and the shipment details are unchanged
+
+#### Scenario: No advisor messages for gateways without a result
+
+- **WHEN** rates are fetched from a gateway that returns no rates, or a shipment creation fails at the carrier
+- **THEN** no advisor message is added for that gateway, so the response is the same as without advisors
+
+#### Scenario: Return shipments are advised on the swapped request
+
+- **WHEN** a return shipment is created and an advisor returns a message naming the request's shipper country
+- **THEN** the message names the original recipient's country
 
 #### Scenario: Advisor runs per carrier when rating several carriers
 
@@ -36,7 +53,7 @@ The SDK SHALL invoke every collected advisor once per carrier gateway when rates
 
 ### Requirement: Advisors receive no credentials
 
-The carrier context passed to advisors SHALL contain only the carrier name, carrier id, account country code, test mode flag, and the connection's non-credential configuration, and SHALL NOT contain API keys, secrets, passwords, tokens, or account numbers used for authentication.
+The carrier context passed to advisors SHALL contain only the carrier name, carrier id, account country code, test mode flag, and the connection's configuration dictionary, and SHALL NOT contain API keys, secrets, passwords, tokens, or account numbers used for authentication.
 Shipper identity and addresses SHALL be available to advisors only through the unified request.
 
 #### Scenario: Credentials are absent from the advisor context
@@ -66,3 +83,12 @@ An advisor that raises SHALL NOT fail the operation; the SDK SHALL report the fa
 
 - **WHEN** one installed advisor raises an exception and another returns a warning
 - **THEN** the operation succeeds, the response carries the other advisor's warning, and a warning names the plugin whose advisor failed
+
+### Requirement: Purchase-time advisor messages persist on the shipment
+
+When the server purchases a label, the messages returned by shipment creation, including advisor messages and non-blocking carrier warnings, SHALL be stored in the shipment's messages together with the messages already stored from rating, without duplicating messages already present.
+
+#### Scenario: Purchase-time advisory is visible on the purchased shipment
+
+- **WHEN** a shipment is purchased through the server API and an installed advisor returns a warning at shipment creation
+- **THEN** the purchased shipment returned by the API lists that warning in its messages
