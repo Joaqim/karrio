@@ -27,20 +27,31 @@ It stays on the fork until both parents land upstream.
 1. Branch from `upstream/main`, or from the unmerged branch the work depends on.
 2. Put the PRD commit first, then one commit per logical capability, in the format `type(scope): summary`.
 3. Verify outside nix in `python:3.12-slim-bookworm`, matching upstream CI, and inside the nix dev shell; see [nix-dev-shell-worktrees.md](nix-dev-shell-worktrees.md) for the per-worktree `.envrc`.
-4. If the branch is new, add it to `BRANCHES` in `assemble-develop.sh` on `docs-openspec`.
-5. Regenerate and deploy from the main checkout.
-   Without `-r`, the script takes the repository from the current directory, so running it from a worktree roots the target worktree inside that worktree; from elsewhere, pass `-r /home/joaqim/projects/karrio`.
-
-   ```bash
-   docs/notes/workflow/assemble-develop.sh -f           # builds develop-next in .worktrees/develop-next
-   git diff develop develop-next --stat                 # review what the deployment will change
-   git push --force-with-lease=develop:"$(git rev-parse origin/develop)" origin develop-next:develop
-   git -c submodule.recurse=false switch develop && git -c submodule.recurse=false reset --hard develop-next
-   git worktree remove .worktrees/develop-next && git branch -D develop-next
-   ```
+4. If the branch is new, add it to `BRANCHES` in `assemble-develop.sh` on `docs-openspec`, after the branch it is based on, and commit.
+5. Regenerate develop with `rebuild-develop.sh`, then push; see the agent workflow below.
+   The scripts read `BRANCHES` from the committed tip of `docs-openspec`, so an uncommitted edit to the list has no effect.
 
 A merge conflict during assembly means two feature branches disagree.
 Fix it on the feature branches, never in the assembled result.
+
+## Agent workflow
+
+Agents follow these steps so that feature branches and the generated `develop` are never confused.
+The scripts live in `docs/notes/workflow/` on `develop` and `docs-openspec`; from other branches run them from `/home/joaqim/projects/karrio/.worktrees/docs-openspec/docs/notes/workflow/`.
+
+1. At the start of work, run `develop-status.sh` (add `--fetch` to refresh the remotes) before stating anything about `develop`, `origin` or a branch's push state.
+   It lists each `BRANCHES` entry with its containment in `develop` and its state against `origin`, compares `develop` with `origin/develop` and `upstream/main`, and flags dirty worktrees and worktrees on branches missing from `BRANCHES`.
+   It exits 0 when `develop` contains every `BRANCHES` tip, 1 when it is stale and 2 on error.
+2. Put new work in a worktree under `.worktrees/`, branched from its parent feature branch, or from `upstream/main` for a fix meant for upstream.
+   Register the branch in `BRANCHES` right after its parent.
+3. Put working notes, openspec changes and this workflow on `docs-openspec`, and dev tooling, the nix flake and agent skills on `dev-nix-flake`.
+4. Never commit to `develop` or `main`.
+5. After committing to any `BRANCHES` member, including `docs-openspec` and `dev-nix-flake`, run `rebuild-develop.sh` from the main checkout.
+   It assembles `develop-next`, runs the touched connector suites and `./bin/run-sdk-tests` in the nix dev shell inside a detached worktree, checks that every `BRANCHES` tip is contained, and moves local `develop` only if the main checkout is clean and every check passed.
+   `--no-promote` stops after verification and `--skip-sdk` skips the full SDK run.
+   The log goes to `$XDG_STATE_HOME/agent-logs/karrio/`, because `logs/` is not ignored in this repository.
+6. Pushing is the user's decision.
+   `rebuild-develop.sh` prints the push commands, with `--force-with-lease` pinned to the current `origin/develop`, and never runs them.
 
 ## When upstream merges a pull request
 
@@ -49,4 +60,4 @@ Remove the branch from `BRANCHES`, rebase any branches that depend on it onto `u
 ## Git hazard
 
 The global git config sets `submodule.recurse=true`, and the `community` submodule is not initialised in `.worktrees/`.
-Pass `-c submodule.recurse=false` to any reset, checkout, cherry-pick or rebase in a worktree; the script does this already.
+Pass `-c submodule.recurse=false` to any reset, checkout, cherry-pick or rebase in a worktree; the workflow scripts do this already.
