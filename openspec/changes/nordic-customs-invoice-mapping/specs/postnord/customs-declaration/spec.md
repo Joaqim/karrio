@@ -16,7 +16,12 @@ Parcel products are all PostNord services that are neither letter services nor I
 #### Scenario: Line values and weights are totals over the quantity
 
 - **WHEN** a commodity with quantity 3, a per-unit value of 10 and a per-unit weight of 0.2 kg is declared on a CN22 or a customs invoice
-- **THEN** its declaration line carries value 30 and weight 0.6 kg, and the declaration totals sum these line totals, because unified commodity value and weight are per unit while PostNord's lines and totals are per line
+- **THEN** its declaration line carries value 30 and weight 0.6 kg, and the declaration's total value sums the line values, because unified commodity value and weight are per unit while PostNord's lines and totals are per line
+
+#### Scenario: Total gross weight includes packaging
+
+- **WHEN** a CN22 or customs invoice is sent for a shipment whose parcels carry weights
+- **THEN** its total gross weight is the sum of the parcel weights, which include packaging, falling back to the sum of commodity line weights only when no parcel weight is given, and a customs invoice's total net weight is the sum of commodity line weights
 
 #### Scenario: Parcel products carry a customs invoice instead of CN22
 

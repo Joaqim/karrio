@@ -63,6 +63,11 @@ Options follow the `doorstepDelivery{accessCode}` pattern: boolean options selec
 Fail-fast checks raise the connector's existing `ShippingSDKDetailedError` subclass with `SHIPPING_SDK_FIELD_ERROR` (`create.py:18-27`): standard handling without EORI, own declaration without customs identifier, joint declaration without SFID.
 The document type applies `commercial_invoice` literally, replacing `commercial_invoice or invoice` (`create.py:294-298`), and `transportMovement` compares recipient country with shipper country rather than `settings.account_country_code`; both are equal for Swedish accounts.
 
+### Callers may declare customs maximally
+
+Callers may attach customs data and customs options to every shipment; the connectors own the known criteria for when customs is not required and drop it with a warning rather than failing (user decision 2026-09-25).
+DHL Freight Sweden applies this within the EU VAT area; applying the same principle to PostNord is a follow-up.
+
 ## Risks / Trade-offs
 
 - [PostNord rejects `customsInvoice` on parcel bookings] → the first task is a sandbox booking; if validation rejects it, stop and revise the specs toward CN22 at booking plus a post-booking customs invoice declaration.
