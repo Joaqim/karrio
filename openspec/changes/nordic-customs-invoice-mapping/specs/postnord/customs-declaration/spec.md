@@ -13,6 +13,11 @@ Parcel products are all PostNord services that are neither letter services nor I
 - **WHEN** a letter service or International Parcel is booked with customs data containing commodities
 - **THEN** the booking request carries CN22 declaration lines with description, quantity, weight, value, currency, and country of origin derived from those commodities
 
+#### Scenario: Line values and weights are totals over the quantity
+
+- **WHEN** a commodity with quantity 3, a per-unit value of 10 and a per-unit weight of 0.2 kg is declared on a CN22 or a customs invoice
+- **THEN** its declaration line carries value 30 and weight 0.6 kg, and the declaration totals sum these line totals, because unified commodity value and weight are per unit while PostNord's lines and totals are per line
+
 #### Scenario: Parcel products carry a customs invoice instead of CN22
 
 - **WHEN** a parcel product (for example `postnord_mypack_home`, `postnord_mypack_collect`, `postnord_parcel`, or `postnord_pallet`) is booked with customs data containing commodities
