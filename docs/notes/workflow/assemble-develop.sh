@@ -32,6 +32,7 @@ BRANCHES=(
   fix-dashboard-carrier-options
   chore-sdk-pypdf
   feat-tracker-locale
+  feat-shipment-advisors
   feat-dhl-freight-se-connector
   feat-dhl-freight-se-customs
   docs-vendored-carrier-specs
