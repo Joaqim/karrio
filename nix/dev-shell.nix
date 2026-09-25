@@ -70,7 +70,9 @@ pkgs.mkShell {
     # module/connector/plugin source root to PYTHONPATH merges the
     # karrio.{mappers,providers,schemas,plugins}.* subpackages across them with
     # no install step. Editing the sources takes effect immediately.
-    root="$PWD"
+    # Root at the git toplevel so a shell entered from a subdirectory, or a
+    # worktree nested inside another checkout, resolves its own sources.
+    root="$(${pkgs.git}/bin/git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")"
     # Core source roots (sdk provides karrio.*, soap provides pysoap, cli
     # provides karrio_cli) are always on the path.
     extra="$root/modules/sdk:$root/modules/soap:$root/modules/cli"
@@ -80,7 +82,10 @@ pkgs.mkShell {
         extra="$d:$extra"
       fi
     done
-    export PYTHONPATH="$extra:$PYTHONPATH"
+    # The inherited PYTHONPATH is dropped: carrying it over lets modules absent
+    # from this checkout resolve to another checkout's sources.
+    export PYTHONPATH="$extra"
+    export KARRIO_DEV_ROOT="$root"
 
     # This nix shell is an alternative entry point alongside the standard
     # bin/activate-env virtualenv workflow; it does not replace it. Surface the
