@@ -15,6 +15,26 @@ Shipment creation that includes unified customs data SHALL send a customs docume
 - **WHEN** a shipment from Sweden to Norway is created with customs data carrying an invoice number, invoice date, declared value, currency, and EORI number
 - **THEN** the transport instruction carries one customs document with those values, transport movement Export, and the EORI on the document
 
+#### Scenario: Commodity lines carry quantity totals
+
+- **WHEN** a commodity with quantity 2, a per-unit value of 30 EUR and a per-unit weight of 0.38 kg is declared
+- **THEN** its customs commodity line carries customs value 60, net weight 0.76 kg, and 2 units, so that line values sum to the invoice amount
+
+#### Scenario: Invoice number falls back to the shipment reference
+
+- **WHEN** customs data carries no invoice number and the shipment carries a reference
+- **THEN** the customs document identifier is the shipment reference
+
+#### Scenario: Invoice date falls back to the shipping date
+
+- **WHEN** customs data carries no invoice date
+- **THEN** the customs document invoice date is the shipment's shipping date, so DHL never records a default date
+
+#### Scenario: Missing invoice number and reference fails fast
+
+- **WHEN** a customs document would be sent without an invoice number and without a shipment reference
+- **THEN** the operation fails with a field error naming the invoice number and no request is sent to DHL
+
 #### Scenario: Commodity net weight is sent in kilograms
 
 - **WHEN** a customs commodity carries its weight in pounds or ounces
@@ -88,3 +108,28 @@ Services that require an identifier SHALL fail fast when it is missing: standard
 
 - **WHEN** the caller selects joint declaration without a joint-declaration identifier
 - **THEN** the operation fails with a field error naming the identifier and no request is sent to DHL
+
+### Requirement: Customs information is omitted within the EU VAT area
+
+The connector SHALL omit customs information when both the shipper and the recipient are inside the EU VAT area, and SHALL report the omission as a warning message on the response when the caller supplied customs data.
+The EU VAT area check SHALL treat Greece under its ISO code `GR` as a member state, and SHALL treat the following special fiscal territories as outside it even when their country code is an EU member state: Åland (`AX`, or `FI` with postal codes 22000–22999), the Canary Islands (`IC`, or `ES` with postal codes 35000–35999 and 38000–38999), Ceuta (`ES` 51000–51999), Melilla (`ES` 52000–52999), Büsingen (`DE` 78266), Heligoland (`DE` 27498), Livigno (`IT` 23041), Campione d'Italia (`IT` 22061), and the French overseas departments (`GP`, `GF`, `MQ`, `RE`, `YT`).
+
+#### Scenario: Intra-EU shipment omits customs and warns
+
+- **WHEN** a shipment from Sweden to Poland is created with customs data
+- **THEN** the transport instruction contains no customs information and the response carries a warning message stating that customs data was not sent for an intra-EU shipment
+
+#### Scenario: Greece is treated as EU
+
+- **WHEN** a shipment from Sweden to Greece (`GR`) is created with customs data
+- **THEN** the transport instruction contains no customs information
+
+#### Scenario: Special fiscal territory keeps customs
+
+- **WHEN** a shipment from Sweden to Åland (`FI`, postal code 22100) is created with customs data
+- **THEN** the transport instruction carries customs information with transport movement Export
+
+#### Scenario: Non-EU destination keeps customs
+
+- **WHEN** a shipment from Sweden to Norway is created with customs data
+- **THEN** the transport instruction carries customs information with transport movement Export
