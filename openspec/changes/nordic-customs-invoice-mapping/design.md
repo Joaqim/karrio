@@ -84,4 +84,4 @@ Existing tests that book `postnord_parcel` with customs (about 12 in `tests/post
 
 ## Open Questions
 
-- Whether PostNord applies `SACUS-BR-24062502` to customs invoices; the spec already defines behaviour for both outcomes, and the production probe answers it.
+None remaining: the sandbox gate and the production probe of 2026-09-25 both accepted a customs invoice without registration numbers, so `SACUS-BR-24062502` does not apply to customs invoices (`docs/notes/postnord/customs-invoice-live-verification.md`).
