@@ -47,3 +47,44 @@ The label printout composes label and invoice together, so a connector that surf
 Whether production applies `SACUS-BR-24062502` to customs invoices remains for the production probe (task 6.2); the sandbox has previously matched production on this rule for CN22.
 A `PROFORMA` invoice, a buyer `vatNo`, and ZPL labels were not exercised.
 The seller `vatNo` was a fixture value; the sandbox did not validate it against a register.
+
+## Production probe 2026-09-25
+
+Task 6.2 booked one parcel in production with explicit user approval, using `openspec/changes/nordic-customs-invoice-mapping/verify_prod_probe.py --production` against `api2.postnord.com`.
+The script runs from the `feat-postnord-customs-invoice` worktree, and the connector module resolved into that worktree before the network call.
+Unlike the sandbox gate, the booking goes through the karrio gateway and the branch connector, so the connector built the customs invoice and ran the by-id fetch itself.
+Credentials were read by environment variable name only: `POSTNORD_LIVE_APIKEY`, `POSTNORD_LIVE_CUSTOMER_NUMBER`, and `POSTNORD_LIVE_APPLICATION_ID`, with `POSTNORD_EORI` held back for a fallback attempt that was not needed.
+The script output was checked against every one of these values before recording; none appears in it or in this note.
+
+The booking was `postnord_parcel` (basic service code 18) from Stockholm, SE to Karl Johans gate 1, 0154 Oslo, NO, 0.5 kg.
+The shipper address and shipper VAT number were the sandbox fixture values (Sandhamnsgatan 61, 11528 Stockholm, and the fixture `vatNo`), not the account holder's real data.
+The customs data was one commodity line (candy, HS 1704906500, origin SE, quantity 2, EUR 15.00 and 0.19 kg per unit), `commercial_invoice` true, and `customs.invoice` set.
+The connector sent a `COMMERCIAL` `customsInvoice` with a line total of EUR 30.00 and 0.38 kg, `totalGrossWeight` 0.5 KGM, and no `eoriNo`, `voec`, or `ioss`.
+
+### Attempt A: no registration numbers
+
+Accepted on the first attempt: `idInformation[].status` `OK` with one item id and a printId, and no `compositeFault`.
+The fallback attempt with the EORI was therefore not run, and exactly one booking was made.
+The booking printout composition was `label: 1`, `customsInvoice: 1`, with `cn22` and `cn23` at 0, and the parsed shipment reports `meta.printout_composition` `["customsInvoice", "label"]`.
+The label document is a PDF of 15,917 bytes (21,224 base64 characters) that combines the label and the invoice, as in the sandbox.
+
+PostNord does not apply `SACUS-BR-24062502` to a customs invoice on a production parcel booking, which matches the sandbox result, so the connector's choice to leave the invoice path without a registration check holds.
+
+### Composed customs invoice by printId
+
+The connector's implicit by-id fetch (`POST /rest/shipment/v3/labels/ids/pdf` with `definePrintout=onlyCustomsDeclarations`, keyed by the booking's printId) returned member status `OK` and composition `customsInvoice: 1` with every other kind at 0.
+The connector attached it as one `extra_documents` entry with category `customsInvoice`, format PDF, 2,711 bytes (3,616 base64 characters), `%PDF-` magic.
+No message was raised.
+The document contents were not saved to the repository.
+
+### Booking left unshipped
+
+PostNord offers no cancellation endpoint, so the booking was left unshipped rather than cancelled; the user confirmed that unshipped live-test bookings are not billed.
+
+| Id | Value |
+|---|---|
+| item id (tracking number) | 00573132901949477786 |
+| printId | 7879e5cd3edd4ed6bc8a36bd354e86cb |
+| bookingId | ILPN001B0L6J8NTDEDBHZCGCOOHPTG |
+
+The ZPL by-id fetch, a `PROFORMA` invoice, and a buyer `vatNo` were not exercised in production.

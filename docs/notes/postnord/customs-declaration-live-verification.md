@@ -59,7 +59,7 @@ The unrestricted by-id fetch returns `{'label': 1, 'cn22': 1}` (23,132 character
 
 ## Re-declaration and rendered documents
 
-A further live round re-declared the same item with a realistic one-line merchandise CN22 ("Candy", HS 1704906500, EUR 30, 0.51 KG gross) using `updateIndicator: "Update"` over the earlier Original — accepted; the Swedish issuer Z12 supports Update (the swagger restricts Update/Deletion to the DK/NO/FI issuers).
+A further live round re-declared the same item with a realistic one-line merchandise CN22 ("Candy", HS 1704906500, EUR 30, 0.51 KG gross) using `updateIndicator: "Update"` over the earlier Original — accepted; the Swedish issuer Z12 supports Update (the swagger states that Update and Deletion are not supported for the DK/NO/FI issuers Z11, Z13, and Z14).
 The `categoryType` string `"SALE OF GOODS"`, taken from the swagger-documented value list, is accepted.
 
 The PDF-variant endpoint (`/v3/customs/declaration/pdf` with A4 rendering parameters) returns the wrapped envelope `{bookingResponse: {bookingId, idInformation}, labelPrintout: [...]}` — the inner key is `bookingResponse`, distinct from the digital endpoint's bare envelope — matching the shape the connector already parses (`karrio/providers/postnord/customs.py` reads both).
