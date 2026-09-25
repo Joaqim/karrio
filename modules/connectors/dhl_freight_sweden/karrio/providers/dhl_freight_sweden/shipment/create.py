@@ -366,7 +366,12 @@ def _customs_information(
                 hsItemId=commodity.hs_code,
                 commodityDescription=commodity.description or commodity.title,
                 procedureCode=procedure_code,
-                netWeight=commodity.weight,
+                # A commodity without a weight unit keeps the kilogram reading
+                # it had before unit conversion, unlike the SDK Product default
+                # of pounds.
+                netWeight=units.Weight(
+                    commodity.weight, commodity.weight_unit or units.WeightUnit.KG.name
+                ).KG,
                 numberOfUnits=commodity.quantity,
             )
             for commodity in commodities

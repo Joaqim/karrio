@@ -272,6 +272,23 @@ class TestDHLFreightShipment(unittest.TestCase):
             {"voecSupplyVAT": {"vatId": "VOEC2012345"}},
         )
 
+    def test_create_shipment_request_customs_net_weight_in_kilograms(self):
+        cases = [("LB", 11.025, 5.0), ("OZ", 35.274, 1.0), ("KG", 2.5, 2.5)]
+
+        for weight_unit, weight, expected in cases:
+            with self.subTest(weight_unit=weight_unit):
+                request = gateway.mapper.create_shipment_request(
+                    models.ShipmentRequest(
+                        **_with_commodity_weight(
+                            ShipmentPayload202Customs, weight, weight_unit
+                        )
+                    )
+                )
+                serialized = lib.to_dict(request.serialize())
+
+                commodity = serialized["customsInformation"]["customsCommodities"][0]
+                self.assertEqual(commodity["netWeight"], expected)
+
     def test_create_shipment_request_payer_from_customs_incoterm(self):
         request = gateway.mapper.create_shipment_request(
             models.ShipmentRequest(**ShipmentPayload202Customs)
@@ -906,6 +923,20 @@ _parcel = {
 
 def _with_options(payload: dict, options: dict) -> dict:
     return {**payload, "options": options}
+
+
+def _with_commodity_weight(payload: dict, weight: float, weight_unit: str) -> dict:
+    customs = payload["customs"]
+    return {
+        **payload,
+        "customs": {
+            **customs,
+            "commodities": [
+                {**commodity, "weight": weight, "weight_unit": weight_unit}
+                for commodity in customs["commodities"]
+            ],
+        },
+    }
 
 
 def _payload(service: str, recipient: dict, options: typing.Optional[dict] = None) -> dict:
