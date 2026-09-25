@@ -24,7 +24,7 @@ It stays on the fork until both parents land upstream.
 
 1. Branch from `upstream/main`, or from the unmerged branch the work depends on.
 2. Put the PRD commit first, then one commit per logical capability, in the format `type(scope): summary`.
-3. Verify outside nix in `python:3.12-slim-bookworm`, matching upstream CI, and inside the nix dev shell.
+3. Verify outside nix in `python:3.12-slim-bookworm`, matching upstream CI, and inside the nix dev shell; see [nix-dev-shell-worktrees.md](nix-dev-shell-worktrees.md) for the per-worktree `.envrc`.
 4. If the branch is new, add it to `BRANCHES` in `assemble-develop.sh` on `docs-openspec`.
 5. Regenerate and deploy:
 
