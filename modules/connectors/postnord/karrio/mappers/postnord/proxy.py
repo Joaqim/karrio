@@ -151,14 +151,20 @@ class Proxy(proxy.Proxy):
             headers={"Content-Type": "application/json"},
         )
 
-        # Export-letter bookings with an embedded customs declaration fetch a
-        # standalone customs document by item id so the parser can attach it
-        # next to the label (the booking's own printout is left unchanged).
+        # Export-letter and parcel-product bookings with embedded customs data
+        # fetch the standalone customs document PostNord composed (CN22 or
+        # customs invoice) by printId so the parser can attach it next to the
+        # label (the booking's own printout is left unchanged).
+        basic_service_code = request.ctx.get("basic_service_code")
         customs_ctx = lib.identity(
             self._get_customs_printouts(response, label_type)
-            if request.ctx.get("basic_service_code")
-            == provider_units.ShippingService.postnord_export_letter
-            and request.ctx.get("customs_declared")
+            if request.ctx.get("customs_declared")
+            and (
+                basic_service_code
+                == provider_units.ShippingService.postnord_export_letter
+                or provider_units.customs_structure(basic_service_code)
+                == provider_units.CustomsStructure.customs_invoice
+            )
             else {}
         )
 
@@ -167,7 +173,7 @@ class Proxy(proxy.Proxy):
         )
 
     def _get_customs_printouts(self, response: str, label_type: str) -> dict:
-        """Fetch the standalone customs printouts for an export-letter booking.
+        """Fetch the standalone customs printouts for a customs booking.
 
         Issues ``POST /rest/shipment/v3/labels/ids/{pdf,zpl}`` (matching the
         booking's label format) keyed by the printId accompanying the booking
