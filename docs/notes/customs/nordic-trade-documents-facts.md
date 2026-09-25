@@ -249,6 +249,7 @@ Invoice rendering from a stored `DocumentTemplate` already exists behind `option
 - Whether PostNord FI's relaxed web guidance or its 2026 contract terms govern.
 - Whether DHL Freight Sweden 112 and road-freight products require copies attached to the outside of the package.
 - Whether DHL Freight Sweden bills own declaration on 109/112.
+- Whether DHL Freight Sweden `CustomsCommodity.customsValue` and `netWeight` are per unit or per line (the vendored spec gives types only; a separate `numberOfUnits` field suggests line totals); the connector sends per-unit values as of 2026-09-25.
 
 ## Out-of-scope follow-ups
 
