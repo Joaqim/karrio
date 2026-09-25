@@ -269,6 +269,18 @@ def _total_weight(commodities: typing.List[models.Commodity]) -> typing.Optional
     return lib.to_decimal(sum(_line_weight(c) or 0 for c in commodities), 0.001) or None
 
 
+def _total_gross_weight(
+    parcel_weight: typing.Optional[float],
+    commodities: typing.List[models.Commodity],
+) -> typing.Optional[float]:
+    """Return the declaration's total gross weight in KG.
+
+    Parcel weights include packaging, so their sum is the gross weight; the
+    commodity line weights stand in only when no parcel weight is given.
+    """
+    return lib.to_decimal(parcel_weight, 0.001) or _total_weight(commodities)
+
+
 def _total_value(
     commodities: typing.List[models.Commodity],
 ) -> typing.Optional[postnord_req.GoodsValueType]:
@@ -328,6 +340,7 @@ def _customs_line(
 def _customs_declaration(
     customs: models.Customs,
     options: units.CustomsOptions,
+    parcel_weight: typing.Optional[float],
     country_of_origin: str,
 ) -> postnord_req.CustomsDeclarationCN22Type:
     """Map unified customs data onto the booking's CN22 declaration branch.
@@ -347,7 +360,7 @@ def _customs_declaration(
     )
     provider_units.enforce_cn22_registration_numbers(options)
 
-    total_gross_weight = _total_weight(customs.commodities)
+    total_gross_weight = _total_gross_weight(parcel_weight, customs.commodities)
     category = (
         provider_units.CN22CategoryType.lookup(customs.content_type)
         if customs.content_type
@@ -482,6 +495,7 @@ def _customs_invoice(
     shipper: units.ComputedAddress,
     recipient: units.ComputedAddress,
     invoice_number: typing.Optional[str],
+    parcel_weight: typing.Optional[float],
     settings: provider_utils.Settings,
 ) -> postnord_req.CustomsInvoiceType:
     """Map unified customs data onto the booking's customs invoice branch.
@@ -489,15 +503,17 @@ def _customs_invoice(
     PostNord takes a customs invoice instead of CN22/CN23 for parcel
     products. The shipper is the seller and the recipient the buyer;
     ``commercial_invoice`` selects COMMERCIAL or PROFORMA literally. Line
-    values and weights are totals over the quantity, summed like the CN22
-    totals. Registration numbers are passed through without the CN22
+    values and weights are totals over the quantity; the invoice total and
+    total net weight sum the lines, while the total gross weight is the
+    parcel weight, which includes packaging. Registration numbers are passed through without the CN22
     completeness rule, which the sandbox did not apply to customs invoices.
     """
     errors = _customs_invoice_errors(shipper, recipient, customs, invoice_number)
     if errors:
         raise lib.exceptions.FieldError(errors)
 
-    total_gross_weight = _total_weight(customs.commodities)
+    total_net_weight = _total_weight(customs.commodities)
+    total_gross_weight = _total_gross_weight(parcel_weight, customs.commodities)
 
     return postnord_req.CustomsInvoiceType(
         declarationType=provider_units.CustomsDeclarationType.invoice_export_declaration.value,
@@ -530,6 +546,11 @@ def _customs_invoice(
         detailedDescription=[
             _customs_invoice_line(commodity) for commodity in customs.commodities
         ],
+        totalNetWeight=lib.identity(
+            postnord_req.TotalGrossWeightType(value=total_net_weight, unit="KGM")
+            if total_net_weight
+            else None
+        ),
         totalGrossWeight=lib.identity(
             postnord_req.TotalGrossWeightType(value=total_gross_weight, unit="KGM")
             if total_gross_weight
@@ -626,6 +647,7 @@ def shipment_request(
         _customs_declaration(
             payload.customs,
             options=customs_options,
+            parcel_weight=packages.weight.KG,
             country_of_origin=shipper.country_code,
         )
         if has_customs and customs_structure == provider_units.CustomsStructure.cn22
@@ -638,6 +660,7 @@ def shipment_request(
             shipper=shipper,
             recipient=recipient,
             invoice_number=payload.customs.invoice or payload.reference,
+            parcel_weight=packages.weight.KG,
             settings=settings,
         )
         if has_customs
