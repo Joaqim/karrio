@@ -28,6 +28,11 @@ Parcel products are all PostNord services that are neither letter services nor I
 - **WHEN** a customs invoice would be sent and the shipper carries no tax identifier
 - **THEN** the operation fails with a field error naming the shipper VAT number and no request is sent to PostNord
 
+#### Scenario: Customs invoice required party and line fields fail fast
+
+- **WHEN** a customs invoice would be sent and the shipper or recipient lacks a contact name or phone number, or a commodity lacks an HS code or country of origin
+- **THEN** the operation fails with a field error naming each missing field and no request is sent to PostNord, because PostNord's booking schema requires seller and buyer contacts and per-line tariff number and origin
+
 #### Scenario: Customs invoice declares permanent export by default
 
 - **WHEN** a customs invoice is sent

@@ -6,7 +6,7 @@ See proposal.md for motivation and the spec deltas for required behaviour; sourc
 PostNord builds CN22 lines in `_customs_line` and `_customs_declaration` (`modules/connectors/postnord/karrio/providers/postnord/shipment/create.py:242-342`), guarded by `enforce_customs_declaration_lines` and `enforce_customs_option_placement` (`.../postnord/units.py:262-310`), and attaches the result as `customsDeclarationCN22` (`create.py:546`).
 The generated schema already has `CustomsInvoiceType`, `BuyerType`, `InvoiceType`, and `CustomsInvoiceDetailedDescriptionType` (`.../schemas/postnord/shipment_request.py:132-241, 364`).
 The Export Letter customs document fetch (`.../mappers/postnord/proxy.py:157-252`) requests `definePrintout=onlyCustomsDeclarations`, which covers CN22, CN23, and customs invoices in both PDF and ZPL, and derives the document category from `printoutComposition` (`create.py:192-224`).
-PostNord test-mode bookings never reach the print or declaration subsystems, so composed documents can only be observed in production (archived change `2026-09-21-postnord-customs-declaration`, tasks 5.2 and `verify_prod_probe.py`).
+PostNord test-mode bookings never reach the print or declaration subsystems for by-id fetches (archived change `2026-09-21-postnord-customs-declaration`, task 5.2), but the sandbox gate on 2026-09-25 showed a parcel booking with `customsInvoice` returning composition `{label: 1, customsInvoice: 1}` and a two-page label printout whose second page is the invoice (`docs/notes/postnord/customs-invoice-live-verification.md`).
 DHL Freight Sweden builds customs information in `_customs_information` (`.../dhl_freight_sweden/shipment/create.py:251-330`); `CustomsDocumentType.eori` exists in the generated schema, but `AdditionalServicesType` lacks all customs services, which the vendored `transport-instruction-2.10.0.json` `AdditionalServicesDTO` defines.
 
 ## Goals / Non-Goals
@@ -33,6 +33,8 @@ Field derivation:
 | `declarationType` | `invoiceExportDeclaration` |
 | `seller` | shipper address; `vatNo` from shipper `tax_id` (required); `partyIdentification` from `settings.customer_number`; `eoriNo` from `customs.options.eori_number` |
 | `buyer` | recipient address, recipient `tax_id` when present |
+| `seller.contacts`, `buyer.contacts` | person name (or company name) and phone number of shipper and recipient; both required |
+| `partyIdentification` | `partyId` from `settings.customer_number`, `partyIdType` `160` |
 | `voec`, `ioss` | `customs.options.voec_number`, `customs.options.ioss_number` |
 | `invoice.invoiceNo` | `customs.invoice`, else `payload.reference`, else field error |
 | `invoice.shippingDate` | `customs.invoice_date` (the swagger describes `shippingDate` as the invoice date) |
@@ -41,7 +43,8 @@ Field derivation:
 | `invoiceTotal`, `totalGrossWeight` | sums over commodities, using the same rounding as the CN22 total |
 
 The existence check for `payload.reference` reads the payload field, not `shipmentId`, because `shipmentId` falls back to a generated UUID (`create.py:410`).
-Alternative considered: letting PostNord reject missing required fields. Rejected for `vatNo` and `invoiceNo` because the swagger marks them required and the user chose to fail fast where a requirement is established.
+Postal codes and the procedure code are sent as strings: the generated schema types `BuyerType.postalCode` and `reasonForExportation` as `int`, which would drop leading zeros (Norwegian `0154`), so the schema sample is corrected to strings and regenerated, as the swagger declares.
+Alternative considered: letting PostNord reject missing required fields. Rejected for `vatNo`, `invoiceNo`, contact name and phone, and per-line HS code and origin because the swagger marks them required and the user chose to fail fast where a requirement is established.
 
 ### Registration-number check on the CN22 path only
 
@@ -63,7 +66,7 @@ The document type applies `commercial_invoice` literally, replacing `commercial_
 ## Risks / Trade-offs
 
 - [PostNord rejects `customsInvoice` on parcel bookings] → the first task is a sandbox booking; if validation rejects it, stop and revise the specs toward CN22 at booking plus a post-booking customs invoice declaration.
-- [Composed invoice cannot be observed in sandbox] → one production booking with `customsInvoice` on a parcel product, approved by the user and cancelled afterwards, following `verify_prod_probe.py` from the archived customs change; no production key or EORI value is printed or committed.
+- [The by-id customs fetch cannot be observed in sandbox, and the invoice is also embedded as page 2 of the label printout, so the standalone document duplicates it, as already accepted for export letters] → one production booking with `customsInvoice` on a parcel product, approved by the user and cancelled afterwards, following `verify_prod_probe.py` from the archived customs change; no production key or EORI value is printed or committed.
 - [Consumers without shipper `tax_id` start failing on parcel customs bookings] → recorded as breaking in the proposal; the error names the missing field.
 - [Unknown future services default to parcel] → the classification is a single frozenset with a test asserting every `ShippingService` member is either in it or deliberately a parcel product.
 - [Procedure code 1000 is wrong for returns or temporary exports] → accepted for now; returns and temporary exports are not in scope, and PostNord's codes are recorded in the facts note.
