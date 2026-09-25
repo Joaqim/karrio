@@ -240,6 +240,39 @@ def shipment_request(
                 if options.dhl_freight_sweden_insurance.state is not None
                 else None
             ),
+            customsHandlingStandard=lib.identity(
+                True
+                if options.dhl_freight_sweden_customs_handling_standard.state
+                else None
+            ),
+            customsHandlingFullService=lib.identity(
+                True
+                if options.dhl_freight_sweden_customs_handling_full_service.state
+                else None
+            ),
+            customsCustomersOwnDeclaration=lib.identity(
+                dhl_freight_sweden_req.CustomsCustomersOwnDeclarationType(
+                    customsId=options.dhl_freight_sweden_customs_own_declaration.state
+                )
+                if options.dhl_freight_sweden_customs_own_declaration.state
+                is not None
+                else None
+            ),
+            customsJointDeclaration=lib.identity(
+                dhl_freight_sweden_req.CustomsJointDeclarationType(
+                    sfid=options.dhl_freight_sweden_customs_joint_declaration.state
+                )
+                if options.dhl_freight_sweden_customs_joint_declaration.state
+                is not None
+                else None
+            ),
+            voecSupplyVAT=lib.identity(
+                dhl_freight_sweden_req.VoecSupplyVATType(
+                    vatId=customs_options.voec_number.state
+                )
+                if customs_options.voec_number.state
+                else None
+            ),
         ),
         customsInformation=customs,
     )
