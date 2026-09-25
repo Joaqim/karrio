@@ -1,4 +1,7 @@
 import re
+import typing
+import functools
+import unicodedata
 import phonenumbers
 from datetime import datetime
 from karrio.server.core.logging import logger
@@ -298,6 +301,210 @@ def shipment_documents_accessor(cls=None, *, include_base64: bool = False):
         return decorator
 
 
+# ø and æ are single base letters (not NFD-decomposable), so they are folded
+# through an explicit translation to match ASCII-typed Nordic names; å folds
+# through NFD like other accented characters.
+_NORDIC_FOLD_TRANSLATION = str.maketrans({"ø": "o", "Ø": "O", "æ": "ae", "Æ": "AE"})
+
+
+def _fold_text(value: str) -> str:
+    decomposed = unicodedata.normalize("NFD", value.translate(_NORDIC_FOLD_TRANSLATION))
+    stripped = "".join(c for c in decomposed if unicodedata.category(c) != "Mn")
+    return stripped.casefold().strip()
+
+
+STATE_NAME_SUFFIXES = tuple(
+    _fold_text(suffix)
+    for suffix in [
+        " län",
+        " fylke",
+        " maakunta",
+        " lääni",
+        " region",
+        " county",
+        " province",
+        " state",
+    ]
+)
+
+
+def _state_match_keys(value: str) -> list[str]:
+    folded = _fold_text(value)
+    keys = [folded]
+    keys += [
+        folded[: -len(suffix)].strip()
+        for suffix in STATE_NAME_SUFFIXES
+        if folded.endswith(suffix)
+    ]
+
+    if folded.startswith("region "):
+        keys.append(folded[len("region ") :])
+
+    keys += [key[:-1] for key in keys if key.endswith("s")]
+    keys += [key.replace("ae", "e") for key in keys if "ae" in key]
+
+    return list(dict.fromkeys(key for key in keys if key))
+
+
+# Legacy subdivision aliases consulted when both the code and the name lookups
+# miss. "PQ" is the legacy Canada Post province code for Quebec. Names of
+# dissolved Norwegian counties have no alias and pass through unchanged.
+STATE_INPUT_ALIASES = {
+    "CA": {"PQ": "QC"},
+}
+
+
+# Subdivisions used only to normalize address input.
+# They are kept out of units.CountryState because /references exports that enum,
+# and the dashboard address form requires a state for every country listed there.
+NORMALIZATION_ONLY_STATES = {
+    "DK": {
+        "81": "Nordjylland",
+        "82": "Midtjylland",
+        "83": "Syddanmark",
+        "84": "Hovedstaden",
+        "85": "Sjælland",
+    },
+    "FI": {
+        "01": "Åland",
+        "02": "Etelä-Karjala",
+        "03": "Etelä-Pohjanmaa",
+        "04": "Etelä-Savo",
+        "05": "Kainuu",
+        "06": "Kanta-Häme",
+        "07": "Keski-Pohjanmaa",
+        "08": "Keski-Suomi",
+        "09": "Kymenlaakso",
+        "10": "Lappi",
+        "11": "Pirkanmaa",
+        "12": "Pohjanmaa",
+        "13": "Pohjois-Karjala",
+        "14": "Pohjois-Pohjanmaa",
+        "15": "Pohjois-Savo",
+        "16": "Päijät-Häme",
+        "17": "Satakunta",
+        "18": "Uusimaa",
+        "19": "Varsinais-Suomi",
+    },
+    # County numbers in effect since 2024-01-01. ISO 3166-2:NO still lists the
+    # 2020-2023 codes 30, 38 and 54 and has not adopted 31, 32, 33, 39, 40, 55
+    # or 56.
+    "NO": {
+        "03": "Oslo",
+        "11": "Rogaland",
+        "15": "Møre og Romsdal",
+        "18": "Nordland",
+        "21": "Svalbard",
+        "22": "Jan Mayen",
+        "31": "Østfold",
+        "32": "Akershus",
+        "33": "Buskerud",
+        "34": "Innlandet",
+        "39": "Vestfold",
+        "40": "Telemark",
+        "42": "Agder",
+        "46": "Vestland",
+        "50": "Trøndelag",
+        "55": "Troms",
+        "56": "Finnmark",
+    },
+    "SE": {
+        "AB": "Stockholms län",
+        "AC": "Västerbottens län",
+        "BD": "Norrbottens län",
+        "C": "Uppsala län",
+        "D": "Södermanlands län",
+        "E": "Östergötlands län",
+        "F": "Jönköpings län",
+        "G": "Kronobergs län",
+        "H": "Kalmar län",
+        "I": "Gotlands län",
+        "K": "Blekinge län",
+        "M": "Skåne län",
+        "N": "Hallands län",
+        "O": "Västra Götalands län",
+        "S": "Värmlands län",
+        "T": "Örebro län",
+        "U": "Västmanlands län",
+        "W": "Dalarnas län",
+        "X": "Gävleborgs län",
+        "Y": "Västernorrlands län",
+        "Z": "Jämtlands län",
+    },
+}
+
+
+def _country_states(country_code: str) -> typing.Optional[dict[str, str]]:
+    states = units.CountryState.__members__.get(country_code)
+
+    if states is None:
+        return NORMALIZATION_ONLY_STATES.get(country_code)
+
+    return {state.name: state.value for state in states.value}
+
+
+@functools.lru_cache(maxsize=None)
+def _state_code_lookups(
+    country_code: str,
+) -> typing.Optional[tuple[dict[str, str], dict[str, str]]]:
+    states = _country_states(str(country_code).upper())
+
+    if states is None:
+        return None
+
+    code_lookup = {_fold_text(code): code for code in states}
+
+    keys_by_code = {code: _state_match_keys(name) for code, name in states.items()}
+    codes_by_key = {
+        key: {code for code, code_keys in keys_by_code.items() if key in code_keys}
+        for keys in keys_by_code.values()
+        for key in keys
+    }
+
+    name_lookup = {
+        key: next(iter(codes)) for key, codes in codes_by_key.items() if len(codes) == 1
+    }
+
+    return code_lookup, name_lookup
+
+
+@functools.lru_cache(maxsize=None)
+def _state_alias_lookup(country_code: str) -> dict[str, str]:
+    aliases = STATE_INPUT_ALIASES.get(str(country_code).upper(), {})
+    return {_fold_text(alias): code for alias, code in aliases.items()}
+
+
+def normalize_state_code(country_code: str, state_code: str) -> str:
+    country = str(country_code).upper()
+    lookups = _state_code_lookups(country)
+
+    if lookups is None:
+        return state_code
+
+    code_lookup, name_lookup = lookups
+    value = str(state_code).strip()
+    country_prefix = f"{country}-"
+
+    if value.upper().startswith(country_prefix):
+        value = value[len(country_prefix) :]
+
+    code = code_lookup.get(_fold_text(value))
+    if code is not None:
+        return code
+
+    match_keys = _state_match_keys(value)
+
+    return next(
+        (
+            lookup[key]
+            for lookup in (name_lookup, _state_alias_lookup(country))
+            for key in match_keys
+            if key in lookup
+        ),
+        state_code,
+    )
+
+
 class AugmentedAddressSerializer(serializers.Serializer):
     def validate(self, data):
         # Format and validate Postal Code
@@ -351,5 +558,19 @@ class AugmentedAddressSerializer(serializers.Serializer):
                 raise serializers.ValidationError(
                     {"phone_number": "Invalid phone number format"}
                 )
+
+        # Normalize State or Province Code
+        if all(
+            data.get(key) is not None and data.get(key) != ""
+            for key in ["country_code", "state_code"]
+        ):
+            data.update(
+                {
+                    **data,
+                    "state_code": normalize_state_code(
+                        data["country_code"], data["state_code"]
+                    ),
+                }
+            )
 
         return data
