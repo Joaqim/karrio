@@ -533,6 +533,7 @@ class TestPostNordShipment(unittest.TestCase):
         # line's (SEK), not the second line's (EUR).
         payload = {
             **ShipmentPayload,
+            "recipient": NorwayRecipient,
             "service": "postnord_tracked_letter",
             "customs": {
                 "content_type": "merchandise",
@@ -642,6 +643,7 @@ class TestPostNordShipment(unittest.TestCase):
         # entirely rather than emitted as unitless/amountless structs.
         payload = {
             **ShipmentPayload,
+            "recipient": NorwayRecipient,
             "service": "postnord_tracked_letter",
             "customs": {
                 "content_type": "merchandise",
@@ -1836,6 +1838,161 @@ class TestPostNordCustomsInvoice(unittest.TestCase):
                 self.assertEqual(invoice["type"], "PROFORMA")
 
 
+class TestPostNordEUVATArea(unittest.TestCase):
+    def setUp(self):
+        self.maxDiff = None
+
+    def test_in_eu_vat_area(self):
+        cases = [
+            ("SE", "11143", True),
+            ("PL", "00-001", True),
+            ("GR", "10552", True),
+            ("EL", "10552", True),
+            ("DE", "10115", True),
+            ("DE", "78266", False),
+            ("DE", "27498", False),
+            ("IT", "23041", False),
+            ("IT", "22061", False),
+            ("IT", "00100", True),
+            ("FI", "22100", False),
+            ("FI", "22 100", False),
+            ("FI", "00100", True),
+            ("AX", "22100", False),
+            ("ES", "35001", False),
+            ("ES", "38001", False),
+            ("ES", "51001", False),
+            ("ES", "52001", False),
+            ("ES", "28001", True),
+            ("IC", "35001", False),
+            ("GP", "97110", False),
+            ("GF", "97300", False),
+            ("MQ", "97200", False),
+            ("RE", "97400", False),
+            ("YT", "97600", False),
+            ("NO", "0154", False),
+            ("GB", "SW1A 1AA", False),
+            ("CH", "8001", False),
+            (None, None, False),
+        ]
+        for country_code, postal_code, expected in cases:
+            with self.subTest(country_code=country_code, postal_code=postal_code):
+                self.assertEqual(
+                    provider_units.in_eu_vat_area(country_code, postal_code),
+                    expected,
+                )
+
+    def test_intra_eu_parcel_omits_customs_and_warns(self):
+        payload = {
+            **CustomsInvoiceShipmentPayload,
+            "recipient": PolandRecipient,
+        }
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        shipment = lib.to_dict(request.serialize())["shipment"][0]
+        for structure in [
+            "customsDeclarationCN22",
+            "customsDeclarationCN23",
+            "customsInvoice",
+        ]:
+            self.assertNotIn(structure, shipment)
+
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = CustomsInvoiceBookingResponse
+            details, messages = (
+                karrio.Shipment.create(models.ShipmentRequest(**payload))
+                .from_(gateway)
+                .parse()
+            )
+            mock.assert_called_once()
+        self.assertIsNotNone(details)
+        self.assertEqual(details.docs.extra_documents, [])
+        self.assertListEqual(
+            lib.to_dict(messages),
+            [
+                {
+                    "carrier_id": "postnord",
+                    "carrier_name": "postnord",
+                    "code": "customs_omitted_intra_eu",
+                    "level": "warning",
+                    "message": (
+                        "Customs data was not sent: the shipment from SE to PL "
+                        "stays within the EU VAT area"
+                    ),
+                }
+            ],
+        )
+
+    def test_intra_eu_skips_customs_fail_fast_checks(self):
+        # A letter to Germany without registration numbers, shipper VAT
+        # number, HS codes, and with misplaced registration keys and too
+        # many lines is sent without customs instead of failing.
+        payload = {
+            **_customs_payload(14),
+            "recipient": GermanyRecipient,
+            "options": {"eori_number": "SE556000123401"},
+        }
+        payload["customs"] = {
+            key: value for key, value in payload["customs"].items() if key != "options"
+        }
+        for service in ["postnord_tracked_letter", "postnord_parcel"]:
+            with self.subTest(service=service):
+                with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+                    mock.return_value = ShipmentResponse
+                    details, messages = (
+                        karrio.Shipment.create(
+                            models.ShipmentRequest(
+                                **{**payload, "service": service, "reference": None}
+                            )
+                        )
+                        .from_(gateway)
+                        .parse()
+                    )
+                    mock.assert_called_once()
+                    body = json.loads(mock.call_args[1]["data"])
+                self.assertIsNotNone(details)
+                self.assertNotIn("customsDeclarationCN22", body["shipment"][0])
+                self.assertNotIn("customsInvoice", body["shipment"][0])
+                self.assertEqual(
+                    [message.code for message in messages],
+                    ["customs_omitted_intra_eu"],
+                )
+
+    def test_aland_parcel_keeps_customs_invoice(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(
+                **{**CustomsInvoiceShipmentPayload, "recipient": AlandRecipient}
+            )
+        )
+        shipment = lib.to_dict(request.serialize())["shipment"][0]
+        self.assertEqual(shipment["customsInvoice"]["buyer"]["postalCode"], "22100")
+        self.assertIsNone(request.ctx.get("customs_omitted"))
+
+    def test_norway_keeps_customs(self):
+        for payload, structure in [
+            (CustomsInvoiceShipmentPayload, "customsInvoice"),
+            (CustomsShipmentPayload, "customsDeclarationCN22"),
+        ]:
+            with self.subTest(structure=structure):
+                request = gateway.mapper.create_shipment_request(
+                    models.ShipmentRequest(**payload)
+                )
+                self.assertIn(
+                    structure, lib.to_dict(request.serialize())["shipment"][0]
+                )
+                self.assertIsNone(request.ctx.get("customs_omitted"))
+
+    def test_intra_eu_without_customs_does_not_warn(self):
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = ShipmentResponse
+            _, messages = (
+                karrio.Shipment.create(models.ShipmentRequest(**ShipmentPayload))
+                .from_(gateway)
+                .parse()
+            )
+        self.assertEqual(messages, [])
+
+
 class TestPostNordProductGroups(unittest.TestCase):
     def test_letter_services_pinned(self):
         self.assertEqual(
@@ -2000,10 +2157,68 @@ ShipmentRequest = {
     ],
 }
 
+# Customs is only sent outside the EU VAT area, so customs fixtures ship
+# from Sweden to Norway.
+NorwayRecipient = {
+    "address_line1": "Karl Johans gate 22",
+    "city": "Oslo",
+    "postal_code": "0154",
+    "country_code": "NO",
+    "person_name": "Kari Receiver",
+    "company_name": "Receiver AS",
+    "phone_number": "+4791234567",
+    "email": "receiver@example.com",
+}
+
+NorwayConsignee = {
+    "issuerCode": "Z12",
+    "party": {
+        "nameIdentification": {
+            "name": "Kari Receiver",
+            "companyName": "Receiver AS",
+        },
+        "address": {
+            "streets": ["Karl Johans gate 22"],
+            "postalCode": "0154",
+            "city": "Oslo",
+            "countryCode": "NO",
+        },
+        "contact": {
+            "contactName": "Kari Receiver",
+            "emailAddress": "receiver@example.com",
+            "phoneNo": "+4791234567",
+            "smsNo": "+4791234567",
+        },
+    },
+}
+
+PolandRecipient = {
+    **NorwayRecipient,
+    "address_line1": "ul. Marszalkowska 1",
+    "city": "Warszawa",
+    "postal_code": "00-001",
+    "country_code": "PL",
+}
+GermanyRecipient = {
+    **NorwayRecipient,
+    "address_line1": "Unter den Linden 1",
+    "city": "Berlin",
+    "postal_code": "10117",
+    "country_code": "DE",
+}
+AlandRecipient = {
+    **NorwayRecipient,
+    "address_line1": "Torggatan 1",
+    "city": "Mariehamn",
+    "postal_code": "22100",
+    "country_code": "FI",
+}
+
 # CN22 is sent for letters and International Parcel; a tracked letter
 # exercises the CN22 branch without triggering the export-letter fetch.
 CustomsShipmentPayload = {
     **ShipmentPayload,
+    "recipient": NorwayRecipient,
     "service": "postnord_tracked_letter",
     "customs": {
         "content_type": "merchandise",
@@ -2044,6 +2259,10 @@ CustomsShipmentRequest = {
             "service": {
                 "basicServiceCode": "34",
                 "additionalServiceCode": ["A5"],
+            },
+            "parties": {
+                **ShipmentRequest["shipment"][0]["parties"],
+                "consignee": NorwayConsignee,
             },
             "customsDeclarationCN22": {
                 "EORIorPersonalIdNumber": "SE556000123401",
@@ -2110,6 +2329,7 @@ CustomsRegistrationShipmentRequest = {
 def _customs_payload(lines: int) -> dict:
     return {
         **ShipmentPayload,
+        "recipient": NorwayRecipient,
         "service": "postnord_tracked_letter",
         "customs": {
             "content_type": "merchandise",
@@ -2133,6 +2353,7 @@ def _customs_payload(lines: int) -> dict:
 # to a single-unit line: lines carry 30 SEK / 0.6 kg and 5 SEK / 0.1 kg.
 QuantityThreeCN22Payload = {
     **ShipmentPayload,
+    "recipient": NorwayRecipient,
     "service": "postnord_tracked_letter",
     "customs": {
         "options": {"eori_number": "SE556000123401"},
@@ -2175,16 +2396,7 @@ ExportLetterCustomsPayload = {
 CustomsInvoiceShipmentPayload = {
     **ShipmentPayload,
     "shipper": {**ShipmentPayload["shipper"], "federal_tax_id": "SE556123471101"},
-    "recipient": {
-        "address_line1": "Karl Johans gate 22",
-        "city": "Oslo",
-        "postal_code": "0154",
-        "country_code": "NO",
-        "person_name": "Kari Receiver",
-        "company_name": "Receiver AS",
-        "phone_number": "+4791234567",
-        "email": "receiver@example.com",
-    },
+    "recipient": NorwayRecipient,
     "customs": {
         "content_type": "merchandise",
         "commercial_invoice": True,
@@ -2223,27 +2435,7 @@ CustomsInvoiceShipmentRequest = {
             **ShipmentRequest["shipment"][0],
             "parties": {
                 **ShipmentRequest["shipment"][0]["parties"],
-                "consignee": {
-                    "issuerCode": "Z12",
-                    "party": {
-                        "nameIdentification": {
-                            "name": "Kari Receiver",
-                            "companyName": "Receiver AS",
-                        },
-                        "address": {
-                            "streets": ["Karl Johans gate 22"],
-                            "postalCode": "0154",
-                            "city": "Oslo",
-                            "countryCode": "NO",
-                        },
-                        "contact": {
-                            "contactName": "Kari Receiver",
-                            "emailAddress": "receiver@example.com",
-                            "phoneNo": "+4791234567",
-                            "smsNo": "+4791234567",
-                        },
-                    },
-                },
+                "consignee": NorwayConsignee,
             },
             "customsInvoice": {
                 "declarationType": "invoiceExportDeclaration",
