@@ -29,11 +29,11 @@
 
 ## 5. DHL Freight Sweden customs
 
-- [ ] 5.1 Add `customsHandlingStandard`, `customsHandlingFullService`, `customsCustomersOwnDeclaration{customsId, customsClearanceInstruction}`, `customsJointDeclaration{sfid}`, and `voecSupplyVAT{vatId}` from the vendored `AdditionalServicesDTO` to `schemas/transport_instruction_request.json`, and verify `./bin/run-generate-on modules/connectors/dhl_freight_sweden` regenerates `AdditionalServicesType` with those members and the existing tests still pass
-- [ ] 5.2 Map `customs.options.eori_number` to `CustomsDocument.eori`, apply `commercial_invoice` literally, and derive `transportMovement` from shipper versus recipient country, and verify updated unit tests including one asserting an invoice number with the flag false yields ProformaInvoice
-- [ ] 5.3 Add the customs service options to `units.py` following the `doorstepDelivery{accessCode}` pattern and build them into additional services only when set, with `voecSupplyVAT` fed from `customs.options.voec_number`, and verify unit tests asserting no customs service without an option and each service's request shape when set
+- [x] 5.1 Add `customsHandlingStandard`, `customsHandlingFullService`, `customsCustomersOwnDeclaration{customsId, customsClearanceInstruction}`, `customsJointDeclaration{sfid}`, and `voecSupplyVAT{vatId}` from the vendored `AdditionalServicesDTO` to `schemas/transport_instruction_request.json`, and verify `./bin/run-generate-on modules/connectors/dhl_freight_sweden` regenerates `AdditionalServicesType` with those members and the existing tests still pass
+- [x] 5.2 Map `customs.options.eori_number` to `CustomsDocument.eori`, apply `commercial_invoice` literally, and derive `transportMovement` from shipper versus recipient country, and verify updated unit tests including one asserting an invoice number with the flag false yields ProformaInvoice
+- [x] 5.3 Add the customs service options to `units.py` following the `doorstepDelivery{accessCode}` pattern and build them into additional services only when set, with `voecSupplyVAT` fed from `customs.options.voec_number`, and verify unit tests asserting no customs service without an option and each service's request shape when set
 - [ ] 5.4 Add fail-fast checks for standard handling without EORI, own declaration without customs identifier, and joint declaration without SFID using the connector's `SHIPPING_SDK_FIELD_ERROR` error type, and verify unit tests asserting each field error and no HTTP call
-- [ ] 5.5 Run `python -m unittest discover -v -f modules/connectors/dhl_freight_sweden/tests` and verify all tests pass
+- [x] 5.5 Run `python -m unittest discover -v -f modules/connectors/dhl_freight_sweden/tests` and verify all tests pass
 
 ## 6. Integration verification
 

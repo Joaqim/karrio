@@ -59,7 +59,7 @@ Alternative considered: `onlyCustomsInvoice`. Rejected because PostNord document
 ### DHL Freight Sweden customs services as sub-field options
 
 The schema sample `dhl_freight_sweden/schemas/transport_instruction_request.json` gains the five services from `AdditionalServicesDTO` and the types are regenerated.
-Options follow the `doorstepDelivery{accessCode}` pattern: boolean options for standard and full-service handling, string options carrying `customsId` and `sfid` for own and joint declaration, and `voecSupplyVAT{vatId}` fed from `customs.options.voec_number` rather than a new option.
+Options follow the `doorstepDelivery{accessCode}` pattern: boolean options select each of the four services (standard handling, full-service handling, own declaration, joint declaration), and separate string options carry the own-declaration `customsId` and the joint-declaration `sfid`, so that selecting a service without its identifier is expressible and fails fast (a single string option doubling as selector would let a boolean `true` pass through as the identifier `"True"`), and `voecSupplyVAT{vatId}` fed from `customs.options.voec_number` rather than a new option.
 Fail-fast checks raise the connector's existing `ShippingSDKDetailedError` subclass with `SHIPPING_SDK_FIELD_ERROR` (`create.py:18-27`): standard handling without EORI, own declaration without customs identifier, joint declaration without SFID.
 The document type applies `commercial_invoice` literally, replacing `commercial_invoice or invoice` (`create.py:294-298`), and `transportMovement` compares recipient country with shipper country rather than `settings.account_country_code`; both are equal for Swedish accounts.
 
