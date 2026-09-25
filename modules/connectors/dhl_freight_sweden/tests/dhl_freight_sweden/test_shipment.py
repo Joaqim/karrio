@@ -472,6 +472,30 @@ class TestDHLFreightShipment(unittest.TestCase):
         self.assertEqual(set(messages[0].details), {"customs.invoice"})
         self.assertIn("invoice number", messages[0].message)
 
+    def test_create_shipment_request_customs_commodity_without_quantity(self):
+        payload = {
+            **ShipmentPayload109CustomsQuantity,
+            "customs": {
+                **ShipmentPayload109CustomsQuantity["customs"],
+                "commodities": [
+                    {
+                        **ShipmentPayload109CustomsQuantity["customs"]["commodities"][0],
+                        "quantity": None,
+                    }
+                ],
+            },
+        }
+        shipment = models.ShipmentRequest(**payload)
+        self.assertIsNone(shipment.customs.commodities[0].quantity)
+
+        request = gateway.mapper.create_shipment_request(shipment)
+        serialized = lib.to_dict(request.serialize())
+
+        commodity = serialized["customsInformation"]["customsCommodities"][0]
+        self.assertEqual(commodity["customsValue"], 30.0)
+        self.assertEqual(commodity["netWeight"], 0.38)
+        self.assertEqual(commodity["numberOfUnits"], 1)
+
     def test_create_shipment_request_payer_from_customs_incoterm(self):
         request = gateway.mapper.create_shipment_request(
             models.ShipmentRequest(**ShipmentPayload202Customs)
