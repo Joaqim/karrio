@@ -15,7 +15,7 @@
 - [x] 2.5 Verify `commercial_invoice` typing with unit tests asserting COMMERCIAL for true and PROFORMA for false and omitted, including a `content_type="merchandise"` payload with the flag false still yielding PROFORMA
 - [x] 2.6 Migrate the existing tests that book `postnord_parcel` with customs (`test_create_shipment_customs_request`, the category, registration-number, line-limit, and rounding tests at `tests/postnord/test_shipment.py:227-508`) to a letter service where they exercise CN22 behaviour, and verify the connector suite passes with no CN22 assertion left on a parcel product
 - [x] 2.7 Multiply per-unit commodity value and weight by quantity for CN22 lines, customs invoice lines, and total value; set total gross weight to the sum of parcel weights (including packaging) with the line-weight sum as fallback, and invoice `totalNetWeight` to the line-weight sum (user confirmed 2026-09-25 that production CN22s show a third of the expected value and weight for quantity 3), and verify unit tests asserting line and total values for a quantity-3 commodity on both paths
-- [ ] 2.8 Omit customs structures, customs document retrieval, and customs fail-fast checks within the EU VAT area with a warning, using the same EU VAT area definition as the DHL Freight Sweden connector (connector-local, `GR` accepted, special fiscal territories by country code or postal-code range), and verify unit tests for SE to PL parcel (omitted plus warning, no by-id fetch), SE to DE letter without registration numbers (no field error), SE to FI 22100 (customs invoice kept), and SE to NO (kept); migrate existing tests whose customs fixtures use EU destinations
+- [x] 2.8 Omit customs structures, customs document retrieval, and customs fail-fast checks within the EU VAT area with a warning, using the same EU VAT area definition as the DHL Freight Sweden connector (connector-local, `GR` accepted, special fiscal territories by country code or postal-code range), and verify unit tests for SE to PL parcel (omitted plus warning, no by-id fetch), SE to DE letter without registration numbers (no field error), SE to FI 22100 (customs invoice kept), and SE to NO (kept); migrate existing tests whose customs fixtures use EU destinations
 
 ## 3. PostNord CN22 registration rule
 
@@ -44,8 +44,8 @@
 
 ## 6. Integration verification
 
-- [ ] 6.1 Run `python -m unittest discover -v -f modules/connectors/postnord/tests` and `./bin/run-sdk-tests`, and verify both pass
+- [x] 6.1 Run `python -m unittest discover -v -f modules/connectors/postnord/tests` and `./bin/run-sdk-tests`, and verify both pass
 - [ ] 6.2 With explicit user approval immediately before running, book one PostNord production parcel with customs via a `verify_prod_probe.py` in this change directory, fetch the composed documents by printId, then cancel the booking, and verify the findings note records composition including `customsInvoice`, the retrieved document size and format, whether registration numbers were required, and the cancellation, with no key or EORI value recorded
-- [ ] 6.3 Write `changelog.md` in this change directory listing the features and the three breaking changes from the proposal, and verify each breaking change names its migration
+- [x] 6.3 Write `changelog.md` in this change directory listing the features and the three breaking changes from the proposal, and verify each breaking change names its migration
 - [ ] 6.4 Run the fresh-context review gate against the specs, design, and repository checklists (karrio.lib usage, enums over hardcoded strings, no generated-file edits, test coverage), address findings, and verify the reviewer reports no blocking issue
 - [ ] 6.5 Register both branches in the develop assembly script and regenerate `develop`, and verify the assembled `develop` passes both connector suites
