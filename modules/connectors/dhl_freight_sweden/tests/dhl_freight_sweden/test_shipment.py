@@ -289,6 +289,17 @@ class TestDHLFreightShipment(unittest.TestCase):
                 commodity = serialized["customsInformation"]["customsCommodities"][0]
                 self.assertEqual(commodity["netWeight"], expected)
 
+    def test_create_shipment_request_customs_commodity_line_totals(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload109CustomsQuantity)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        commodity = serialized["customsInformation"]["customsCommodities"][0]
+        self.assertEqual(commodity["customsValue"], 60.0)
+        self.assertEqual(commodity["netWeight"], 0.76)
+        self.assertEqual(commodity["numberOfUnits"], 2)
+
     def test_create_shipment_request_payer_from_customs_incoterm(self):
         request = gateway.mapper.create_shipment_request(
             models.ShipmentRequest(**ShipmentPayload202Customs)
@@ -932,7 +943,12 @@ def _with_commodity_weight(payload: dict, weight: float, weight_unit: str) -> di
         "customs": {
             **customs,
             "commodities": [
-                {**commodity, "weight": weight, "weight_unit": weight_unit}
+                {
+                    **commodity,
+                    "weight": weight,
+                    "weight_unit": weight_unit,
+                    "quantity": 1,
+                }
                 for commodity in customs["commodities"]
             ],
         },
@@ -1102,6 +1118,24 @@ CustomsDocumentNO = {
     "eori": "SE5560000001",
 }
 
+ShipmentPayload109CustomsQuantity = {
+    **ShipmentPayload109CustomsNO,
+    "customs": {
+        **CustomsNO,
+        "duty": {"paid_by": "sender", "currency": "EUR", "declared_value": 60.0},
+        "commodities": [
+            {
+                **Customs["commodities"][0],
+                "quantity": 2,
+                "value_amount": 30.0,
+                "value_currency": "EUR",
+                "weight": 0.38,
+                "weight_unit": "KG",
+            }
+        ],
+    },
+}
+
 ShipmentPayload109CustomsVOEC = {
     **ShipmentPayload109CustomsNO,
     "customs": {
@@ -1212,11 +1246,11 @@ CustomsInformation = {
         {
             "countryCodeOfOrigin": "SE",
             "customsValueCurrency": "EUR",
-            "customsValue": 1200.0,
+            "customsValue": 4800.0,
             "hsItemId": "7615101090",
             "commodityDescription": "Aluminium brackets",
             "procedureCode": "1042",
-            "netWeight": 2.5,
+            "netWeight": 10.0,
             "numberOfUnits": 4,
         }
     ],
