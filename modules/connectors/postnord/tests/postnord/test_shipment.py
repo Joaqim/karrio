@@ -1512,6 +1512,52 @@ class TestPostNordCustomsInvoice(unittest.TestCase):
             },
         )
 
+    def test_create_shipment_customs_invoice_without_registration_numbers(self):
+        # The CN22 registration rule does not apply: the sandbox accepted a
+        # parcel customsInvoice without EORI, VOEC, or IOSS (2026-09-25), so
+        # the invoice is sent as-is for PostNord to judge.
+        payload = {
+            **CustomsInvoiceShipmentPayload,
+            "customs": {
+                **CustomsInvoiceShipmentPayload["customs"],
+                "options": {},
+            },
+        }
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        expected_invoice = CustomsInvoiceShipmentRequest["shipment"][0][
+            "customsInvoice"
+        ]
+        self.assertEqual(
+            lib.to_dict(request.serialize())["shipment"][0]["customsInvoice"],
+            {
+                **expected_invoice,
+                "seller": {
+                    k: v
+                    for k, v in expected_invoice["seller"].items()
+                    if k != "eoriNo"
+                },
+            },
+        )
+
+    def test_create_shipment_customs_invoice_registration_numbers(self):
+        payload = {
+            **CustomsInvoiceShipmentPayload,
+            "customs": {
+                **CustomsInvoiceShipmentPayload["customs"],
+                "options": {
+                    "eori_number": "SE556000123401",
+                    "voec_number": "1234567",
+                    "ioss_number": "IM1234567890",
+                },
+            },
+        }
+        invoice = self._invoice(payload)
+        self.assertEqual(invoice["seller"]["eoriNo"], "SE556000123401")
+        self.assertEqual(invoice["voec"], "1234567")
+        self.assertEqual(invoice["ioss"], "IM1234567890")
+
     def test_create_shipment_customs_invoice_commercial_type(self):
         invoice = self._invoice(CustomsInvoiceShipmentPayload)
         self.assertEqual(invoice["type"], "COMMERCIAL")
