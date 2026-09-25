@@ -86,19 +86,35 @@ The CN22 date and signature strip is stamped on request via `POST /v1/documents/
 
 ### Requirements by product (shipper in Sweden)
 
-Source: PostNord SE customs documents page (W [Wayback 2026-01-16](https://web.archive.org/web/20260116090151/https://www.postnord.se/en/business/import-export-customs/customs-documents-and-shipping-documents/)) unless noted.
+Correction 2026-09-25: an earlier version of this table read "Letters > SEK 2 000 or commercial: CN23 and invoice" and "Postpaket Utrikes > SEK 2 000 or commercial: CN23 and invoice ×2" as the web page's rule.
+That row was an over-summary: for letters, commercial purpose triggers only a registration number, and the "or commercial" invoice trigger for Postpaket Utrikes comes from its terms, not the web page.
+The rows below are re-read from the sources with verbatim quotes.
 
-| Product group | Value | Structured data | Physical documents |
+Sources: EN PostNord SE customs documents page (W [Wayback 2026-01-16](https://web.archive.org/web/20260116090151/https://www.postnord.se/en/business/import-export-customs/customs-documents-and-shipping-documents/)), SV page (W Wayback 2026-02-08, `postnord.se/foretag/import-export-tull/tulldokument-och-frakthandlingar-for-foretag/`), and the Postpaket Utrikes terms (W [valid 2025-05-02, §2](https://api2.postnord.com/rest/customer/v2/ptm/file/download/5341.28764?disposition=inline)).
+
+| Product group | Value or purpose | Documents | Source |
 |---|---|---|---|
-| Letters (Varubrev, Export Letter, Tracked, Registered) | ≤ SEK 2 000, not commercial | CN22 | CN22 glued on the item |
-| Letters | > SEK 2 000 or commercial | CN23 and invoice | CN23 and commercial invoice |
-| Service Point, MyPack Home, Pallet, Parcel | any | invoice, not CN22/CN23 | shipping document and invoice "in triplicate" |
-| Postpaket Utrikes, EMS, International Parcel | ≤ SEK 2 000 | CN23 | CN23 |
-| Postpaket Utrikes, EMS, International Parcel | > SEK 2 000 or commercial | CN23 and invoice | CN23 and invoice ×2 (W [Postpaket Utrikes terms, valid 2025-05-02](https://api2.postnord.com/rest/customer/v2/ptm/file/download/5341.28764?disposition=inline)) |
+| Letters (EN: International letters, Untracked letter, International Tracked Letter, International Registered Mail) | any value | CN22, date, and sender; EORI, personal ID number, or VOEC if commercial | W EN and SV pages |
+| Letters | > SEK 2 000 | EN: CN23 and commercial invoice; SV: CN22 and commercial invoice (unresolved conflict) | W EN and SV pages |
+| Letters to Norway | from SEK 0 | commercial invoice and VOEC | W SV page only |
+| Service Point, MyPack Home, Pallet, Parcel | any | invoice, not CN22/CN23; shipping document and invoice "in triplicate" | W EN page |
+| Postpaket Utrikes, EMS, International Parcel | any value | CN23; EORI or personal ID number if commercial | W EN and SV pages; terms §2 |
+| Postpaket Utrikes, EMS, International Parcel | > SEK 2 000 | web pages: CN23 and commercial or proforma invoice in triplicate | W EN and SV pages |
+| Postpaket Utrikes, EMS, International Parcel | > SEK 2 000 or commercial | terms: CN23 in two copies and commercial invoice in two copies with the parcel | W terms §2 |
+
+EN letters table: "Regardless of value: Customs label CN22, date, and sender shall always be stated. EORI/personal ID number/VOEC* must be stated if the item is being sent for commercial purposes." and "Value more than SEK 2,000: Customs declaration CN23 and commercial invoice." (W EN page).
+EN prose elsewhere on the same page says "CN23 is also used for parcels and mail items with a value of SEK 2,000 or less if they are being sent for commercial purposes."; its own letters table contradicts that sentence, and this note follows the table (I).
+EN EMS and Parcel Post International table: "Value max. SEK 2,000: Customs Declaration CN23. EORI… must be stated if … commercial purposes." and "> SEK 2,000: CN23 and commercial or pro forma invoice in triplicate." (W EN page).
+SV letters: "Oavsett värde: Tulletikett CN22, datum och avsändare anges alltid. EORI/personnummer/VOEC* anges om varan skickas i handelssyfte.", "Värde över 2 000 kronor: Tulldeklaration CN22 och Handelsfaktura.", and "OBS! Vid export till Norge behöver Handelsfaktura och VOEC* anges från 0 kr." (W SV page).
+SV EMS and Postpaket: "Oavsett värde: Tulletikett CN23 … EORI/personnummer anges om varan skickas i handelssyfte." and "> 2 000 kr: CN23 och handels- eller proformafaktura i tre exemplar." (W SV page).
+The EN and SV pages disagree on CN22 versus CN23 for letters above SEK 2 000; the SV capture (2026-02-08) is later than the EN capture (2026-01-16), and the conflict is unresolved (I).
+Postpaket Utrikes terms §2: "För paket utanför EU med varuvärde under 2000 kr krävs att man fyller i Exportdeklaration Post CN23 … För paket med varuvärde över 2000 kr eller då varan skickas i handelssyfte krävs utöver frakthandling och Exportdeklaration Post CN23, i två exemplar en handelsfaktura i 2 exemplar med paketet. … Proformafaktura … får endast användas vid gåva eller varuprov." (W terms).
+For Postpaket Utrikes the terms trigger the invoice on value or commercial purpose with two copies, while the web pages trigger it on value only with three copies; unresolved (I).
+Proforma invoices are permitted only for gifts or samples (W terms §2).
 
 PostNord's SEK 2 000 threshold is stricter than the UPU 300 SDR (about SEK 4 000, I).
-Commercial items require an EORI, personal identity number, or VOEC number; Norway always requires VOEC (W same page).
-Letters with goods leaving the EU require customs data sent electronically in advance from 2026-01-01 (W [Brev utrikes 2026](https://api2.postnord.com/rest/customer/v2/ptm/file/download/5191.29333?disposition=inline)).
+The UPU trigger for CN23 is value only: above 300 SDR, or when the sender prefers it (W UPU Circular 100/2022 and CIRC-2024-086, found by web search only and not read in full).
+Letters with goods leaving the EU require an S10 barcode label and customs data sent electronically in advance from 2026-01-01; the price list states no CN22, CN23, or invoice rule (W [Brev utrikes 2026](https://api2.postnord.com/rest/customer/v2/ptm/file/download/5191.29333?disposition=inline)).
 Service Point special terms §4 (valid 2026-01-01): a commercial invoice "in at least two copies in English shall accompany the parcel", in a plastic pocket on parcel no. 1; "To Norway the commercial invoice and shipment list shall be sent digitally"; digital data prevails over paper on discrepancy (W [avropa.se PDF](https://www.avropa.se/globalassets/bilagor/1.-aktuella-rao/postformedlingstjanster-2021/paketformedlingstjanster--1-lev-postnord/sarskilda-villkor-service-point-2026.pdf)).
 The copy count differs between sources ("triplicate" versus "at least two"); unresolved.
 
@@ -123,7 +139,7 @@ Most PostNord pages refuse automated fetches; the sources below were read on 202
 
 | Shipper | Invoice data via EDI | Physical invoice with the parcel | Separate channel | Copies | Signature | Threshold |
 |---|---|---|---|---|---|---|
-| SE | Booking API; required digitally to Norway | yes, except to Norway (digital only) | Norway only: Booking API, Skicka Direkt Business, foravisering.export@postnord.com, MyCustoms upload | English page 3, Swedish page 2 (conflict); 3 for Postpaket Utrikes | "usually signed by hand" | invoice above SEK 2 000 for letters and postal parcels; any value for Service Point, MyPack, Parcel, Pallet |
+| SE | Booking API; required digitally to Norway | yes, except to Norway (digital only) | Norway only: Booking API, Skicka Direkt Business, foravisering.export@postnord.com, MyCustoms upload | English page 3, Swedish page 2 (conflict); 3 for Postpaket Utrikes | "usually signed by hand" | invoice above SEK 2 000 for letters and postal parcels, from SEK 0 for letters to Norway (SV page), and for commercial Postpaket Utrikes (terms §2); any value for Service Point, MyPack, Parcel, Pallet |
 | FI | required; clearance "primarily based on" EDI | web page: optional ("attached to the shipment or submitted separately"); terms 2026-05-01: signed, triplicate | tullaus.fi@postnord.com | page: not stated; terms: 3 | page: "if necessary", not for authorized exporters; terms: signed | none stated; export clearance included up to 5 items |
 | DK | required via ToldAPI for non-EU | yes, plastic pocket visible on the parcel; rest of world invoice "not required" but recommended | eksport@postnord.com (export declaration copy only) | Norway 2, Switzerland and Liechtenstein 3, UK 2, rest of world 1 CN23 and 2 invoices | not stated | export declaration above DKK 7 500 |
 | NO | customs EDI required since 2021 (import context) | not found | fortolling.no@postnord.com (enquiries) | not found | not found | fees only (see below) |
@@ -246,6 +262,8 @@ Invoice rendering from a stored `DocumentTemplate` already exists behind `option
 
 - PostNord NO rules for Norwegian shippers exporting (no official source found).
 - PostNord SE invoice copy count: English page "triplicate" versus Swedish page "två exemplar".
+- PostNord SE letters above SEK 2 000: English page CN23 versus Swedish page CN22 (both with a commercial invoice).
+- PostNord Postpaket Utrikes invoice: terms §2 two copies on value or commercial purpose versus web pages three copies on value only.
 - Whether PostNord FI's relaxed web guidance or its 2026 contract terms govern.
 - Whether DHL Freight Sweden 112 and road-freight products require copies attached to the outside of the package.
 - Whether DHL Freight Sweden bills own declaration on 109/112.
