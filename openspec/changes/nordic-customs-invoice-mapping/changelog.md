@@ -12,6 +12,7 @@ Commits are on `feat-postnord-customs-invoice` (base `feat-postnord-connector` 0
   `customs.commercial_invoice` true selects COMMERCIAL, false or omitted selects PROFORMA.
 - feat(postnord): reject CN22 declarations without registration numbers before any request is sent.
 - feat(postnord): attach the customs invoice PostNord composes for parcel bookings to the shipping documents (`docs.extra_documents`), fetched by printId as for export letters and categorized by the printout composition; retrieval failure does not fail the booking.
+- feat(postnord): omit customs structures and the customs document retrieval within the EU VAT area with the warning `customs_omitted_intra_eu`, skipping the customs fail-fast checks, using the same EU VAT area definition as DHL Freight Sweden.
 - docs(postnord): document the customs invoice selection for parcel products in the connector README.
 - feat(dhl_freight_sweden): add the customs additional services to the transport instruction schema.
 - feat(dhl_freight_sweden): send `customs.options.eori_number` as `CustomsDocument.eori` and apply `customs.commercial_invoice` literally as the document type.
@@ -19,7 +20,7 @@ Commits are on `feat-postnord-customs-invoice` (base `feat-postnord-connector` 0
   `customs.options.voec_number` is sent as the `voecSupplyVAT` service.
 - feat(dhl_freight_sweden): fail fast on standard customs handling without EORI, own declaration without customs identifier, and joint declaration without SFID.
 - feat(dhl_freight_sweden): fall back the customs invoice number to the shipment reference and the invoice date to the shipping date, then the booking date.
-- feat(dhl_freight_sweden): omit customs information, customs services, and VOEC within the EU VAT area with a warning, treating special fiscal territories (Åland, Canary Islands, Ceuta, Melilla, Büsingen, Heligoland, Livigno, Campione d'Italia) as outside it.
+- feat(dhl_freight_sweden): omit customs information, customs services, and VOEC within the EU VAT area with a warning that names the dropped services, skipping the customs fail-fast checks, and treating special fiscal territories (Åland, Canary Islands, Ceuta, Melilla, Büsingen, Heligoland, Livigno, Campione d'Italia) as outside it.
 
 ## Fixes
 
@@ -43,8 +44,10 @@ Commits are on `feat-postnord-customs-invoice` (base `feat-postnord-connector` 0
   Migration: set parcel weights to the shipped gross weight.
 - DHL Freight Sweden customs documents with an invoice number and `commercial_invoice` false are typed ProformaInvoice instead of CommercialInvoice.
   Migration: set `customs.commercial_invoice` true for goods sold.
-- DHL Freight Sweden omits customs information, customs services, and VOEC when shipper and recipient are both inside the EU VAT area, returning the warning `customs_omitted_intra_eu`.
-  Migration: none required to book; consumers that relied on customs data being sent within the EU VAT area handle the warning.
+- PostNord omits every customs structure (CN22, CN23, customs invoice) and the customs document retrieval when shipper and recipient are both inside the EU VAT area, skips the customs fail-fast checks there, and returns the warning `customs_omitted_intra_eu`; previously such bookings, for example Sweden to another member state, sent a CN22.
+  Migration: consumers that read a CN22 or customs document from intra-EU PostNord bookings stop expecting one and handle the warning; customs data may still be sent, and bookings no longer fail on missing customs fields within the EU VAT area.
+- DHL Freight Sweden omits customs information, customs services, and VOEC when shipper and recipient are both inside the EU VAT area, skips the customs fail-fast checks there, and returns the warning `customs_omitted_intra_eu` naming any dropped services.
+  Migration: consumers that relied on customs data or customs services being sent within the EU VAT area handle the warning; customs data and options may still be sent without failing the booking.
 - DHL Freight Sweden customs documents take the shipment reference when `customs.invoice` is absent and the shipping date or booking date when `customs.invoice_date` is absent, and fail with a field error on `customs.invoice` when neither invoice number nor reference exists.
   Migration: send `customs.invoice` and `customs.invoice_date`, or a shipment reference.
 - DHL Freight Sweden customs services are selected only through the new options, and each selector without its required identifier fails fast.
