@@ -4,11 +4,31 @@
 # SDK, CLI, connectors and plugins (from nixpkgs plus the out-of-tree
 # derivations in ./pkgs), and puts the local pure-Python sources on PYTHONPATH
 # as editable namespace packages. No virtualenv or pip install step is needed.
-{ pkgs }:
+#
+# `withPyPDF2` adds PyPDF2 for branches based on upstream karrio, which still
+# import it (the fork's branches use pypdf). PyPDF2 is flagged with known
+# vulnerabilities in nixpkgs; that flag is cleared only in the package set of
+# the shell built with `withPyPDF2 = true`.
+{
+  pkgs,
+  withPyPDF2 ? false,
+}:
 let
+  inherit (pkgs) lib;
+
+  allowPyPDF2 = _pyfinal: pyprev: {
+    pypdf2 = pyprev.pypdf2.overrideAttrs (old: {
+      meta = old.meta // {
+        knownVulnerabilities = [ ];
+      };
+    });
+  };
+
   python = pkgs.python3.override {
     self = python;
-    packageOverrides = import ./python-overlay.nix;
+    packageOverrides = lib.composeManyExtensions (
+      [ (import ./python-overlay.nix) ] ++ lib.optional withPyPDF2 allowPyPDF2
+    );
   };
 
   pythonEnv = python.withPackages (
@@ -44,6 +64,7 @@ let
       # Django live-settings dependency used by the server modules
       ps.django-constance
     ]
+    ++ lib.optional withPyPDF2 ps.pypdf2
   );
 
   # `kcli` is the modules/cli console entry point (pyproject `kcli =
@@ -57,7 +78,7 @@ let
   '';
 in
 pkgs.mkShell {
-  name = "karrio-dev";
+  name = if withPyPDF2 then "karrio-dev-upstream" else "karrio-dev";
 
   packages = [
     pythonEnv

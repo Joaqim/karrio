@@ -10,10 +10,18 @@
       forAllSystems = lib.genAttrs lib.systems.flakeExposed;
     in
     {
-      devShells = forAllSystems (system: {
-        default = import ./nix/dev-shell.nix {
+      devShells = forAllSystems (
+        system:
+        let
           pkgs = nixpkgs.legacyPackages.${system};
-        };
-      });
+        in
+        {
+          default = import ./nix/dev-shell.nix { inherit pkgs; };
+          upstream = import ./nix/dev-shell.nix {
+            inherit pkgs;
+            withPyPDF2 = true;
+          };
+        }
+      );
     };
 }

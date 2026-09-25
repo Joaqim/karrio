@@ -3,5 +3,6 @@
 # monorepo working tree into the store, which the flake path incurs.
 {
   pkgs ? import ./nix/nixpkgs.nix { },
+  withPyPDF2 ? false,
 }:
-import ./nix/dev-shell.nix { inherit pkgs; }
+import ./nix/dev-shell.nix { inherit pkgs withPyPDF2; }
