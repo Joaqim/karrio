@@ -563,6 +563,45 @@ class TestPostNordShipment(unittest.TestCase):
             declaration["totalValue"], {"amount": 0.3, "currency": "SEK"}
         )
 
+    def test_create_shipment_customs_line_totals_over_quantity(self):
+        # Unified commodity value and weight are per unit; CN22 lines and
+        # totals are per line: 3 x (10 SEK, 0.2 kg) is 30 SEK and 0.6 kg.
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**QuantityThreeCN22Payload)
+        )
+        declaration = lib.to_dict(request.serialize())["shipment"][0][
+            "customsDeclarationCN22"
+        ]
+        self.assertEqual(
+            declaration["detailedDescription"],
+            [
+                {
+                    "content": "Enamel pin",
+                    "quantity": {"value": 3},
+                    "grossWeight": {"value": 0.6, "unit": "KGM"},
+                    "value": {"amount": 30.0, "currency": "SEK"},
+                    "hsTariffNumber": "7117190000",
+                    "countryCode": "SE",
+                    "rowNo": 1,
+                },
+                {
+                    "content": "Postcard",
+                    "quantity": {"value": 1},
+                    "grossWeight": {"value": 0.1, "unit": "KGM"},
+                    "value": {"amount": 5.0, "currency": "SEK"},
+                    "hsTariffNumber": "4909000000",
+                    "countryCode": "SE",
+                    "rowNo": 2,
+                },
+            ],
+        )
+        self.assertEqual(
+            declaration["totalValue"], {"amount": 35.0, "currency": "SEK"}
+        )
+        self.assertEqual(
+            declaration["totalGrossWeight"], {"value": 0.7, "unit": "KGM"}
+        )
+
     def test_create_shipment_customs_underivable_line_fields_omitted(self):
         # A commodity without weight_unit has no KGM value and a line
         # without value_amount carries no value: the elements are omitted
@@ -1694,6 +1733,39 @@ class TestPostNordCustomsInvoice(unittest.TestCase):
         self.assertEqual(invoice["voec"], "1234567")
         self.assertEqual(invoice["ioss"], "IM1234567890")
 
+    def test_create_shipment_customs_invoice_line_totals_over_quantity(self):
+        invoice = self._invoice(
+            {
+                **CustomsInvoiceShipmentPayload,
+                "customs": {
+                    **CustomsInvoiceShipmentPayload["customs"],
+                    "commodities": QuantityThreeCN22Payload["customs"]["commodities"],
+                },
+            }
+        )
+        self.assertEqual(
+            [
+                (line["quantity"], line["netWeight"], line["grossWeight"], line["itemValue"])
+                for line in invoice["detailedDescription"]
+            ],
+            [
+                (
+                    3,
+                    {"value": 0.6, "unit": "KGM"},
+                    {"value": 0.6, "unit": "KGM"},
+                    {"amount": 30.0, "currency": "SEK"},
+                ),
+                (
+                    1,
+                    {"value": 0.1, "unit": "KGM"},
+                    {"value": 0.1, "unit": "KGM"},
+                    {"amount": 5.0, "currency": "SEK"},
+                ),
+            ],
+        )
+        self.assertEqual(invoice["invoiceTotal"], {"amount": 35.0, "currency": "SEK"})
+        self.assertEqual(invoice["totalGrossWeight"], {"value": 0.7, "unit": "KGM"})
+
     def test_create_shipment_customs_invoice_commercial_type(self):
         invoice = self._invoice(CustomsInvoiceShipmentPayload)
         self.assertEqual(invoice["type"], "COMMERCIAL")
@@ -1930,10 +2002,11 @@ CustomsShipmentRequest = {
                 "categoryOfItem": {"categoryType": ["SALE OF GOODS"]},
                 "detailedDescription": [
                     {
+                        # 2 x (0.4 kg, 25 SEK): line totals over the quantity
                         "content": "Wool socks",
                         "quantity": {"value": 2},
-                        "grossWeight": {"value": 0.4, "unit": "KGM"},
-                        "value": {"amount": 25.0, "currency": "SEK"},
+                        "grossWeight": {"value": 0.8, "unit": "KGM"},
+                        "value": {"amount": 50.0, "currency": "SEK"},
                         "hsTariffNumber": "6115950000",
                         "countryCode": "SE",
                         "rowNo": 1,
@@ -1949,8 +2022,8 @@ CustomsShipmentRequest = {
                         "rowNo": 2,
                     },
                 ],
-                "totalGrossWeight": {"value": 1.5, "unit": "KGM"},
-                "totalValue": {"amount": 40.0, "currency": "SEK"},
+                "totalGrossWeight": {"value": 1.8, "unit": "KGM"},
+                "totalValue": {"amount": 65.0, "currency": "SEK"},
             },
         }
     ],
@@ -2007,6 +2080,38 @@ def _customs_payload(lines: int) -> dict:
     }
 
 
+# A quantity-3 commodity with per-unit value 10 SEK and weight 0.2 kg next
+# to a single-unit line: lines carry 30 SEK / 0.6 kg and 5 SEK / 0.1 kg.
+QuantityThreeCN22Payload = {
+    **ShipmentPayload,
+    "service": "postnord_tracked_letter",
+    "customs": {
+        "options": {"eori_number": "SE556000123401"},
+        "commodities": [
+            {
+                "title": "Enamel pin",
+                "quantity": 3,
+                "weight": 0.2,
+                "weight_unit": "KG",
+                "value_amount": 10.0,
+                "value_currency": "SEK",
+                "hs_code": "7117190000",
+                "origin_country": "SE",
+            },
+            {
+                "title": "Postcard",
+                "quantity": 1,
+                "weight": 0.1,
+                "weight_unit": "KG",
+                "value_amount": 5.0,
+                "value_currency": "SEK",
+                "hs_code": "4909000000",
+                "origin_country": "SE",
+            },
+        ],
+    },
+}
+
 # Export letter (UX) to an international recipient with the customs block:
 # the payload shape that triggers the implicit by-id customs document fetch.
 ExportLetterCustomsPayload = {
@@ -2040,9 +2145,9 @@ CustomsInvoiceShipmentPayload = {
             {
                 "title": "Wool socks",
                 "quantity": 2,
-                "weight": 0.4,
+                "weight": 0.2,
                 "weight_unit": "KG",
-                "value_amount": 300.0,
+                "value_amount": 150.0,
                 "value_currency": "SEK",
                 "hs_code": "6115950000",
                 "origin_country": "SE",

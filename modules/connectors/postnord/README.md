@@ -118,8 +118,8 @@ CN22 mapping:
 |---------------|------------|
 | `customs.content_type` | `categoryOfItem.categoryType` (see below) |
 | `customs.commodities[]` | `detailedDescription[]`: `title` (or `description`) as `content`, `quantity`, `grossWeight` in KGM, `value`, `hs_code` as `hsTariffNumber`, `origin_country` as `countryCode`, 1-based `rowNo` |
-| package weights | `totalGrossWeight` in KGM |
-| commodity values | `totalValue`: sum of `value_amount`, currency of the first commodity that sets one |
+| commodity weights | `totalGrossWeight` in KGM: sum of the line weights |
+| commodity values | `totalValue`: sum of the line values, currency of the first commodity that sets one |
 | `shipper.country_code` | `countryOfOrigin` |
 | `customs.options.eori_number` / `voec_number` / `ioss_number` | `EORIorPersonalIdNumber` / `voec` / `ioss` |
 
@@ -127,6 +127,7 @@ CN22 mapping:
 Other values are sent verbatim, and an absent `content_type` sends no `categoryOfItem`.
 
 A CN22 without any of EORI, VOEC, or IOSS under `customs.options` is rejected with a field error before any call, matching PostNord's rejection `SACUS-BR-24062502`.
+Commodity `weight` and `value_amount` are per unit, so each line carries them multiplied by `quantity`, on both the CN22 and the customs invoice.
 A CN22 accepts at most 13 commodity lines; more are rejected before any call to PostNord.
 
 Customs invoice mapping:

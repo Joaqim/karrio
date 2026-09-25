@@ -240,6 +240,51 @@ def _printout_base64(printout: postnord_res.PrintoutType) -> str:
     return base64.b64encode(printout.data.encode("utf-8")).decode("utf-8")
 
 
+def _line_weight(commodity: models.Commodity) -> typing.Optional[float]:
+    """Return a commodity line's weight in KG: per-unit weight times quantity.
+
+    Unified commodity weight is per unit, while PostNord's declaration lines
+    and totals are per line.
+    """
+    return units.Weight(
+        lib.identity(
+            commodity.weight * (commodity.quantity or 1)
+            if commodity.weight
+            else None
+        ),
+        commodity.weight_unit,
+    ).KG
+
+
+def _line_value(commodity: models.Commodity) -> typing.Optional[float]:
+    """Return a commodity line's value: per-unit value times quantity."""
+    return lib.identity(
+        lib.to_money(commodity.value_amount * (commodity.quantity or 1))
+        if commodity.value_amount
+        else None
+    )
+
+
+def _total_weight(commodities: typing.List[models.Commodity]) -> typing.Optional[float]:
+    return lib.to_decimal(sum(_line_weight(c) or 0 for c in commodities), 0.001) or None
+
+
+def _total_value(
+    commodities: typing.List[models.Commodity],
+) -> typing.Optional[postnord_req.GoodsValueType]:
+    """Sum the line values in the currency of the first line that sets one."""
+    currency = next((c.value_currency for c in commodities if c.value_currency), None)
+
+    return lib.identity(
+        postnord_req.GoodsValueType(
+            amount=lib.to_money(sum(_line_value(c) or 0 for c in commodities)),
+            currency=currency,
+        )
+        if any(c.value_amount for c in commodities)
+        else None
+    )
+
+
 def _customs_line(
     index: int, commodity: models.Commodity
 ) -> postnord_req.CustomsDeclarationCN22DetailedDescriptionType:
@@ -249,9 +294,10 @@ def _customs_line(
     partial structs: a commodity without ``weight_unit`` has no KGM value
     (``Commodity.weight_unit`` has no default, unlike ``Parcel``'s), and a
     line without ``value_amount`` carries no value; the swagger marks both
-    elements optional on ``detailedDescription``.
+    elements optional on ``detailedDescription``. Value and weight are line
+    totals over the quantity.
     """
-    weight = units.Weight(commodity.weight, commodity.weight_unit).KG
+    weight = _line_weight(commodity)
 
     return postnord_req.CustomsDeclarationCN22DetailedDescriptionType(
         content=commodity.title or commodity.description,
@@ -267,7 +313,7 @@ def _customs_line(
         ),
         value=lib.identity(
             postnord_req.GoodsValueType(
-                amount=commodity.value_amount,
+                amount=_line_value(commodity),
                 currency=commodity.value_currency,
             )
             if commodity.value_amount
@@ -282,7 +328,6 @@ def _customs_line(
 def _customs_declaration(
     customs: models.Customs,
     options: units.CustomsOptions,
-    total_gross_weight: typing.Optional[float],
     country_of_origin: str,
 ) -> postnord_req.CustomsDeclarationCN22Type:
     """Map unified customs data onto the booking's CN22 declaration branch.
@@ -302,9 +347,7 @@ def _customs_declaration(
     )
     provider_units.enforce_cn22_registration_numbers(options)
 
-    currency = next(
-        (c.value_currency for c in customs.commodities if c.value_currency), None
-    )
+    total_gross_weight = _total_weight(customs.commodities)
     category = (
         provider_units.CN22CategoryType.lookup(customs.content_type)
         if customs.content_type
@@ -330,16 +373,7 @@ def _customs_declaration(
             if total_gross_weight
             else None
         ),
-        totalValue=lib.identity(
-            postnord_req.GoodsValueType(
-                amount=lib.to_money(
-                    sum(c.value_amount or 0 for c in customs.commodities)
-                ),
-                currency=currency,
-            )
-            if any(c.value_amount for c in customs.commodities)
-            else None
-        ),
+        totalValue=_total_value(customs.commodities),
     )
 
 
@@ -419,7 +453,7 @@ def _invoice_party(
 def _customs_invoice_line(
     commodity: models.Commodity,
 ) -> postnord_req.CustomsInvoiceDetailedDescriptionType:
-    weight = units.Weight(commodity.weight, commodity.weight_unit).KG
+    weight = _line_weight(commodity)
     weight_element = lib.identity(
         postnord_req.TotalGrossWeightType(value=weight, unit="KGM") if weight else None
     )
@@ -433,7 +467,7 @@ def _customs_invoice_line(
         grossWeight=weight_element,
         itemValue=lib.identity(
             postnord_req.GoodsValueType(
-                amount=commodity.value_amount,
+                amount=_line_value(commodity),
                 currency=commodity.value_currency,
             )
             if commodity.value_amount
@@ -455,24 +489,15 @@ def _customs_invoice(
     PostNord takes a customs invoice instead of CN22/CN23 for parcel
     products. The shipper is the seller and the recipient the buyer;
     ``commercial_invoice`` selects COMMERCIAL or PROFORMA literally. Line
-    values and weights are taken per commodity and summed as the CN22
-    totals are. Registration numbers are passed through without the CN22
+    values and weights are totals over the quantity, summed like the CN22
+    totals. Registration numbers are passed through without the CN22
     completeness rule, which the sandbox did not apply to customs invoices.
     """
     errors = _customs_invoice_errors(shipper, recipient, customs, invoice_number)
     if errors:
         raise lib.exceptions.FieldError(errors)
 
-    currency = next(
-        (c.value_currency for c in customs.commodities if c.value_currency), None
-    )
-    total_gross_weight = lib.to_decimal(
-        sum(
-            units.Weight(c.weight, c.weight_unit).KG or 0
-            for c in customs.commodities
-        ),
-        0.001,
-    )
+    total_gross_weight = _total_weight(customs.commodities)
 
     return postnord_req.CustomsInvoiceType(
         declarationType=provider_units.CustomsDeclarationType.invoice_export_declaration.value,
@@ -510,16 +535,7 @@ def _customs_invoice(
             if total_gross_weight
             else None
         ),
-        invoiceTotal=lib.identity(
-            postnord_req.GoodsValueType(
-                amount=lib.to_money(
-                    sum(c.value_amount or 0 for c in customs.commodities)
-                ),
-                currency=currency,
-            )
-            if any(c.value_amount for c in customs.commodities)
-            else None
-        ),
+        invoiceTotal=_total_value(customs.commodities),
     )
 
 
@@ -610,7 +626,6 @@ def shipment_request(
         _customs_declaration(
             payload.customs,
             options=customs_options,
-            total_gross_weight=packages.weight.KG,
             country_of_origin=shipper.country_code,
         )
         if has_customs and customs_structure == provider_units.CustomsStructure.cn22
