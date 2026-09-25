@@ -28,6 +28,12 @@ class CustomsServiceIdentifierError(errors.ShippingSDKDetailedError):
     code = "SHIPPING_SDK_FIELD_ERROR"
 
 
+class CustomsInvoiceNumberError(errors.ShippingSDKDetailedError):
+    """Raised when a customs document has neither invoice number nor reference."""
+
+    code = "SHIPPING_SDK_FIELD_ERROR"
+
+
 class ServicePointDetailsError(errors.ShippingSDKDetailedError):
     """Raised when an access point party is missing service point details."""
 
@@ -142,6 +148,7 @@ def shipment_request(
         or (payload.customs.incoterm if payload.customs else None)
         or "1"
     )
+    shipping_date = lib.fdate(payload.options.get("shipment_date"))
     procedure_code = (
         options.dhl_freight_sweden_customs_procedure_code.state or "1042"
     )
@@ -162,6 +169,8 @@ def shipment_request(
             shipper.country_code,
             recipient.country_code,
             procedure_code,
+            payload.reference,
+            shipping_date,
         )
         if payload.customs
         and any(
@@ -188,7 +197,7 @@ def shipment_request(
         # productCode is generated as Optional[int]; the SPI product and codes
         # such as 402/502 must serialize as strings on the wire.
         productCode=str(service),
-        shippingDate=lib.fdate(payload.options.get("shipment_date")),
+        shippingDate=shipping_date,
         pickupInstruction=options.dhl_freight_sweden_pickup_instruction.state,
         deliveryInstruction=options.dhl_freight_sweden_delivery_instruction.state,
         totalNumberOfPieces=len(packages),
@@ -300,6 +309,8 @@ def _customs_information(
     origin_country: str,
     destination_country: str,
     procedure_code: str,
+    reference: typing.Optional[str],
+    shipping_date: typing.Optional[str],
 ) -> dhl_freight_sweden_req.CustomsInformationType:
     duty = customs.duty
     commodities = customs.commodities or []
@@ -333,10 +344,24 @@ def _customs_information(
             },
         )
 
+    invoice_number = customs.invoice or reference
+    if not invoice_number:
+        raise CustomsInvoiceNumberError(
+            "A customs document requires an invoice number "
+            "(customs.invoice) or a shipment reference",
+            details={
+                "customs.invoice": dict(
+                    code="required", message="invoice number is required"
+                )
+            },
+        )
+
     # The API requires at least one customs document whenever the customs
     # information section is present, so the document is always emitted.
+    # DHL records a missing invoice date as 0001-01-01 (booking 2906745548),
+    # so it falls back to the shipping date.
     document = dhl_freight_sweden_req.CustomsDocumentType(
-        id=customs.invoice,
+        id=invoice_number,
         type=lib.identity(
             provider_units.CustomsDocumentType.CommercialInvoice.value
             if customs.commercial_invoice
@@ -347,7 +372,7 @@ def _customs_information(
             if destination_country and destination_country != origin_country
             else None
         ),
-        invoiceDate=lib.fdate(customs.invoice_date),
+        invoiceDate=lib.fdate(customs.invoice_date) or shipping_date,
         invoiceCurrency=declaration_currency,
         invoiceAmount=duty.declared_value if duty else None,
         eori=customs_options.eori_number.state or None,

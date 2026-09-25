@@ -140,7 +140,7 @@ class TestDHLFreightShipment(unittest.TestCase):
 
         document = serialized["customsInformation"]["customsDocuments"][0]
         self.assertEqual(document["type"], "ProformaInvoice")
-        self.assertNotIn("id", document)
+        self.assertEqual(document["id"], "ORDER-2026-042")
         self.assertEqual(
             serialized["customsInformation"]["customsCommodities"][0]["procedureCode"],
             "1042",
@@ -299,6 +299,40 @@ class TestDHLFreightShipment(unittest.TestCase):
         self.assertEqual(commodity["customsValue"], 60.0)
         self.assertEqual(commodity["netWeight"], 0.76)
         self.assertEqual(commodity["numberOfUnits"], 2)
+
+    def test_create_shipment_request_customs_invoice_falls_back_to_reference(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload109CustomsNoInvoice)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        document = serialized["customsInformation"]["customsDocuments"][0]
+        self.assertEqual(document["id"], "ORDER-2026-042")
+        self.assertEqual(document["invoiceDate"], "2026-09-30")
+        self.assertEqual(serialized["shippingDate"], "2026-09-30")
+
+    def test_shipment_customs_without_invoice_or_reference_surfaces_field_error(self):
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            details, messages = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(
+                        **{
+                            key: value
+                            for key, value in ShipmentPayload109CustomsNoInvoice.items()
+                            if key != "reference"
+                        }
+                    )
+                )
+                .from_(gateway)
+                .parse()
+            )
+
+        mock.assert_not_called()
+        self.assertIsNone(details)
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0].code, "SHIPPING_SDK_FIELD_ERROR")
+        self.assertEqual(set(messages[0].details), {"customs.invoice"})
+        self.assertIn("invoice number", messages[0].message)
 
     def test_create_shipment_request_payer_from_customs_incoterm(self):
         request = gateway.mapper.create_shipment_request(
@@ -1074,6 +1108,7 @@ ShipmentPayload102Customs = {
 
 ShipmentPayload202Proforma = {
     **_payload("dhl_freight_sweden_road_freight_standard", _recipient_de),
+    "reference": "ORDER-2026-042",
     "customs": {
         "commodities": Customs["commodities"],
         "incoterm": "DAP",
@@ -1133,6 +1168,20 @@ ShipmentPayload109CustomsQuantity = {
                 "weight_unit": "KG",
             }
         ],
+    },
+}
+
+ShipmentPayload109CustomsNoInvoice = {
+    **_payload(
+        "dhl_freight_sweden_parcel_connect_b2c",
+        _recipient_no,
+        {"shipment_date": "2026-09-30"},
+    ),
+    "reference": "ORDER-2026-042",
+    "customs": {
+        key: value
+        for key, value in CustomsNO.items()
+        if key not in ("invoice", "invoice_date")
     },
 }
 
@@ -1211,6 +1260,7 @@ ShipmentPayload202GapCurrency = {
             },
         ],
         "incoterm": "DAP",
+        "invoice": "INV-2026-001",
         "duty": {"paid_by": "sender", "currency": "EUR", "declared_value": 1250.0},
     },
 }
