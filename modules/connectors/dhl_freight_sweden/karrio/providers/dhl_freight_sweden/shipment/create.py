@@ -356,26 +356,46 @@ def _customs_information(
     return dhl_freight_sweden_req.CustomsInformationType(
         customsDocuments=[document],
         customsCommodities=[
-            dhl_freight_sweden_req.CustomsCommodityType(
-                countryCodeOfOrigin=commodity.origin_country,
-                customsValueCurrency=commodity.value_currency
-                or declaration_currency,
-                customsValue=commodity.value_amount,
-                # hsItemId and procedureCode are strings on the wire even
-                # though the generated type annotates them as int.
-                hsItemId=commodity.hs_code,
-                commodityDescription=commodity.description or commodity.title,
-                procedureCode=procedure_code,
-                # A commodity without a weight unit keeps the kilogram reading
-                # it had before unit conversion, unlike the SDK Product default
-                # of pounds.
-                netWeight=units.Weight(
-                    commodity.weight, commodity.weight_unit or units.WeightUnit.KG.name
-                ).KG,
-                numberOfUnits=commodity.quantity,
-            )
+            _customs_commodity(commodity, declaration_currency, procedure_code)
             for commodity in commodities
         ],
+    )
+
+
+def _customs_commodity(
+    commodity: models.Commodity,
+    declaration_currency: typing.Optional[str],
+    procedure_code: str,
+) -> dhl_freight_sweden_req.CustomsCommodityType:
+    # DHL stores each line as a quantity total: the line values must sum to
+    # the invoice amount (booking 2906745548 recorded a per-unit value 30
+    # against an invoice amount 60 for 2 units).
+    quantity = commodity.quantity or 1
+
+    return dhl_freight_sweden_req.CustomsCommodityType(
+        countryCodeOfOrigin=commodity.origin_country,
+        customsValueCurrency=commodity.value_currency or declaration_currency,
+        customsValue=lib.identity(
+            lib.to_money(commodity.value_amount * quantity)
+            if commodity.value_amount is not None
+            else None
+        ),
+        # hsItemId and procedureCode are strings on the wire even though the
+        # generated type annotates them as int.
+        hsItemId=commodity.hs_code,
+        commodityDescription=commodity.description or commodity.title,
+        procedureCode=procedure_code,
+        # A commodity without a weight unit keeps the kilogram reading it had
+        # before unit conversion, unlike the SDK Product default of pounds.
+        netWeight=lib.identity(
+            units.Weight(
+                commodity.weight * quantity,
+                commodity.weight_unit or units.WeightUnit.KG.name,
+            ).KG
+            if commodity.weight is not None
+            else None
+        ),
+        numberOfUnits=commodity.quantity,
     )
 
 
