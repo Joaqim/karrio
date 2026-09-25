@@ -29,7 +29,7 @@ Alternative considered: separate `rate_advisors` and `shipment_advisors` fields;
 
 ### Context from an allowlist
 
-`AdvisorContext.from_settings(settings)` copies the five base fields and `dict(settings.config or {})`, deep-copied; nothing else on the settings object is read.
+`AdvisorContext.from_settings(settings, operation)` copies the five base fields and `dict(settings.config or {})`, deep-copied; nothing else on the settings object is read.
 Alternative considered: stripping known credential names per connector; rejected because credentials are arbitrary connector-specific fields with no marker, so any denylist leaks new ones.
 
 ### Placement to avoid conflicts
@@ -49,10 +49,12 @@ Each advisor call is wrapped in a single `except Exception` that converts the fa
 This is a deliberate exception to the repository rule against catching bare `Exception`: advisors are third-party code whose failure modes are unknown, and the spec guarantees that a broken plugin never fails rating or shipping; the handler is confined to this one call site and the reason is stated in its docstring.
 `lib.failsafe` is not used because it discards the error, and the spec requires the failure to be reported.
 Codes avoid the `SHIPPING_SDK_` prefix that the server's `is_sdk_message` treats specially.
+Validation of the advisor's returned value sits inside the same handler, so a malformed return is reported as a failure rather than breaking the operation.
+`models.Message` requires `carrier_name` and `carrier_id`, so advisors construct messages with those arguments (possibly `None`) and the runner fills them from the context; the plugin documentation states this.
 
 ### Invocation points
 
-In `Rating.fetch`, advisors run inside `flatten()` per gateway after parsing, and only when that gateway's parsed rates are non-empty, which keeps the server's 424 rule unchanged for gateways without rates.
+In `Rating.fetch`, advisors run inside `flatten()` per gateway after parsing, and only when rates remain after the connection's `filter_rates`, which keeps the server's 424 rule unchanged for gateways whose rates are all filtered out.
 In `Shipment.create`, advisors run inside the deserialize closure after parsing, only when shipment details are present, with the request as sent to the carrier (the swapped copy for returns).
 Advisors never see the carrier response, so they cannot alter it.
 Alternative considered: running advisors before the carrier call; rejected because advice about an operation that then aborts is noise and the spec skips aborted gateways.
