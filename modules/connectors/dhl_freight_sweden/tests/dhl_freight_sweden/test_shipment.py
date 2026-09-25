@@ -324,6 +324,65 @@ class TestDHLFreightShipment(unittest.TestCase):
         self.assertIn("EUR", messages[0].message)
         self.assertIn("SEK", messages[0].message)
 
+    def test_shipment_customs_service_missing_identifier_surfaces_field_error(self):
+        cases = [
+            (
+                ShipmentPayload109StandardWithoutEORI,
+                "customs.options.eori_number",
+                "EORI",
+            ),
+            (
+                ShipmentPayload109OwnDeclarationWithoutId,
+                "dhl_freight_sweden_customs_own_declaration",
+                "customs identifier",
+            ),
+            (
+                ShipmentPayload109JointDeclarationWithoutSfid,
+                "dhl_freight_sweden_customs_joint_declaration",
+                "SFID",
+            ),
+        ]
+
+        for payload, field, label in cases:
+            with self.subTest(field=field):
+                with patch(
+                    "karrio.mappers.dhl_freight_sweden.proxy.lib.request"
+                ) as mock:
+                    details, messages = (
+                        karrio.Shipment.create(models.ShipmentRequest(**payload))
+                        .from_(gateway)
+                        .parse()
+                    )
+
+                mock.assert_not_called()
+                self.assertIsNone(details)
+                self.assertEqual(len(messages), 1)
+                self.assertEqual(messages[0].code, "SHIPPING_SDK_FIELD_ERROR")
+                self.assertEqual(set(messages[0].details), {field})
+                self.assertIn(label, messages[0].message)
+
+    def test_shipment_customs_service_empty_identifier_selects_no_service(self):
+        # The SDK strips empty-string options before mapping, so an empty
+        # identifier is indistinguishable from an unset option.
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            mock.side_effect = [BookingResponse102, PrintResponse]
+            karrio.Shipment.create(
+                models.ShipmentRequest(
+                    **{
+                        **ShipmentPayload109CustomsNO,
+                        "options": {
+                            "dhl_freight_sweden_customs_own_declaration": "",
+                            "dhl_freight_sweden_customs_joint_declaration": "",
+                        },
+                    }
+                )
+            ).from_(gateway)
+
+        booking = lib.to_dict(mock.call_args_list[0].kwargs["data"])
+        self.assertFalse(
+            set(booking.get("additionalServices") or {}) & CustomsServiceKeys
+        )
+
     def test_shipment_service_point_missing_details_surfaces_field_error(self):
         with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request"):
             details, messages = (
@@ -980,6 +1039,22 @@ ShipmentPayload109CustomsVOEC = {
         **CustomsNO,
         "options": {**CustomsNO["options"], "voec_number": "VOEC2012345"},
     },
+}
+
+ShipmentPayload109StandardWithoutEORI = {
+    **ShipmentPayload109CustomsNO,
+    "customs": {**CustomsNO, "options": {}},
+    "options": {"dhl_freight_sweden_customs_handling_standard": True},
+}
+
+ShipmentPayload109OwnDeclarationWithoutId = {
+    **ShipmentPayload109CustomsNO,
+    "options": {"dhl_freight_sweden_customs_own_declaration": " "},
+}
+
+ShipmentPayload109JointDeclarationWithoutSfid = {
+    **ShipmentPayload109CustomsNO,
+    "options": {"dhl_freight_sweden_customs_joint_declaration": " "},
 }
 
 CustomsServiceKeys = {
