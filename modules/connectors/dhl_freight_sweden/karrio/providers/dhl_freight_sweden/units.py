@@ -85,6 +85,33 @@ class PageType(lib.StrEnum):
     LabelCompact2x2PortraitA4 = "LabelCompact2x2PortraitA4"
 
 
+class CustomsDocumentType(lib.StrEnum):
+    """DHL Freight customs document types (CustomsDocument.type)."""
+
+    CommercialInvoice = "CommercialInvoice"
+    ProformaInvoice = "ProformaInvoice"
+
+
+class TransportMovement(lib.StrEnum):
+    """DHL Freight customs document transport movements."""
+
+    Export = "Export"
+    Import = "Import"
+
+
+class CustomsOption(lib.Enum):
+    """Unified ``customs.options`` registration identifiers.
+
+    ``voec_number`` is not a member of the core
+    ``karrio.core.units.CustomsOption`` enum, and the options helper drops
+    keys unknown to both enums, so customs options are converted with this
+    enum as the ``option_type`` to keep it visible.
+    """
+
+    eori_number = lib.OptionEnum("eori_number")
+    voec_number = lib.OptionEnum("voec_number")
+
+
 class ShippingService(lib.StrEnum):
     """DHL Freight product codes.
 

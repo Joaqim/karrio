@@ -146,6 +146,54 @@ class TestDHLFreightShipment(unittest.TestCase):
             "1042",
         )
 
+    def test_create_shipment_request_customs_document_to_norway(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload109CustomsNO)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        self.assertEqual(
+            serialized["customsInformation"]["customsDocuments"],
+            [CustomsDocumentNO],
+        )
+
+    def test_create_shipment_request_customs_without_eori_omits_eori(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload202Customs)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        document = serialized["customsInformation"]["customsDocuments"][0]
+        self.assertNotIn("eori", document)
+
+    def test_create_shipment_request_invoice_without_commercial_flag_is_proforma(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload202InvoiceNotCommercial)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        document = serialized["customsInformation"]["customsDocuments"][0]
+        self.assertEqual(document["type"], "ProformaInvoice")
+        self.assertEqual(document["id"], "INV-2026-001")
+
+    def test_create_shipment_request_merchandise_without_flag_is_proforma(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload202MerchandiseNoFlag)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        document = serialized["customsInformation"]["customsDocuments"][0]
+        self.assertEqual(document["type"], "ProformaInvoice")
+
+    def test_create_shipment_request_transport_movement_from_shipper_country(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload202CustomsWithinNO)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        document = serialized["customsInformation"]["customsDocuments"][0]
+        self.assertNotIn("transportMovement", document)
+
     def test_create_shipment_request_payer_from_customs_incoterm(self):
         request = gateway.mapper.create_shipment_request(
             models.ShipmentRequest(**ShipmentPayload202Customs)
@@ -816,6 +864,62 @@ ShipmentPayload202Proforma = {
         "commodities": Customs["commodities"],
         "incoterm": "DAP",
     },
+}
+
+_recipient_no = {
+    **_recipient_se,
+    "city": "Oslo",
+    "postal_code": "0154",
+    "country_code": "NO",
+}
+
+_shipper_no = {
+    **_shipper,
+    "city": "Bergen",
+    "postal_code": "5003",
+    "country_code": "NO",
+}
+
+CustomsNO = {
+    **Customs,
+    "duty": {"paid_by": "sender", "currency": "SEK", "declared_value": 2500.0},
+    "commodities": [
+        {**Customs["commodities"][0], "value_amount": 2500.0, "value_currency": "SEK"}
+    ],
+    "options": {"eori_number": "SE5560000001"},
+}
+
+ShipmentPayload109CustomsNO = {
+    **_payload("dhl_freight_sweden_parcel_connect_b2c", _recipient_no),
+    "customs": CustomsNO,
+}
+
+CustomsDocumentNO = {
+    "id": "INV-2026-001",
+    "type": "CommercialInvoice",
+    "transportMovement": "Export",
+    "invoiceDate": "2026-09-08",
+    "invoiceCurrency": "SEK",
+    "invoiceAmount": 2500.0,
+    "eori": "SE5560000001",
+}
+
+ShipmentPayload202InvoiceNotCommercial = {
+    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_de),
+    "customs": {**Customs, "commercial_invoice": False},
+}
+
+ShipmentPayload202MerchandiseNoFlag = {
+    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_de),
+    "customs": {
+        key: value for key, value in Customs.items() if key != "commercial_invoice"
+    },
+}
+
+ShipmentPayload202CustomsWithinNO = {
+    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_no),
+    "shipper": _shipper_no,
+    "customs": Customs,
 }
 
 ShipmentPayloadWithReference = {

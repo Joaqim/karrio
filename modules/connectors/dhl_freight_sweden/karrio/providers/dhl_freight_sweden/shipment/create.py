@@ -9,6 +9,7 @@ import base64
 import typing
 import karrio.lib as lib
 import karrio.core.models as models
+import karrio.core.units as units
 import karrio.core.errors as errors
 import karrio.providers.dhl_freight_sweden.error as error
 import karrio.providers.dhl_freight_sweden.utils as provider_utils
@@ -139,6 +140,9 @@ def shipment_request(
         options.dhl_freight_sweden_customs_procedure_code.state or "1042"
     )
     service_point_party = _service_point_party(options)
+    customs_options = lib.to_customs_info(
+        payload.customs, option_type=provider_units.CustomsOption
+    ).options
     page_type = provider_units.PageType.map(
         options.dhl_freight_sweden_label_page_type.state
         or settings.connection_config.label_page_type.state
@@ -146,7 +150,11 @@ def shipment_request(
     ).value_or_key
     customs = lib.identity(
         _customs_information(
-            payload.customs, settings, recipient.country_code, procedure_code
+            payload.customs,
+            customs_options,
+            shipper.country_code,
+            recipient.country_code,
+            procedure_code,
         )
         if payload.customs
         and any(
@@ -250,7 +258,8 @@ def shipment_request(
 
 def _customs_information(
     customs: models.Customs,
-    settings: provider_utils.Settings,
+    customs_options: units.CustomsOptions,
+    origin_country: str,
     destination_country: str,
     procedure_code: str,
 ) -> dhl_freight_sweden_req.CustomsInformationType:
@@ -287,26 +296,23 @@ def _customs_information(
         )
 
     # The API requires at least one customs document whenever the customs
-    # information section is present, so the document is always emitted; an
-    # invoice used for payment is commercial, otherwise a customs-only pro forma.
+    # information section is present, so the document is always emitted.
     document = dhl_freight_sweden_req.CustomsDocumentType(
         id=customs.invoice,
         type=lib.identity(
-            "CommercialInvoice"
-            if any([customs.commercial_invoice, customs.invoice])
-            else "ProformaInvoice"
+            provider_units.CustomsDocumentType.CommercialInvoice.value
+            if customs.commercial_invoice
+            else provider_units.CustomsDocumentType.ProformaInvoice.value
         ),
-        # The account ships from Sweden, so a foreign destination is an
-        # export declaration; a domestic destination carries no movement.
         transportMovement=lib.identity(
-            "Export"
-            if destination_country and destination_country
-            != settings.account_country_code
+            provider_units.TransportMovement.Export.value
+            if destination_country and destination_country != origin_country
             else None
         ),
         invoiceDate=lib.fdate(customs.invoice_date),
         invoiceCurrency=declaration_currency,
         invoiceAmount=duty.declared_value if duty else None,
+        eori=customs_options.eori_number.state or None,
     )
 
     return dhl_freight_sweden_req.CustomsInformationType(
