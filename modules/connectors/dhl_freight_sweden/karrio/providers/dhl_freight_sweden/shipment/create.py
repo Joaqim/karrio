@@ -47,9 +47,15 @@ def parse_shipment_response(
     # The proxy appends address-validation warning messages as optional
     # trailing elements after the booking and print bodies.
     booking, printed, *warnings = _response.deserialize()
+    customs_omitted = (_response.ctx or {}).get("customs_omitted")
     messages = [
         *error.parse_error_response([booking, printed], settings),
         *(lib.to_object(models.Message, warning) for warning in warnings),
+        *lib.identity(
+            [_customs_omitted_message(customs_omitted, settings)]
+            if customs_omitted
+            else []
+        ),
     ]
 
     instruction = (booking or {}).get("transportInstruction") or {}
@@ -58,6 +64,24 @@ def parse_shipment_response(
     )
 
     return details, messages
+
+
+def _customs_omitted_message(
+    countries: dict,
+    settings: provider_utils.Settings,
+) -> models.Message:
+    return models.Message(
+        carrier_name=settings.carrier_name,
+        carrier_id=settings.carrier_id,
+        code="customs_omitted_intra_eu",
+        level="warning",
+        message=(
+            "Customs data was not sent: the shipment from "
+            f"{countries['shipper_country_code']} to "
+            f"{countries['recipient_country_code']} stays within the EU VAT area"
+        ),
+        details=countries,
+    )
 
 
 def _extract_details(
@@ -162,6 +186,20 @@ def shipment_request(
         or settings.connection_config.label_page_type.state
         or provider_units.PageType.Label.value
     ).value_or_key
+    has_customs_data = bool(
+        payload.customs
+        and any(
+            [
+                payload.customs.commodities,
+                payload.customs.invoice,
+                payload.customs.invoice_date,
+            ]
+        )
+    )
+    customs_omitted = has_customs_data and all(
+        provider_units.in_eu_vat_area(address.country_code, address.postal_code)
+        for address in (shipper, recipient)
+    )
     customs = lib.identity(
         _customs_information(
             payload.customs,
@@ -172,14 +210,7 @@ def shipment_request(
             payload.reference,
             shipping_date,
         )
-        if payload.customs
-        and any(
-            [
-                payload.customs.commodities,
-                payload.customs.invoice,
-                payload.customs.invoice_date,
-            ]
-        )
+        if has_customs_data and not customs_omitted
         else None
     )
 
@@ -299,7 +330,17 @@ def shipment_request(
     return lib.Serializable(
         request,
         lib.to_dict,
-        dict(print_options=lib.to_dict(print_options)),
+        dict(
+            print_options=lib.to_dict(print_options),
+            customs_omitted=lib.identity(
+                dict(
+                    shipper_country_code=shipper.country_code,
+                    recipient_country_code=recipient.country_code,
+                )
+                if customs_omitted
+                else None
+            ),
+        ),
     )
 
 

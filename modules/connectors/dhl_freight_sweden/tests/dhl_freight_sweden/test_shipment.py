@@ -112,15 +112,72 @@ class TestDHLFreightShipment(unittest.TestCase):
         self.assertEqual(hs_item, "7615101090")
         self.assertIsInstance(hs_item, str)
 
-    def test_create_shipment_request_customs_domestic_omits_export_movement(self):
+    def test_create_shipment_request_customs_domestic_omits_customs(self):
         request = gateway.mapper.create_shipment_request(
             models.ShipmentRequest(**ShipmentPayload102Customs)
         )
         serialized = lib.to_dict(request.serialize())
 
-        document = serialized["customsInformation"]["customsDocuments"][0]
-        self.assertEqual(document["type"], "CommercialInvoice")
-        self.assertNotIn("transportMovement", document)
+        self.assertNotIn("customsInformation", serialized)
+
+    def test_create_shipment_request_customs_by_eu_vat_area(self):
+        cases = [
+            ("PL", "00-001", False),
+            ("GR", "10552", False),
+            ("FI", "22100", True),
+            ("FI", "00100", False),
+            ("ES", "38001", True),
+            ("ES", "28001", False),
+            ("NO", "0154", True),
+        ]
+
+        for country_code, postal_code, keeps_customs in cases:
+            with self.subTest(country_code=country_code, postal_code=postal_code):
+                payload = {
+                    **ShipmentPayload202Customs,
+                    "recipient": {
+                        **_recipient_se,
+                        "country_code": country_code,
+                        "postal_code": postal_code,
+                    },
+                }
+                request = gateway.mapper.create_shipment_request(
+                    models.ShipmentRequest(**payload)
+                )
+                serialized = lib.to_dict(request.serialize())
+
+                if keeps_customs:
+                    document = serialized["customsInformation"]["customsDocuments"][0]
+                    self.assertEqual(document["transportMovement"], "Export")
+                else:
+                    self.assertNotIn("customsInformation", serialized)
+
+    def test_shipment_intra_eu_customs_omitted_with_warning(self):
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            mock.side_effect = [BookingResponse102, PrintResponse]
+            details, messages = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(**ShipmentPayload202CustomsPL)
+                )
+                .from_(gateway)
+                .parse()
+            )
+
+        booking = lib.to_dict(mock.call_args_list[0].kwargs["data"])
+        self.assertNotIn("customsInformation", booking)
+        self.assertIsNotNone(details)
+        self.assertEqual(lib.to_dict(messages), [IntraEUCustomsWarning])
+
+    def test_shipment_without_customs_has_no_intra_eu_warning(self):
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            mock.side_effect = [BookingResponse102, PrintResponse]
+            _, messages = (
+                karrio.Shipment.create(models.ShipmentRequest(**ShipmentPayload102))
+                .from_(gateway)
+                .parse()
+            )
+
+        self.assertEqual(messages, [])
 
     def test_create_shipment_request_without_customs_omits_section(self):
         request = gateway.mapper.create_shipment_request(
@@ -942,6 +999,20 @@ _recipient_dk = {
     "country_code": "DK",
 }
 
+_recipient_no = {
+    **_recipient_se,
+    "city": "Oslo",
+    "postal_code": "0154",
+    "country_code": "NO",
+}
+
+_recipient_pl = {
+    **_recipient_se,
+    "city": "Warszawa",
+    "postal_code": "00-001",
+    "country_code": "PL",
+}
+
 # Pre-flight trigger scope: product 118 (the only product with a documented
 # per-product route flag) to Swedish consignees with a postal code.
 _recipient_kiruna = {
@@ -1097,8 +1168,25 @@ Customs = {
 }
 
 ShipmentPayload202Customs = {
-    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_de),
+    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_no),
     "customs": Customs,
+}
+
+ShipmentPayload202CustomsPL = {
+    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_pl),
+    "customs": Customs,
+}
+
+IntraEUCustomsWarning = {
+    "carrier_name": "dhl_freight_sweden",
+    "carrier_id": "dhl_freight_sweden",
+    "code": "customs_omitted_intra_eu",
+    "level": "warning",
+    "message": (
+        "Customs data was not sent: the shipment from SE to PL stays "
+        "within the EU VAT area"
+    ),
+    "details": {"shipper_country_code": "SE", "recipient_country_code": "PL"},
 }
 
 ShipmentPayload102Customs = {
@@ -1107,19 +1195,12 @@ ShipmentPayload102Customs = {
 }
 
 ShipmentPayload202Proforma = {
-    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_de),
+    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_no),
     "reference": "ORDER-2026-042",
     "customs": {
         "commodities": Customs["commodities"],
         "incoterm": "DAP",
     },
-}
-
-_recipient_no = {
-    **_recipient_se,
-    "city": "Oslo",
-    "postal_code": "0154",
-    "country_code": "NO",
 }
 
 _shipper_no = {
@@ -1208,12 +1289,12 @@ CustomsServiceKeys = {
 }
 
 ShipmentPayload202InvoiceNotCommercial = {
-    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_de),
+    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_no),
     "customs": {**Customs, "commercial_invoice": False},
 }
 
 ShipmentPayload202MerchandiseNoFlag = {
-    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_de),
+    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_no),
     "customs": {
         key: value for key, value in Customs.items() if key != "commercial_invoice"
     },
@@ -1249,7 +1330,7 @@ _gap_currency_commodity = {
 }
 
 ShipmentPayload202GapCurrency = {
-    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_de),
+    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_no),
     "customs": {
         "commodities": [
             _gap_currency_commodity,
@@ -1266,7 +1347,7 @@ ShipmentPayload202GapCurrency = {
 }
 
 ShipmentPayload202MixedCurrency = {
-    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_de),
+    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_no),
     "customs": {
         "commodities": [
             Customs["commodities"][0],
