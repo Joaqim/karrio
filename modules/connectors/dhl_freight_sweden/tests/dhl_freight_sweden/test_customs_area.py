@@ -35,6 +35,12 @@ class TestDHLFreightEUVATArea(unittest.TestCase):
             ("YT", "97600", False),
             ("NO", "0154", False),
             ("GB", "SW1A 1AA", False),
+            ("GB", "BT1 1AA", True),
+            ("GB", "bt1 1aa", True),
+            ("GB", "EC1A 1BB", False),
+            ("MC", "98000", True),
+            ("FR", "98000", True),
+            ("GR", "630 86", False),
             ("CH", "8001", False),
             (None, None, False),
         ]
