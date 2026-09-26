@@ -277,3 +277,9 @@ Invoice rendering from a stored `DocumentTemplate` already exists behind `option
 - Server `invoice_template` rendering overwrites a carrier-returned invoice (S `modules/manager/karrio/server/manager/serializers/shipment.py:748, 1049-1080`).
 - `paperless` capability is inferred from proxy method names, so dhl_express reports it although its `upload_document` raises `MethodNotSupported` (S `.../dhl_express/proxy.py:53-54`).
 - mydhl defines WY and PM value-added services that no provider code emits (S `.../mydhl/units.py:147, 198`).
+
+## Territory alignment sources (2026-09-26)
+
+Northern Ireland is inside the EU VAT area for goods and outside it for services: "Nordirland räknas som ett EU-land vid varuhandel med andra EU-länder. Vid handel med tjänster med andra EU-länder räknas Nordirland som ett land utanför EU." (W [Skatteverket, Sälja varor till länder utanför EU](https://www.skatteverket.se/foretag/moms/saljavarorochtjanster/forsaljningtilllanderutanforeu/saljavarortilllanderutanforeu.4.361dc8c15312eff6fd3723b.html), read 2026-09-26).
+UK guidance covers how to charge and account for VAT on goods moving between Northern Ireland and EU member states (W [GOV.UK, VAT on movements of goods between Northern Ireland and the EU](https://www.gov.uk/guidance/vat-on-movements-of-goods-between-northern-ireland-and-the-eu), read 2026-09-26).
+Neither connector encodes Monaco, Northern Ireland, or Mount Athos: the country set is `EUCountry` plus `GR` and the postal ranges exclude Åland, the Canary Islands, Ceuta, Melilla, Büsingen, Heligoland, Livigno, and Campione d'Italia only (S `modules/connectors/postnord/karrio/providers/postnord/units.py:294-305`; `modules/connectors/dhl_freight_sweden/karrio/providers/dhl_freight_sweden/units.py:115-149`).
