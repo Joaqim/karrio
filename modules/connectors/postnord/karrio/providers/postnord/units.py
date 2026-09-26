@@ -261,6 +261,108 @@ ENTRY_CODE_MAX_LENGTH = 50
 # and enforced before submission.
 CUSTOMS_DECLARATION_MAX_LINES = 13
 
+# PostNord takes a customs invoice instead of CN22/CN23 for parcel products,
+# while letters and International Parcel carry CN22/CN23. The letter set is
+# the closed group; every other service, including ones added later, is a
+# parcel product. VV (insured value) and AF (Danish delivery receipt) are
+# letter-mail variants.
+LETTER_SERVICES = frozenset(
+    {
+        ShippingService.postnord_tracked,
+        ShippingService.postnord_tracked_letter,
+        ShippingService.postnord_export_letter,
+        ShippingService.postnord_varubrev_first_class,
+        ShippingService.postnord_expressbrev,
+        ShippingService.postnord_rek,
+        ShippingService.postnord_rek_retur,
+        ShippingService.postnord_rek_extra,
+        ShippingService.postnord_rekommanderet_brev,
+        ShippingService.postnord_rekommanderet_quickbrev,
+        ShippingService.postnord_varde,
+        ShippingService.postnord_afleveringsattest,
+    }
+)
+INTERNATIONAL_PARCEL_SERVICE = ShippingService.postnord_postpaket_utrikes
+
+
+# Same EU VAT area definition as the DHL Freight Sweden connector. The SDK
+# EUCountry enum lists Greece under its VAT prefix EL, so the ISO code GR is
+# added. Special fiscal territories outside the EU VAT area (Tullverket, EU
+# customs and fiscal territories) either carry their own country code (AX,
+# IC, GP, GF, MQ, RE, YT), which is absent from EUCountry, or are identified
+# by postal-code range within a member state.
+EU_VAT_AREA_COUNTRIES: typing.FrozenSet[str] = frozenset(
+    [*(country.name for country in units.EUCountry), "GR"]
+)
+NON_EU_VAT_POSTAL_RANGES: typing.Tuple[typing.Tuple[str, int, int], ...] = (
+    ("FI", 22000, 22999),  # Åland
+    ("ES", 35000, 35999),  # Canary Islands (Las Palmas)
+    ("ES", 38000, 38999),  # Canary Islands (Santa Cruz de Tenerife)
+    ("ES", 51000, 51999),  # Ceuta
+    ("ES", 52000, 52999),  # Melilla
+    ("DE", 78266, 78266),  # Büsingen
+    ("DE", 27498, 27498),  # Heligoland
+    ("IT", 23041, 23041),  # Livigno
+    ("IT", 22061, 22061),  # Campione d'Italia
+)
+
+# Warning code shared with the DHL Freight Sweden connector.
+CUSTOMS_OMITTED_INTRA_EU = "customs_omitted_intra_eu"
+
+
+def in_eu_vat_area(
+    country_code: typing.Optional[str],
+    postal_code: typing.Optional[str],
+) -> bool:
+    """Whether an address lies inside the EU VAT area."""
+    country = (country_code or "").upper()
+    postal = str(postal_code or "").replace(" ", "")
+    postal_number = int(postal) if postal.isdigit() else None
+
+    return country in EU_VAT_AREA_COUNTRIES and not any(
+        country == range_country
+        and postal_number is not None
+        and low <= postal_number <= high
+        for range_country, low, high in NON_EU_VAT_POSTAL_RANGES
+    )
+
+
+class CustomsStructure(lib.StrEnum):
+    """Booking customs branch, named by its ``shipmentCustomsv2`` element."""
+
+    cn22 = "customsDeclarationCN22"
+    customs_invoice = "customsInvoice"
+
+
+class CustomsInvoiceType(lib.StrEnum):
+    """``customsInvoice.type``; selected literally by ``commercial_invoice``."""
+
+    commercial = "COMMERCIAL"
+    proforma = "PROFORMA"
+
+
+class CustomsDeclarationType(lib.StrEnum):
+    """``customsInvoice.declarationType`` values used by the connector."""
+
+    invoice_export_declaration = "invoiceExportDeclaration"
+
+
+class ExportReason(lib.StrEnum):
+    """``invoice.reasonForExportation`` procedure codes (booking.swagger.json)."""
+
+    permanent_export = "1000"
+
+
+def customs_structure(basic_service_code: str) -> CustomsStructure:
+    """Select the booking customs branch for a basicServiceCode."""
+    if (
+        basic_service_code in LETTER_SERVICES
+        or basic_service_code == INTERNATIONAL_PARCEL_SERVICE
+    ):
+        return CustomsStructure.cn22
+
+    return CustomsStructure.customs_invoice
+
 
 def enforce_customs_declaration_lines(
     lines: int, field: str, item_id: typing.Optional[str] = None
@@ -284,6 +386,27 @@ def enforce_customs_declaration_lines(
         explanation = f"{explanation} for item {item_id}"
 
     raise lib.exceptions.FieldError({field: explanation})
+
+
+def enforce_cn22_registration_numbers(options: units.CustomsOptions) -> None:
+    """Raise a FieldError when a CN22 carries none of EORI, VOEC, or IOSS.
+
+    PostNord rejects such a declaration with SACUS-BR-24062502 ("Customs
+    CN22/CN23 should have either EORI, VOEC, IOSS"), observed live. The
+    sandbox did not apply the rule to customs invoices, so this guard is
+    scoped to the CN22 branch.
+    """
+    if any(options[key].state for key in CustomsOption.__members__):
+        return
+
+    raise lib.exceptions.FieldError(
+        {
+            "customs.options": (
+                "a CN22 declaration requires at least one of "
+                "eori_number, voec_number, or ioss_number"
+            )
+        }
+    )
 
 
 def enforce_customs_option_placement(options: dict) -> None:

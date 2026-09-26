@@ -10,6 +10,7 @@ import karrio.sdk as karrio
 import karrio.lib as lib
 import karrio.core.models as models
 import karrio.schemas.postnord.shipment_response as postnord_res
+import karrio.providers.postnord.units as provider_units
 
 from .fixture import (
     _settings,
@@ -357,20 +358,75 @@ class TestPostNordShipment(unittest.TestCase):
         self.assertNotIn("EORIorPersonalIdNumber", declaration)
         self.assertNotIn("ioss", declaration)
 
-    def test_create_shipment_customs_registration_numbers_empty_send_nothing(self):
-        # Option-state truthiness: an empty-string or None option emits no
-        # element, so the request is identical to one without options.
-        payload = {
-            **CustomsShipmentPayload,
-            "customs": {
-                **CustomsShipmentPayload["customs"],
-                "options": {"eori_number": "", "voec_number": None},
-            },
-        }
-        request = gateway.mapper.create_shipment_request(
-            models.ShipmentRequest(**payload)
-        )
-        self.assertEqual(lib.to_dict(request.serialize()), CustomsShipmentRequest)
+    def test_create_shipment_customs_registration_numbers_empty_reject(self):
+        # Option-state truthiness: empty-string or None options count as
+        # absent, and a CN22 without EORI, VOEC, or IOSS is rejected before
+        # submission, as PostNord rejects it (SACUS-BR-24062502).
+        for label, options in [
+            ("empty", {"eori_number": "", "voec_number": None}),
+            ("absent", {}),
+        ]:
+            with self.subTest(options=label):
+                with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+                    shipment, messages = (
+                        karrio.Shipment.create(
+                            models.ShipmentRequest(
+                                **{
+                                    **CustomsShipmentPayload,
+                                    "customs": {
+                                        **CustomsShipmentPayload["customs"],
+                                        "options": options,
+                                    },
+                                }
+                            )
+                        )
+                        .from_(gateway)
+                        .parse()
+                    )
+                    mock.assert_not_called()
+                self.assertIsNone(shipment)
+                self.assertEqual(len(messages), 1)
+                self.assertEqual(messages[0].code, "SHIPPING_SDK_FIELD_ERROR")
+                self.assertEqual(
+                    messages[0].details,
+                    {
+                        "customs.options": (
+                            "a CN22 declaration requires at least one of "
+                            "eori_number, voec_number, or ioss_number"
+                        )
+                    },
+                )
+
+    def test_create_shipment_customs_registration_numbers_any_one_suffices(self):
+        # Any single registration number satisfies the CN22 rule and the
+        # request carries only that number.
+        for key, element in [
+            ("eori_number", "EORIorPersonalIdNumber"),
+            ("voec_number", "voec"),
+            ("ioss_number", "ioss"),
+        ]:
+            with self.subTest(option=key):
+                payload = {
+                    **CustomsShipmentPayload,
+                    "customs": {
+                        **CustomsShipmentPayload["customs"],
+                        "options": {key: "REG123"},
+                    },
+                }
+                request = gateway.mapper.create_shipment_request(
+                    models.ShipmentRequest(**payload)
+                )
+                declaration = lib.to_dict(request.serialize())["shipment"][0][
+                    "customsDeclarationCN22"
+                ]
+                expected = {
+                    k: v
+                    for k, v in CustomsShipmentRequest["shipment"][0][
+                        "customsDeclarationCN22"
+                    ].items()
+                    if k != "EORIorPersonalIdNumber"
+                }
+                self.assertEqual(declaration, {**expected, element: "REG123"})
 
     def test_create_shipment_customs_registration_numbers_misplaced_reject(self):
         # Registration keys under shipment-level options are dropped by the
@@ -477,8 +533,11 @@ class TestPostNordShipment(unittest.TestCase):
         # line's (SEK), not the second line's (EUR).
         payload = {
             **ShipmentPayload,
+            "recipient": NorwayRecipient,
+            "service": "postnord_tracked_letter",
             "customs": {
                 "content_type": "merchandise",
+                "options": {"eori_number": "SE556000123401"},
                 "commodities": [
                     {
                         "title": "Sticker sheet",
@@ -505,14 +564,90 @@ class TestPostNordShipment(unittest.TestCase):
             declaration["totalValue"], {"amount": 0.3, "currency": "SEK"}
         )
 
+    def test_create_shipment_customs_line_totals_over_quantity(self):
+        # Unified commodity value and weight are per unit; CN22 lines and
+        # totals are per line: 3 x (10 SEK, 0.2 kg) is 30 SEK and 0.6 kg.
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**QuantityThreeCN22Payload)
+        )
+        declaration = lib.to_dict(request.serialize())["shipment"][0][
+            "customsDeclarationCN22"
+        ]
+        self.assertEqual(
+            declaration["detailedDescription"],
+            [
+                {
+                    "content": "Enamel pin",
+                    "quantity": {"value": 3},
+                    "grossWeight": {"value": 0.6, "unit": "KGM"},
+                    "value": {"amount": 30.0, "currency": "SEK"},
+                    "hsTariffNumber": "7117190000",
+                    "countryCode": "SE",
+                    "rowNo": 1,
+                },
+                {
+                    "content": "Postcard",
+                    "quantity": {"value": 1},
+                    "grossWeight": {"value": 0.1, "unit": "KGM"},
+                    "value": {"amount": 5.0, "currency": "SEK"},
+                    "hsTariffNumber": "4909000000",
+                    "countryCode": "SE",
+                    "rowNo": 2,
+                },
+            ],
+        )
+        self.assertEqual(
+            declaration["totalValue"], {"amount": 35.0, "currency": "SEK"}
+        )
+
+    def test_create_shipment_customs_gross_weight_from_parcels(self):
+        # Total gross weight includes packaging: the sum of the parcel
+        # weights (1.5 kg + 500 g), not the 0.7 kg of commodity lines.
+        payload = {
+            **QuantityThreeCN22Payload,
+            "parcels": [
+                *ShipmentPayload["parcels"],
+                {"weight": 500, "weight_unit": "G"},
+            ],
+        }
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        declaration = lib.to_dict(request.serialize())["shipment"][0][
+            "customsDeclarationCN22"
+        ]
+        self.assertEqual(
+            declaration["totalGrossWeight"], {"value": 2.0, "unit": "KGM"}
+        )
+
+    def test_create_shipment_customs_gross_weight_falls_back_to_lines(self):
+        # Without any parcel weight the commodity line weights are the only
+        # derivable gross weight.
+        payload = {
+            **QuantityThreeCN22Payload,
+            "parcels": [{"length": 30.0, "width": 20.0, "height": 10.0, "dimension_unit": "CM"}],
+        }
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        declaration = lib.to_dict(request.serialize())["shipment"][0][
+            "customsDeclarationCN22"
+        ]
+        self.assertEqual(
+            declaration["totalGrossWeight"], {"value": 0.7, "unit": "KGM"}
+        )
+
     def test_create_shipment_customs_underivable_line_fields_omitted(self):
         # A commodity without weight_unit has no KGM value and a line
         # without value_amount carries no value: the elements are omitted
         # entirely rather than emitted as unitless/amountless structs.
         payload = {
             **ShipmentPayload,
+            "recipient": NorwayRecipient,
+            "service": "postnord_tracked_letter",
             "customs": {
                 "content_type": "merchandise",
+                "options": {"eori_number": "SE556000123401"},
                 "commodities": [
                     {
                         "title": "Undeclared weight item",
@@ -874,7 +1009,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
 
     def test_parse_shipment_response_printout_composition(self):
         # Non-zero printoutComposition kinds are carried into meta as the
-        # composed document kinds. The parcel service keeps the by-id fetch
+        # composed document kinds. A tracked letter keeps the by-id fetch
         # gated off, so exactly one HTTP call is made.
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
             mock.return_value = CustomsBookingResponse
@@ -1295,6 +1430,602 @@ class TestPostNordCustomsDocument(unittest.TestCase):
         self.assertEqual(details.docs.extra_documents, [])
 
 
+    def test_create_shipment_customs_invoice_document_fetch(self):
+        # Parcel product + customs: the booking composes a customs invoice,
+        # and the same printId-keyed onlyCustomsDeclarations fetch as for
+        # export letters attaches it categorized customsInvoice.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.side_effect = [
+                CustomsInvoiceBookingResponse,
+                CustomsInvoicePrintoutsResponse,
+            ]
+            parsed_response = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(**CustomsInvoiceShipmentPayload)
+                )
+                .from_(gateway)
+                .parse()
+            )
+            self.assertEqual(mock.call_count, 2)
+            customs_call = mock.call_args_list[1]
+            self.assertEqual(
+                customs_call[1]["url"],
+                f"{gateway.settings.server_url}/rest/shipment/v3/labels/ids/pdf"
+                "?apikey=TEST_API_KEY&definePrintout=onlyCustomsDeclarations",
+            )
+            self.assertEqual(json.loads(customs_call[1]["data"]), [{"id": "P1"}])
+        details, messages = parsed_response
+        self.assertEqual(messages, [])
+        self.assertEqual(
+            details.meta["printout_composition"], ["customsInvoice", "label"]
+        )
+        self.assertEqual(
+            lib.to_dict(details.docs.extra_documents),
+            [
+                {
+                    "category": "customsInvoice",
+                    "format": "PDF",
+                    "base64": CustomsPDFData,
+                }
+            ],
+        )
+
+    def test_create_shipment_customs_invoice_document_zpl_fetch(self):
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.side_effect = [
+                CustomsInvoiceBookingZPLResponse,
+                CustomsInvoicePrintoutsZPLResponse,
+            ]
+            parsed_response = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(
+                        **{**CustomsInvoiceShipmentPayload, "label_type": "ZPL"}
+                    )
+                )
+                .from_(gateway)
+                .parse()
+            )
+            self.assertEqual(mock.call_count, 2)
+            self.assertEqual(
+                mock.call_args_list[1][1]["url"],
+                f"{gateway.settings.server_url}/rest/shipment/v3/labels/ids/zpl"
+                "?apikey=TEST_API_KEY&definePrintout=onlyCustomsDeclarations",
+            )
+        details, messages = parsed_response
+        self.assertEqual(messages, [])
+        self.assertEqual(
+            lib.to_dict(details.docs.extra_documents),
+            [
+                {
+                    "category": "customsInvoice",
+                    "format": "ZPL",
+                    "base64": base64.b64encode(
+                        CustomsRawZPL.encode("utf-8")
+                    ).decode("utf-8"),
+                }
+            ],
+        )
+
+    def test_create_shipment_customs_invoice_document_error_fails_open(self):
+        # A failing by-id call on a parcel booking leaves the shipment
+        # successful with its label; the failure surfaces as a message.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.side_effect = [
+                CustomsInvoiceBookingResponse,
+                CustomsRetrievalErrorResponse,
+            ]
+            parsed_response = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(**CustomsInvoiceShipmentPayload)
+                )
+                .from_(gateway)
+                .parse()
+            )
+            self.assertEqual(mock.call_count, 2)
+        details, messages = parsed_response
+        self.assertIsNotNone(details)
+        self.assertEqual(details.tracking_number, "00373500454541020957")
+        self.assertEqual(details.docs.label, "JVBERi0xLjQK")
+        self.assertEqual(details.docs.extra_documents, [])
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0].code, "EDI_NOT_FOUND")
+
+    def test_create_shipment_customs_invoice_document_transport_failure_fails_open(
+        self,
+    ):
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.side_effect = [
+                CustomsInvoiceBookingResponse,
+                ConnectionError("connection reset"),
+            ]
+            parsed_response = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(**CustomsInvoiceShipmentPayload)
+                )
+                .from_(gateway)
+                .parse()
+            )
+            self.assertEqual(mock.call_count, 2)
+        details, messages = parsed_response
+        self.assertIsNotNone(details)
+        self.assertEqual(details.docs.extra_documents, [])
+        self.assertEqual(len(messages), 1)
+        self.assertIn("customs document retrieval failed", messages[0].message)
+
+    def test_create_shipment_parcel_without_customs_skips_fetch(self):
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = CustomsInvoiceBookingResponse
+            parsed_response = (
+                karrio.Shipment.create(models.ShipmentRequest(**ShipmentPayload))
+                .from_(gateway)
+                .parse()
+            )
+            mock.assert_called_once()
+        details, messages = parsed_response
+        self.assertEqual(messages, [])
+        self.assertEqual(details.docs.extra_documents, [])
+
+
+class TestPostNordCustomsInvoice(unittest.TestCase):
+    def setUp(self):
+        self.maxDiff = None
+
+    def _invoice(self, payload: dict) -> dict:
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        return lib.to_dict(request.serialize())["shipment"][0]["customsInvoice"]
+
+    def _field_errors(self, payload: dict) -> dict:
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            shipment, messages = (
+                karrio.Shipment.create(models.ShipmentRequest(**payload))
+                .from_(gateway)
+                .parse()
+            )
+            mock.assert_not_called()
+        self.assertIsNone(shipment)
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0].code, "SHIPPING_SDK_FIELD_ERROR")
+        return messages[0].details
+
+    def test_create_shipment_customs_invoice_request(self):
+        # A parcel product with customs data carries customsInvoice built
+        # from the unified payload, and no CN22 or CN23 branch.
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**CustomsInvoiceShipmentPayload)
+        )
+        self.assertEqual(
+            lib.to_dict(request.serialize()), CustomsInvoiceShipmentRequest
+        )
+
+    def test_create_shipment_customs_invoice_for_parcel_products(self):
+        for service in [
+            "postnord_mypack_home",
+            "postnord_mypack_collect",
+            "postnord_parcel",
+            "postnord_pallet",
+        ]:
+            with self.subTest(service=service):
+                request = gateway.mapper.create_shipment_request(
+                    models.ShipmentRequest(
+                        **{**CustomsInvoiceShipmentPayload, "service": service}
+                    )
+                )
+                shipment = lib.to_dict(request.serialize())["shipment"][0]
+                self.assertIn("customsInvoice", shipment)
+                self.assertNotIn("customsDeclarationCN22", shipment)
+                self.assertNotIn("customsDeclarationCN23", shipment)
+
+    def test_create_shipment_customs_invoice_keeps_leading_zero_postal_code(self):
+        invoice = self._invoice(CustomsInvoiceShipmentPayload)
+        self.assertEqual(invoice["buyer"]["postalCode"], "0154")
+
+    def test_create_shipment_customs_invoice_number_falls_back_to_reference(self):
+        payload = {
+            **CustomsInvoiceShipmentPayload,
+            "customs": {
+                key: value
+                for key, value in CustomsInvoiceShipmentPayload["customs"].items()
+                if key != "invoice"
+            },
+        }
+        invoice = self._invoice(payload)
+        self.assertEqual(invoice["invoice"]["invoiceNo"], "ORDER-7788")
+
+    def test_create_shipment_customs_invoice_without_number_or_reference(self):
+        payload = {
+            key: value
+            for key, value in CustomsInvoiceShipmentPayload.items()
+            if key != "reference"
+        }
+        payload["customs"] = {
+            key: value
+            for key, value in CustomsInvoiceShipmentPayload["customs"].items()
+            if key != "invoice"
+        }
+        self.assertEqual(
+            self._field_errors(payload),
+            {
+                "customs.invoice": (
+                    "invoice number is required for a PostNord customs invoice; "
+                    "send customs.invoice or a shipment reference"
+                )
+            },
+        )
+
+    def test_create_shipment_customs_invoice_without_seller_vat_number(self):
+        payload = {
+            **CustomsInvoiceShipmentPayload,
+            "shipper": {
+                key: value
+                for key, value in CustomsInvoiceShipmentPayload["shipper"].items()
+                if key != "federal_tax_id"
+            },
+        }
+        self.assertEqual(
+            self._field_errors(payload),
+            {
+                "shipper.federal_tax_id": (
+                    "shipper VAT number is required for a PostNord customs invoice"
+                )
+            },
+        )
+
+    def test_create_shipment_customs_invoice_without_party_contacts(self):
+        # Contact name falls back to the company name, so only a party with
+        # neither person nor company name lacks one.
+        payload = {
+            **CustomsInvoiceShipmentPayload,
+            "shipper": {
+                **CustomsInvoiceShipmentPayload["shipper"],
+                "person_name": None,
+                "company_name": None,
+            },
+            "recipient": {
+                **CustomsInvoiceShipmentPayload["recipient"],
+                "phone_number": None,
+            },
+        }
+        self.assertEqual(
+            self._field_errors(payload),
+            {
+                "shipper.person_name": (
+                    "contact name is required for a PostNord customs invoice"
+                ),
+                "recipient.phone_number": (
+                    "contact phone number is required for a PostNord customs invoice"
+                ),
+            },
+        )
+
+    def test_create_shipment_customs_invoice_without_line_tariff_or_origin(self):
+        commodities = CustomsInvoiceShipmentPayload["customs"]["commodities"]
+        payload = {
+            **CustomsInvoiceShipmentPayload,
+            "customs": {
+                **CustomsInvoiceShipmentPayload["customs"],
+                "commodities": [
+                    {k: v for k, v in commodities[0].items() if k != "hs_code"},
+                    {k: v for k, v in commodities[1].items() if k != "origin_country"},
+                ],
+            },
+        }
+        self.assertEqual(
+            self._field_errors(payload),
+            {
+                "customs.commodities[0].hs_code": (
+                    "HS tariff number is required for a PostNord customs invoice line"
+                ),
+                "customs.commodities[1].origin_country": (
+                    "country of origin is required for a PostNord customs invoice line"
+                ),
+            },
+        )
+
+    def test_create_shipment_customs_invoice_without_registration_numbers(self):
+        # The CN22 registration rule does not apply: the sandbox accepted a
+        # parcel customsInvoice without EORI, VOEC, or IOSS (2026-09-25), so
+        # the invoice is sent as-is for PostNord to judge.
+        payload = {
+            **CustomsInvoiceShipmentPayload,
+            "customs": {
+                **CustomsInvoiceShipmentPayload["customs"],
+                "options": {},
+            },
+        }
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        expected_invoice = CustomsInvoiceShipmentRequest["shipment"][0][
+            "customsInvoice"
+        ]
+        self.assertEqual(
+            lib.to_dict(request.serialize())["shipment"][0]["customsInvoice"],
+            {
+                **expected_invoice,
+                "seller": {
+                    k: v
+                    for k, v in expected_invoice["seller"].items()
+                    if k != "eoriNo"
+                },
+            },
+        )
+
+    def test_create_shipment_customs_invoice_registration_numbers(self):
+        payload = {
+            **CustomsInvoiceShipmentPayload,
+            "customs": {
+                **CustomsInvoiceShipmentPayload["customs"],
+                "options": {
+                    "eori_number": "SE556000123401",
+                    "voec_number": "1234567",
+                    "ioss_number": "IM1234567890",
+                },
+            },
+        }
+        invoice = self._invoice(payload)
+        self.assertEqual(invoice["seller"]["eoriNo"], "SE556000123401")
+        self.assertEqual(invoice["voec"], "1234567")
+        self.assertEqual(invoice["ioss"], "IM1234567890")
+
+    def test_create_shipment_customs_invoice_line_totals_over_quantity(self):
+        invoice = self._invoice(
+            {
+                **CustomsInvoiceShipmentPayload,
+                "customs": {
+                    **CustomsInvoiceShipmentPayload["customs"],
+                    "commodities": QuantityThreeCN22Payload["customs"]["commodities"],
+                },
+            }
+        )
+        self.assertEqual(
+            [
+                (line["quantity"], line["netWeight"], line["grossWeight"], line["itemValue"])
+                for line in invoice["detailedDescription"]
+            ],
+            [
+                (
+                    3,
+                    {"value": 0.6, "unit": "KGM"},
+                    {"value": 0.6, "unit": "KGM"},
+                    {"amount": 30.0, "currency": "SEK"},
+                ),
+                (
+                    1,
+                    {"value": 0.1, "unit": "KGM"},
+                    {"value": 0.1, "unit": "KGM"},
+                    {"amount": 5.0, "currency": "SEK"},
+                ),
+            ],
+        )
+        self.assertEqual(invoice["invoiceTotal"], {"amount": 35.0, "currency": "SEK"})
+        # Net weight sums the commodity lines; gross weight is the parcel's
+        # 1.5 kg, which includes packaging.
+        self.assertEqual(invoice["totalNetWeight"], {"value": 0.7, "unit": "KGM"})
+        self.assertEqual(invoice["totalGrossWeight"], {"value": 1.5, "unit": "KGM"})
+
+    def test_create_shipment_customs_invoice_gross_weight_falls_back_to_lines(self):
+        invoice = self._invoice(
+            {
+                **CustomsInvoiceShipmentPayload,
+                "parcels": [
+                    {"length": 30.0, "width": 20.0, "height": 10.0, "dimension_unit": "CM"}
+                ],
+            }
+        )
+        self.assertEqual(invoice["totalNetWeight"], {"value": 0.5, "unit": "KGM"})
+        self.assertEqual(invoice["totalGrossWeight"], {"value": 0.5, "unit": "KGM"})
+
+    def test_create_shipment_customs_invoice_commercial_type(self):
+        invoice = self._invoice(CustomsInvoiceShipmentPayload)
+        self.assertEqual(invoice["type"], "COMMERCIAL")
+
+    def test_create_shipment_customs_invoice_proforma_type(self):
+        # The flag applies literally: false and omitted both declare a
+        # proforma invoice, even for merchandise.
+        customs = CustomsInvoiceShipmentPayload["customs"]
+        omitted = {k: v for k, v in customs.items() if k != "commercial_invoice"}
+        for label, customs_payload in [
+            ("false", {**customs, "commercial_invoice": False}),
+            ("omitted", omitted),
+        ]:
+            with self.subTest(commercial_invoice=label):
+                self.assertEqual(customs_payload["content_type"], "merchandise")
+                invoice = self._invoice(
+                    {**CustomsInvoiceShipmentPayload, "customs": customs_payload}
+                )
+                self.assertEqual(invoice["type"], "PROFORMA")
+
+
+class TestPostNordEUVATArea(unittest.TestCase):
+    def setUp(self):
+        self.maxDiff = None
+
+    def test_in_eu_vat_area(self):
+        cases = [
+            ("SE", "11143", True),
+            ("PL", "00-001", True),
+            ("GR", "10552", True),
+            ("EL", "10552", True),
+            ("DE", "10115", True),
+            ("DE", "78266", False),
+            ("DE", "27498", False),
+            ("IT", "23041", False),
+            ("IT", "22061", False),
+            ("IT", "00100", True),
+            ("FI", "22100", False),
+            ("FI", "22 100", False),
+            ("FI", "00100", True),
+            ("AX", "22100", False),
+            ("ES", "35001", False),
+            ("ES", "38001", False),
+            ("ES", "51001", False),
+            ("ES", "52001", False),
+            ("ES", "28001", True),
+            ("IC", "35001", False),
+            ("GP", "97110", False),
+            ("GF", "97300", False),
+            ("MQ", "97200", False),
+            ("RE", "97400", False),
+            ("YT", "97600", False),
+            ("NO", "0154", False),
+            ("GB", "SW1A 1AA", False),
+            ("CH", "8001", False),
+            (None, None, False),
+        ]
+        for country_code, postal_code, expected in cases:
+            with self.subTest(country_code=country_code, postal_code=postal_code):
+                self.assertEqual(
+                    provider_units.in_eu_vat_area(country_code, postal_code),
+                    expected,
+                )
+
+    def test_intra_eu_parcel_omits_customs_and_warns(self):
+        payload = {
+            **CustomsInvoiceShipmentPayload,
+            "recipient": PolandRecipient,
+        }
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        shipment = lib.to_dict(request.serialize())["shipment"][0]
+        for structure in [
+            "customsDeclarationCN22",
+            "customsDeclarationCN23",
+            "customsInvoice",
+        ]:
+            self.assertNotIn(structure, shipment)
+
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = CustomsInvoiceBookingResponse
+            details, messages = (
+                karrio.Shipment.create(models.ShipmentRequest(**payload))
+                .from_(gateway)
+                .parse()
+            )
+            mock.assert_called_once()
+        self.assertIsNotNone(details)
+        self.assertEqual(details.docs.extra_documents, [])
+        self.assertListEqual(
+            lib.to_dict(messages),
+            [
+                {
+                    "carrier_id": "postnord",
+                    "carrier_name": "postnord",
+                    "code": "customs_omitted_intra_eu",
+                    "level": "warning",
+                    "message": (
+                        "Customs data was not sent: the shipment from SE to PL "
+                        "stays within the EU VAT area"
+                    ),
+                }
+            ],
+        )
+
+    def test_intra_eu_skips_customs_fail_fast_checks(self):
+        # A letter to Germany without registration numbers, shipper VAT
+        # number, HS codes, and with misplaced registration keys and too
+        # many lines is sent without customs instead of failing.
+        payload = {
+            **_customs_payload(14),
+            "recipient": GermanyRecipient,
+            "options": {"eori_number": "SE556000123401"},
+        }
+        payload["customs"] = {
+            key: value for key, value in payload["customs"].items() if key != "options"
+        }
+        for service in ["postnord_tracked_letter", "postnord_parcel"]:
+            with self.subTest(service=service):
+                with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+                    mock.return_value = ShipmentResponse
+                    details, messages = (
+                        karrio.Shipment.create(
+                            models.ShipmentRequest(
+                                **{**payload, "service": service, "reference": None}
+                            )
+                        )
+                        .from_(gateway)
+                        .parse()
+                    )
+                    mock.assert_called_once()
+                    body = json.loads(mock.call_args[1]["data"])
+                self.assertIsNotNone(details)
+                self.assertNotIn("customsDeclarationCN22", body["shipment"][0])
+                self.assertNotIn("customsInvoice", body["shipment"][0])
+                self.assertEqual(
+                    [message.code for message in messages],
+                    ["customs_omitted_intra_eu"],
+                )
+
+    def test_aland_parcel_keeps_customs_invoice(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(
+                **{**CustomsInvoiceShipmentPayload, "recipient": AlandRecipient}
+            )
+        )
+        shipment = lib.to_dict(request.serialize())["shipment"][0]
+        self.assertEqual(shipment["customsInvoice"]["buyer"]["postalCode"], "22100")
+        self.assertIsNone(request.ctx.get("customs_omitted"))
+
+    def test_norway_keeps_customs(self):
+        for payload, structure in [
+            (CustomsInvoiceShipmentPayload, "customsInvoice"),
+            (CustomsShipmentPayload, "customsDeclarationCN22"),
+        ]:
+            with self.subTest(structure=structure):
+                request = gateway.mapper.create_shipment_request(
+                    models.ShipmentRequest(**payload)
+                )
+                self.assertIn(
+                    structure, lib.to_dict(request.serialize())["shipment"][0]
+                )
+                self.assertIsNone(request.ctx.get("customs_omitted"))
+
+    def test_intra_eu_without_customs_does_not_warn(self):
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = ShipmentResponse
+            _, messages = (
+                karrio.Shipment.create(models.ShipmentRequest(**ShipmentPayload))
+                .from_(gateway)
+                .parse()
+            )
+        self.assertEqual(messages, [])
+
+
+class TestPostNordProductGroups(unittest.TestCase):
+    def test_letter_services_pinned(self):
+        self.assertEqual(
+            {service.value for service in provider_units.LETTER_SERVICES},
+            {"04", "34", "UX", "86", "LX", "RR", "RK", "RL", "RE", "RQ", "VV", "AF"},
+        )
+        self.assertEqual(provider_units.INTERNATIONAL_PARCEL_SERVICE.value, "91")
+
+    def test_every_service_classifies_into_one_customs_structure(self):
+        # Letters and International Parcel keep CN22; every other service,
+        # including ones added later, is a parcel product sending an invoice.
+        for service in provider_units.ShippingService:
+            with self.subTest(service=service.name):
+                is_cn22 = lib.identity(
+                    service in provider_units.LETTER_SERVICES
+                    or service == provider_units.INTERNATIONAL_PARCEL_SERVICE
+                )
+                self.assertEqual(
+                    provider_units.customs_structure(service.value),
+                    lib.identity(
+                        provider_units.CustomsStructure.cn22
+                        if is_cn22
+                        else provider_units.CustomsStructure.customs_invoice
+                    ),
+                )
+
+    def test_unknown_service_code_is_parcel_product(self):
+        self.assertEqual(
+            provider_units.customs_structure("99"),
+            provider_units.CustomsStructure.customs_invoice,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
 
@@ -1426,8 +2157,69 @@ ShipmentRequest = {
     ],
 }
 
+# Customs is only sent outside the EU VAT area, so customs fixtures ship
+# from Sweden to Norway.
+NorwayRecipient = {
+    "address_line1": "Karl Johans gate 22",
+    "city": "Oslo",
+    "postal_code": "0154",
+    "country_code": "NO",
+    "person_name": "Kari Receiver",
+    "company_name": "Receiver AS",
+    "phone_number": "+4791234567",
+    "email": "receiver@example.com",
+}
+
+NorwayConsignee = {
+    "issuerCode": "Z12",
+    "party": {
+        "nameIdentification": {
+            "name": "Kari Receiver",
+            "companyName": "Receiver AS",
+        },
+        "address": {
+            "streets": ["Karl Johans gate 22"],
+            "postalCode": "0154",
+            "city": "Oslo",
+            "countryCode": "NO",
+        },
+        "contact": {
+            "contactName": "Kari Receiver",
+            "emailAddress": "receiver@example.com",
+            "phoneNo": "+4791234567",
+            "smsNo": "+4791234567",
+        },
+    },
+}
+
+PolandRecipient = {
+    **NorwayRecipient,
+    "address_line1": "ul. Marszalkowska 1",
+    "city": "Warszawa",
+    "postal_code": "00-001",
+    "country_code": "PL",
+}
+GermanyRecipient = {
+    **NorwayRecipient,
+    "address_line1": "Unter den Linden 1",
+    "city": "Berlin",
+    "postal_code": "10117",
+    "country_code": "DE",
+}
+AlandRecipient = {
+    **NorwayRecipient,
+    "address_line1": "Torggatan 1",
+    "city": "Mariehamn",
+    "postal_code": "22100",
+    "country_code": "FI",
+}
+
+# CN22 is sent for letters and International Parcel; a tracked letter
+# exercises the CN22 branch without triggering the export-letter fetch.
 CustomsShipmentPayload = {
     **ShipmentPayload,
+    "recipient": NorwayRecipient,
+    "service": "postnord_tracked_letter",
     "customs": {
         "content_type": "merchandise",
         "commodities": [
@@ -1455,6 +2247,7 @@ CustomsShipmentPayload = {
                 "origin_country": "CN",
             },
         ],
+        "options": {"eori_number": "SE556000123401"},
     },
 }
 
@@ -1463,15 +2256,25 @@ CustomsShipmentRequest = {
     "shipment": [
         {
             **ShipmentRequest["shipment"][0],
+            "service": {
+                "basicServiceCode": "34",
+                "additionalServiceCode": ["A5"],
+            },
+            "parties": {
+                **ShipmentRequest["shipment"][0]["parties"],
+                "consignee": NorwayConsignee,
+            },
             "customsDeclarationCN22": {
+                "EORIorPersonalIdNumber": "SE556000123401",
                 "countryOfOrigin": "SE",
                 "categoryOfItem": {"categoryType": ["SALE OF GOODS"]},
                 "detailedDescription": [
                     {
+                        # 2 x (0.4 kg, 25 SEK): line totals over the quantity
                         "content": "Wool socks",
                         "quantity": {"value": 2},
-                        "grossWeight": {"value": 0.4, "unit": "KGM"},
-                        "value": {"amount": 25.0, "currency": "SEK"},
+                        "grossWeight": {"value": 0.8, "unit": "KGM"},
+                        "value": {"amount": 50.0, "currency": "SEK"},
                         "hsTariffNumber": "6115950000",
                         "countryCode": "SE",
                         "rowNo": 1,
@@ -1488,7 +2291,7 @@ CustomsShipmentRequest = {
                     },
                 ],
                 "totalGrossWeight": {"value": 1.5, "unit": "KGM"},
-                "totalValue": {"amount": 40.0, "currency": "SEK"},
+                "totalValue": {"amount": 65.0, "currency": "SEK"},
             },
         }
     ],
@@ -1526,6 +2329,8 @@ CustomsRegistrationShipmentRequest = {
 def _customs_payload(lines: int) -> dict:
     return {
         **ShipmentPayload,
+        "recipient": NorwayRecipient,
+        "service": "postnord_tracked_letter",
         "customs": {
             "content_type": "merchandise",
             "commodities": [
@@ -1539,9 +2344,43 @@ def _customs_payload(lines: int) -> dict:
                 }
                 for index in range(1, lines + 1)
             ],
+            "options": {"eori_number": "SE556000123401"},
         },
     }
 
+
+# A quantity-3 commodity with per-unit value 10 SEK and weight 0.2 kg next
+# to a single-unit line: lines carry 30 SEK / 0.6 kg and 5 SEK / 0.1 kg.
+QuantityThreeCN22Payload = {
+    **ShipmentPayload,
+    "recipient": NorwayRecipient,
+    "service": "postnord_tracked_letter",
+    "customs": {
+        "options": {"eori_number": "SE556000123401"},
+        "commodities": [
+            {
+                "title": "Enamel pin",
+                "quantity": 3,
+                "weight": 0.2,
+                "weight_unit": "KG",
+                "value_amount": 10.0,
+                "value_currency": "SEK",
+                "hs_code": "7117190000",
+                "origin_country": "SE",
+            },
+            {
+                "title": "Postcard",
+                "quantity": 1,
+                "weight": 0.1,
+                "weight_unit": "KG",
+                "value_amount": 5.0,
+                "value_currency": "SEK",
+                "hs_code": "4909000000",
+                "origin_country": "SE",
+            },
+        ],
+    },
+}
 
 # Export letter (UX) to an international recipient with the customs block:
 # the payload shape that triggers the implicit by-id customs document fetch.
@@ -1550,6 +2389,118 @@ ExportLetterCustomsPayload = {
     "recipient": {**ShipmentPayload["recipient"], "country_code": "US"},
     "service": "postnord_export_letter",
     "customs": CustomsShipmentPayload["customs"],
+}
+
+# Parcel product from Sweden to Norway with customs: the payload shape that
+# selects the customsInvoice branch instead of CN22.
+CustomsInvoiceShipmentPayload = {
+    **ShipmentPayload,
+    "shipper": {**ShipmentPayload["shipper"], "federal_tax_id": "SE556123471101"},
+    "recipient": NorwayRecipient,
+    "customs": {
+        "content_type": "merchandise",
+        "commercial_invoice": True,
+        "invoice": "INV-2026-001",
+        "invoice_date": "2026-09-25",
+        "commodities": [
+            {
+                "title": "Wool socks",
+                "quantity": 2,
+                "weight": 0.2,
+                "weight_unit": "KG",
+                "value_amount": 150.0,
+                "value_currency": "SEK",
+                "hs_code": "6115950000",
+                "origin_country": "SE",
+            },
+            {
+                "description": "Knitted cap",
+                "quantity": 1,
+                "weight": 0.1,
+                "weight_unit": "KG",
+                "value_amount": 200.0,
+                "value_currency": "SEK",
+                "hs_code": "6505003000",
+                "origin_country": "SE",
+            },
+        ],
+        "options": {"eori_number": "SE556000123401"},
+    },
+}
+
+CustomsInvoiceShipmentRequest = {
+    **ShipmentRequest,
+    "shipment": [
+        {
+            **ShipmentRequest["shipment"][0],
+            "parties": {
+                **ShipmentRequest["shipment"][0]["parties"],
+                "consignee": NorwayConsignee,
+            },
+            "customsInvoice": {
+                "declarationType": "invoiceExportDeclaration",
+                "type": "COMMERCIAL",
+                "seller": {
+                    "partyIdentification": {
+                        "partyId": "00000000",
+                        "partyIdType": "160",
+                    },
+                    "vatNo": "SE556123471101",
+                    "name": "ACME Sender AB",
+                    "streets": ["Sandhamnsgatan 61"],
+                    "city": "Stockholm",
+                    "postalCode": "11528",
+                    "countryCode": "SE",
+                    "contacts": {
+                        "name": "John Sender",
+                        "phoneNo": "+46701234567",
+                        "emailAddress": "sender@example.com",
+                    },
+                    "eoriNo": "SE556000123401",
+                },
+                "buyer": {
+                    "name": "Receiver AS",
+                    "streets": ["Karl Johans gate 22"],
+                    "city": "Oslo",
+                    "postalCode": "0154",
+                    "countryCode": "NO",
+                    "contacts": {
+                        "name": "Kari Receiver",
+                        "phoneNo": "+4791234567",
+                        "emailAddress": "receiver@example.com",
+                    },
+                },
+                "invoice": {
+                    "invoiceNo": "INV-2026-001",
+                    "shippingDate": "2026-09-25",
+                    "reasonForExportation": "1000",
+                },
+                "detailedDescription": [
+                    {
+                        "quantity": 2,
+                        "hsTariffNumber": "6115950000",
+                        "content": "Wool socks",
+                        "countryOfOrigin": "SE",
+                        "netWeight": {"value": 0.4, "unit": "KGM"},
+                        "grossWeight": {"value": 0.4, "unit": "KGM"},
+                        "itemValue": {"amount": 300.0, "currency": "SEK"},
+                    },
+                    {
+                        "quantity": 1,
+                        "hsTariffNumber": "6505003000",
+                        "content": "Knitted cap",
+                        "countryOfOrigin": "SE",
+                        "netWeight": {"value": 0.1, "unit": "KGM"},
+                        "grossWeight": {"value": 0.1, "unit": "KGM"},
+                        "itemValue": {"amount": 200.0, "currency": "SEK"},
+                    },
+                ],
+                "totalNetWeight": {"value": 0.5, "unit": "KGM"},
+                "totalGrossWeight": {"value": 1.5, "unit": "KGM"},
+                "invoiceTotal": {"amount": 500.0, "currency": "SEK"},
+            },
+        }
+    ],
 }
 
 ShipmentCancelRequest = {
@@ -1925,6 +2876,15 @@ CustomsBookingNoIdsResponse = """{
   }
 }"""
 
+# Parcel bookings with customsInvoice compose the invoice with the label
+# (sandbox 2026-09-25: printoutComposition {label: 1, customsInvoice: 1}).
+CustomsInvoiceBookingResponse = CustomsBookingResponse.replace(
+    '"cn22": 1', '"customsInvoice": 1'
+)
+CustomsInvoiceBookingZPLResponse = CustomsBookingZPLResponse.replace(
+    '"cn22": 1', '"customsInvoice": 1'
+)
+
 # By-id onlyCustomsDeclarations responses: a top-level labelPrintout array
 # (per the /v3/labels/ids swagger) whose entries carry the composed kind.
 CustomsPDFData = "Q04yMiBQREYgREFUQQ=="
@@ -2037,3 +2997,10 @@ CustomsRetrievalErrorResponse = """{
 
 # Non-JSON body (an intermediary's HTML error page) from the by-id fetch.
 UnreadableBodyResponse = "<html>502 Bad Gateway</html>"
+
+CustomsInvoicePrintoutsResponse = CustomsPrintoutsResponse.replace(
+    '"cn22": 1', '"customsInvoice": 1'
+)
+CustomsInvoicePrintoutsZPLResponse = CustomsPrintoutsZPLResponse.replace(
+    '"cn22": 1', '"customsInvoice": 1'
+)

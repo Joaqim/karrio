@@ -109,25 +109,50 @@ Each point is a dict with `id`, `name`, `type`, `address`, `coordinates`, `openi
 
 ### At booking
 
-When a shipment carries `customs` with at least one commodity, the booking embeds a CN22 declaration (`customsDeclarationCN22`):
+When a shipment carries `customs` with at least one commodity, the booking embeds one customs structure selected by the service.
+When both the shipper and the recipient are inside the EU VAT area, no customs structure is sent, no customs document is fetched, and none of the customs field checks below apply; a caller-supplied `customs` block is reported as a `customs_omitted_intra_eu` warning message instead.
+The EU VAT area follows the DHL Freight Sweden connector's definition (`in_eu_vat_area` in `units.py`): Greece is accepted as `GR` or `EL`, and special fiscal territories such as Åland (`AX`, or `FI` 22000–22999), the Canary Islands, Ceuta, Melilla, Büsingen, Heligoland, Livigno, Campione d'Italia, and the French overseas departments are outside it.
+Letter services (`LETTER_SERVICES` in `units.py`) and International Parcel (91) send a CN22 declaration (`customsDeclarationCN22`); every other service is a parcel product and sends a customs invoice (`customsInvoice`).
+
+CN22 mapping:
 
 | Unified input | CN22 field |
 |---------------|------------|
 | `customs.content_type` | `categoryOfItem.categoryType` (see below) |
 | `customs.commodities[]` | `detailedDescription[]`: `title` (or `description`) as `content`, `quantity`, `grossWeight` in KGM, `value`, `hs_code` as `hsTariffNumber`, `origin_country` as `countryCode`, 1-based `rowNo` |
-| package weights | `totalGrossWeight` in KGM |
-| commodity values | `totalValue`: sum of `value_amount`, currency of the first commodity that sets one |
+| parcel weights | `totalGrossWeight` in KGM: sum of the parcel weights (including packaging), else sum of the commodity line weights |
+| commodity values | `totalValue`: sum of the line values, currency of the first commodity that sets one |
 | `shipper.country_code` | `countryOfOrigin` |
 | `customs.options.eori_number` / `voec_number` / `ioss_number` | `EORIorPersonalIdNumber` / `voec` / `ioss` |
 
 `content_type` accepts Karrio's values or PostNord's own, ignoring case and extra whitespace: `documents`→`DOCUMENT`, `gift`→`GIFT`, `sample`→`COMMERCIAL SAMPLE`, `merchandise`→`SALE OF GOODS`, `return_merchandise`→`RETURNED GOODS`, `other`→`OTHER`.
 Other values are sent verbatim, and an absent `content_type` sends no `categoryOfItem`.
 
-PostNord rejects a CN22 without any of EORI, VOEC, or IOSS (`SACUS-BR-24062502`), so goods declarations need at least one under `customs.options`.
-The same keys under shipment `options` are rejected with a field error, because unknown shipment options would otherwise be dropped silently.
-A declaration accepts at most 13 commodity lines; more are rejected before any call to PostNord.
+A CN22 without any of EORI, VOEC, or IOSS under `customs.options` is rejected with a field error before any call, matching PostNord's rejection `SACUS-BR-24062502`.
+Commodity `weight` and `value_amount` are per unit, so each line carries them multiplied by `quantity`, on both the CN22 and the customs invoice.
+A CN22 accepts at most 13 commodity lines; more are rejected before any call to PostNord.
 
-For Export Letter (UX) bookings with an embedded declaration, the connector also fetches the standalone customs document (`POST /rest/shipment/v3/labels/ids/{pdf,zpl}` with `definePrintout=onlyCustomsDeclarations`), keyed by the booking's `printId`, and attaches it to `docs.extra_documents`.
+Customs invoice mapping:
+
+| Unified input | Customs invoice field |
+|---------------|-----------------------|
+| `customs.commercial_invoice` | `type`: `COMMERCIAL` when true, `PROFORMA` when false or omitted |
+| (fixed) | `declarationType` `invoiceExportDeclaration`, `invoice.reasonForExportation` `1000` (permanent export) |
+| shipper | `seller`: `company_name` (or `person_name`), address, `federal_tax_id` as `vatNo`, connection `customer_number` as `partyIdentification`, `customs.options.eori_number` as `eoriNo` |
+| recipient | `buyer`: same address mapping, tax id as `vatNo` when present |
+| party `person_name` (or `company_name`), `phone_number`, `email` | `contacts` |
+| `customs.options.voec_number` / `ioss_number` | `voec` / `ioss` |
+| `customs.invoice` (or the shipment `reference`), `customs.invoice_date` | `invoice.invoiceNo`, `invoice.shippingDate` |
+| `customs.commodities[]` | `detailedDescription[]`: `quantity`, `hs_code`, `title` (or `description`), `origin_country`, weight in KGM as `netWeight` and `grossWeight`, `itemValue` |
+| commodity weights and values | `totalNetWeight` (sum of the line weights), `invoiceTotal` (sum of the line values, currency of the first commodity that sets one) |
+| parcel weights | `totalGrossWeight`: sum of the parcel weights (including packaging), else sum of the commodity line weights |
+
+A customs invoice is rejected with a field error before any call when the shipper has no tax id, when neither `customs.invoice` nor `reference` is set, when the shipper or recipient lacks a contact name or phone number, or when a commodity lacks `hs_code` or `origin_country`.
+Registration numbers are optional on the customs invoice.
+
+Registration-number keys under shipment `options` are rejected with a field error, because unknown shipment options would otherwise be dropped silently.
+
+For Export Letter (UX) and parcel-product bookings with customs data, the connector also fetches the standalone customs document (`POST /rest/shipment/v3/labels/ids/{pdf,zpl}` with `definePrintout=onlyCustomsDeclarations`), keyed by the booking's `printId`, and attaches it to `docs.extra_documents`.
 The document category is the kind PostNord reports in `printoutComposition` (`cn22`, `customsInvoice`, …), falling back to `customs_declaration`.
 A failed fetch never fails the booking; it surfaces as a message.
 
