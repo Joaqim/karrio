@@ -185,7 +185,7 @@ Booking a parcel product with customs data SHALL surface the customs document Po
 
 The connector SHALL omit every customs structure (CN22, CN23, customs invoice) and the standalone customs document retrieval when both the shipper and the recipient are inside the EU VAT area, SHALL NOT apply the customs fail-fast checks to such shipments, and SHALL report the omission as a warning message on the response when the caller supplied customs data.
 Callers may supply customs data maximally; the connector owns the known criteria for when customs is not required.
-The EU VAT area check SHALL follow the DHL Freight Sweden connector's definition: Greece under its ISO code `GR` is a member state, and Åland (`AX`, or `FI` 22000–22999), the Canary Islands (`IC`, or `ES` 35000–35999 and 38000–38999), Ceuta (`ES` 51000–51999), Melilla (`ES` 52000–52999), Büsingen (`DE` 78266), Heligoland (`DE` 27498), Livigno (`IT` 23041), Campione d'Italia (`IT` 22061), and the French overseas departments (`GP`, `GF`, `MQ`, `RE`, `YT`) are outside it.
+The EU VAT area check SHALL follow the DHL Freight Sweden connector's definition: Greece under its ISO code `GR` and Monaco (`MC`) are treated as EU, Northern Ireland (`GB` with a postal code beginning `BT`) is treated as EU because the connector decides customs handling for goods movements and Northern Ireland is inside the EU VAT area for goods, and Åland (`AX`, or `FI` 22000–22999), the Canary Islands (`IC`, or `ES` 35000–35999 and 38000–38999), Ceuta (`ES` 51000–51999), Melilla (`ES` 52000–52999), Büsingen (`DE` 78266), Heligoland (`DE` 27498), Livigno (`IT` 23041), Campione d'Italia (`IT` 22061), Mount Athos (`GR` 63086), and the French overseas departments (`GP`, `GF`, `MQ`, `RE`, `YT`) are outside it.
 
 #### Scenario: Intra-EU booking omits customs and warns
 
@@ -200,4 +200,19 @@ The EU VAT area check SHALL follow the DHL Freight Sweden connector's definition
 #### Scenario: Special fiscal territory keeps customs
 
 - **WHEN** a parcel product is booked from Sweden to Åland (`FI`, postal code 22100) with customs data
+- **THEN** the booking request carries a customs invoice
+
+#### Scenario: Northern Ireland is treated as EU
+
+- **WHEN** a parcel product is booked from Sweden to the United Kingdom (`GB`, postal code BT1 1AA) with customs data
+- **THEN** the booking request carries no customs structure
+
+#### Scenario: Monaco is treated as EU
+
+- **WHEN** a parcel product is booked from Sweden to Monaco (`MC`) with customs data
+- **THEN** the booking request carries no customs structure
+
+#### Scenario: Mount Athos keeps customs
+
+- **WHEN** a parcel product is booked from Sweden to Greece (`GR`, postal code 630 86) with customs data
 - **THEN** the booking request carries a customs invoice
