@@ -35,11 +35,13 @@ BRANCHES=(
   feat-shipment-advisors
   feat-dhl-freight-se-connector
   feat-dhl-freight-se-customs
+  fix-dhl-freight-se-eu-vat-territories
   docs-vendored-carrier-specs
   feat-document-stamping
   feat-postnord-connector
   feat-postnord-cn22-stamping
   feat-postnord-customs-invoice
+  fix-postnord-eu-vat-territories
   dev-nix-flake
   docs-openspec
 )
