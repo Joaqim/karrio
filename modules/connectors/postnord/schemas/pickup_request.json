@@ -1,0 +1,98 @@
+{
+  "messageDate": "2026-06-24T10:00:00",
+  "updateIndicator": "Original",
+  "testIndicator": false,
+  "application": {
+    "name": "Karrio",
+    "version": "1.0",
+    "applicationId": 0
+  },
+  "shipment": [
+    {
+      "dateAndTimes": {
+        "earliestPickupDate": "2026-06-25T08:00:00",
+        "latestPickupDate": "2026-06-25T16:00:00"
+      },
+      "service": {
+        "basicServiceCode": "20"
+      },
+      "freeText": [
+        {
+          "usageCode": "PICKUP",
+          "text": "Pick up at loading dock"
+        }
+      ],
+      "goodsItem": [
+        {
+          "packageTypeCode": "PC",
+          "numberOfPackageTypeCodeItems": {
+            "value": 1
+          },
+          "items": [
+            {
+              "itemIdentification": {
+                "itemId": "00373500454541020957",
+                "itemIdType": "SSCC"
+              },
+              "grossWeight": {
+                "value": 1.5,
+                "unit": "KGM"
+              }
+            }
+          ]
+        }
+      ],
+      "parties": {
+        "consignor": {
+          "issuerCode": "Z12",
+          "partyIdentification": {
+            "partyId": "00000000",
+            "partyIdType": "160"
+          },
+          "party": {
+            "nameIdentification": {
+              "name": "ACME Sender AB",
+              "companyName": "ACME Sender AB"
+            },
+            "address": {
+              "streets": ["Sandhamnsgatan 61"],
+              "postalCode": "11528",
+              "city": "Stockholm",
+              "countryCode": "SE"
+            },
+            "contact": {
+              "contactName": "John Sender",
+              "emailAddress": "sender@example.com",
+              "phoneNo": "+46701234567",
+              "smsNo": "+46701234567"
+            }
+          }
+        },
+        "pickupParty": {
+          "party": {
+            "nameIdentification": {
+              "name": "ACME Warehouse",
+              "companyName": "ACME Sender AB"
+            },
+            "address": {
+              "streets": ["Sandhamnsgatan 61"],
+              "postalCode": "11528",
+              "city": "Stockholm",
+              "countryCode": "SE"
+            },
+            "contact": {
+              "contactName": "John Sender",
+              "emailAddress": "sender@example.com",
+              "phoneNo": "+46701234567",
+              "smsNo": "+46701234567"
+            }
+          },
+          "reference": {
+            "referenceNo": "PICKUP-REF-1",
+            "referenceType": "ON"
+          }
+        }
+      }
+    }
+  ]
+}

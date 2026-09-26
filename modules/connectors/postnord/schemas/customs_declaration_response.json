@@ -1,0 +1,99 @@
+{
+  "bookingResponse": {
+    "bookingId": "3YSFH8NG0LNREZO38UIN68B3RRWL4X",
+    "idInformation": [
+      {
+        "status": "OK",
+        "references": {
+          "shipment": [
+            {
+              "referenceNo": "ORDER-7788",
+              "referenceType": "CU",
+              "referenceDesc": "Customer order number"
+            }
+          ],
+          "item": [
+            {
+              "referenceNo": "ITEM-1",
+              "referenceType": "ON",
+              "referenceDesc": "Item reference"
+            }
+          ]
+        },
+        "ids": [
+          {
+            "idType": "itemId",
+            "value": "00373500454541020957",
+            "printId": "31eed2dad84b48a2ba92a26590a0a69f"
+          }
+        ]
+      }
+    ]
+  },
+  "labelPrintout": [
+    {
+      "itemIds": [
+        {
+          "itemIds": "00373500454541020957",
+          "printId": "31eed2dad84b48a2ba92a26590a0a69f",
+          "basicServiceCode": "UX",
+          "reference": {
+            "item": [
+              {
+                "referenceNo": "ITEM-1",
+                "referenceType": "ON",
+                "referenceDesc": "Item reference"
+              }
+            ],
+            "shipment": [
+              {
+                "referenceNo": "ORDER-7788",
+                "referenceType": "CU",
+                "referenceDesc": "Customer order number"
+              }
+            ]
+          },
+          "status": "OK",
+          "errorResponse": {
+            "message": "High level error message.",
+            "compositeFault": {
+              "faults": [
+                {
+                  "explanationText": "Explanation of the fault",
+                  "faultCode": "FAULT_CODE",
+                  "paramValues": [
+                    {
+                      "param": "field",
+                      "value": "value"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "printout": {
+        "id": "1",
+        "type": "LABEL",
+        "labelFormat": "PDF",
+        "encoding": "base64",
+        "uriResource": "https://api2.postnord.com/rest/shipment/v3/labels/ids/pdf/1",
+        "data": "JVBERi0xLjQK"
+      },
+      "printoutComposition": {
+        "label": 0,
+        "cn22": 2,
+        "cn23": 0,
+        "customsInvoice": 0,
+        "securityDeclarations": 0,
+        "loadList": 0,
+        "dpc": 0,
+        "dangerousGoods": 0,
+        "fraktsedel": 0,
+        "routingDocument": 0,
+        "datametrixbarcode": 0
+      }
+    }
+  ]
+}

@@ -1,0 +1,466 @@
+{
+  "messageDate": "2026-06-24T10:00:00",
+  "language": "EN",
+  "updateIndicator": "Original",
+  "testIndicator": false,
+  "application": {
+    "name": "Karrio",
+    "version": "1.0",
+    "applicationId": 0
+  },
+  "shipment": [
+    {
+      "shipmentIdentification": {
+        "shipmentId": "SHIP-0001"
+      },
+      "dateAndTimes": {
+        "loadingDate": "2026-06-24"
+      },
+      "service": {
+        "basicServiceCode": "18",
+        "additionalServiceCode": ["A1", "A5"]
+      },
+      "cashOnDelivery": {
+        "transactionIdentifier": "OCR-12345",
+        "codType": "BANKRECEIPT",
+        "codAmount": {
+          "amount": 100.0,
+          "currency": "SEK"
+        }
+      },
+      "insurance": {
+        "typeOfInsurance": "STANDARD",
+        "insuranceAmount": {
+          "amount": 500.0,
+          "currency": "SEK"
+        }
+      },
+      "goodsValue": {
+        "amount": 500.0,
+        "currency": "SEK"
+      },
+      "freeText": [
+        {
+          "usageCode": "DEL",
+          "text": "Leave at front door"
+        }
+      ],
+      "numberOfPackages": {
+        "value": 1
+      },
+      "totalGrossWeight": {
+        "value": 1.5,
+        "unit": "KGM"
+      },
+      "references": [
+        {
+          "referenceNo": "ORDER-7788",
+          "referenceType": "CU",
+          "referenceDesc": "Customer order number"
+        }
+      ],
+      "parties": {
+        "consignor": {
+          "issuerCode": "Z12",
+          "partyIdentification": {
+            "partyId": "00000000",
+            "partyIdType": "160"
+          },
+          "party": {
+            "nameIdentification": {
+              "name": "ACME Sender AB",
+              "companyName": "ACME Sender AB",
+              "careOfName": "Warehouse"
+            },
+            "address": {
+              "streets": ["Sandhamnsgatan 61"],
+              "postalCode": "11528",
+              "placeName": "Stockholm",
+              "state": "Stockholm",
+              "city": "Stockholm",
+              "countryCode": "SE"
+            },
+            "contact": {
+              "contactName": "John Sender",
+              "emailAddress": "sender@example.com",
+              "phoneNo": "+46701234567",
+              "smsNo": "+46701234567"
+            }
+          }
+        },
+        "consignee": {
+          "issuerCode": "Z12",
+          "partyIdentification": {
+            "partyId": "POINT-156",
+            "partyIdType": "156"
+          },
+          "party": {
+            "nameIdentification": {
+              "name": "Jane Receiver",
+              "companyName": "Receiver Co",
+              "careOfName": "Apartment 3"
+            },
+            "address": {
+              "streets": ["Terminalvagen 24"],
+              "postalCode": "17173",
+              "placeName": "Solna",
+              "state": "Stockholm",
+              "city": "Solna",
+              "countryCode": "SE"
+            },
+            "contact": {
+              "contactName": "Jane Receiver",
+              "emailAddress": "receiver@example.com",
+              "phoneNo": "+46709876543",
+              "smsNo": "+46709876543"
+            }
+          }
+        }
+      },
+      "goodsItem": [
+        {
+          "marking": "FRAGILE",
+          "goodsDescription": "Books",
+          "packageTypeCode": "PC",
+          "numberOfPackageTypeCodeItems": {
+            "value": 1
+          },
+          "references": [
+            {
+              "referenceNo": "PKG-1",
+              "referenceType": "ON"
+            }
+          ],
+          "items": [
+            {
+              "itemIdentification": {
+                "itemId": "00373500454541020957",
+                "itemIdType": "SSCC"
+              },
+              "references": [
+                {
+                  "referenceNo": "ITEM-1",
+                  "referenceType": "ON"
+                }
+              ],
+              "dimensions": {
+                "height": {
+                  "value": 10.0,
+                  "unit": "CMT"
+                },
+                "width": {
+                  "value": 20.0,
+                  "unit": "CMT"
+                },
+                "length": {
+                  "value": 30.0,
+                  "unit": "CMT"
+                }
+              },
+              "grossWeight": {
+                "value": 1.5,
+                "unit": "KGM"
+              },
+              "volume": {
+                "value": 6.0,
+                "unit": "DMQ"
+              },
+              "itemValue": {
+                "amount": 500.0,
+                "currency": "SEK"
+              }
+            }
+          ]
+        }
+      ],
+      "customsDeclarationCN22": {
+        "declarationType": "exportDeclaration",
+        "references": [
+          {
+            "referenceNo": "CN22-REF-1",
+            "referenceType": "CU",
+            "referenceDesc": "Customs reference"
+          }
+        ],
+        "EORIorPersonalIdNumber": "SE5561234711",
+        "voec": "0123456",
+        "ioss": "IM2760000742",
+        "hmrc": "GB1234567890",
+        "countryOfOrigin": "SE",
+        "hsTariffNumber": ["07019010"],
+        "categoryOfItem": {
+          "categoryType": ["GIFT"],
+          "explanation": "Gift"
+        },
+        "detailedDescription": [
+          {
+            "content": "Books",
+            "quantity": {
+              "value": 2
+            },
+            "grossWeight": {
+              "value": 0.5,
+              "unit": "KGM"
+            },
+            "value": {
+              "amount": 250.0,
+              "currency": "SEK"
+            },
+            "hsTariffNumber": "07019010",
+            "countryCode": "SE",
+            "rowNo": 1
+          }
+        ],
+        "totalGrossWeight": {
+          "value": 1.5,
+          "unit": "KGM"
+        },
+        "totalValue": {
+          "amount": 500.0,
+          "currency": "SEK"
+        },
+        "postalCharges": {
+          "amount": 40.0,
+          "currency": "SEK"
+        }
+      },
+      "customsDeclarationCN23": {
+        "declarationType": "exportDeclaration",
+        "references": [
+          {
+            "referenceNo": "CN23-REF-1",
+            "referenceType": "CU",
+            "referenceDesc": "Customs reference"
+          }
+        ],
+        "EORIorPersonalIdNumber": "SE5561234711",
+        "voec": "0123456",
+        "ioss": "IM2760000742",
+        "hmrc": "GB1234567890",
+        "categoryOfItem": {
+          "categoryType": ["GIFT"],
+          "explanation": "Gift"
+        },
+        "detailedDescription": [
+          {
+            "content": "Books",
+            "quantity": {
+              "value": 2
+            },
+            "grossWeight": {
+              "value": 0.5,
+              "unit": "KGM"
+            },
+            "value": {
+              "amount": 250.0,
+              "currency": "SEK"
+            },
+            "hsTariffNumber": "07019010",
+            "countryCode": "SE",
+            "rowNo": 1
+          }
+        ],
+        "totalGrossWeight": {
+          "value": 1.5,
+          "unit": "KGM"
+        },
+        "totalValue": {
+          "amount": 500.0,
+          "currency": "SEK"
+        },
+        "itemIds": ["00373500454541020957"],
+        "senderCustomsReferenceId": "SE5561234711",
+        "importerReference": "1234-customs-ref",
+        "importerContactInfo": "+46070775589",
+        "commercialItems": [
+          {
+            "hsTariffNumber": "07019010",
+            "countryCode": "SE",
+            "detailedDescRowNo": 1
+          }
+        ],
+        "quarantineComments": [
+          {
+            "comments": "Phytosanitary certificate attached",
+            "licenceNumber": "LIC-001",
+            "certificateNumber": "CERT-001",
+            "invoiceNumber": "INV-2026-001"
+          }
+        ],
+        "officeOfOrigin": "Stockholm",
+        "dateOfPosting": "2026-06-24T10:00:00",
+        "postalCharges": {
+          "amount": 40.0,
+          "currency": "SEK"
+        }
+      },
+      "customsInvoice": {
+        "declarationType": "invoiceExportDeclaration",
+        "type": "commercial",
+        "basicServiceCode": "18",
+        "references": [
+          {
+            "referenceNo": "INV-REF-1",
+            "referenceType": "CU",
+            "referenceDesc": "Invoice reference"
+          }
+        ],
+        "voec": "0123456",
+        "ioss": "IM2760000742",
+        "hmrc": "GB1234567890",
+        "splitShipmentId": "01100023",
+        "splitShipmentReference": "21100023_1111111",
+        "seller": {
+          "partyIdentification": {
+            "partyId": "00000000",
+            "partyIdType": "160"
+          },
+          "vatNo": "SE543210123401",
+          "name": "ACME Sender AB",
+          "streets": ["Sandhamnsgatan 61"],
+          "place": "Stockholm",
+          "city": "Stockholm",
+          "postalCode": "11528",
+          "countryCode": "SE",
+          "contacts": {
+            "name": "John Sender",
+            "phoneNo": "+46701234567",
+            "emailAddress": "sender@example.com",
+            "smsNo": "+46701234567"
+          },
+          "eoriNo": "SE5561234711"
+        },
+        "buyer": {
+          "partyIdentification": {
+            "partyId": "00000000",
+            "partyIdType": "160"
+          },
+          "vatNo": "SE543210123401",
+          "name": "Receiver Co",
+          "streets": ["Terminalvagen 24"],
+          "city": "Solna",
+          "postalCode": "17173",
+          "countryCode": "SE",
+          "contacts": {
+            "name": "Jane Receiver",
+            "phoneNo": "+46709876543",
+            "emailAddress": "receiver@example.com",
+            "smsNo": "+46709876543"
+          },
+          "eoriNo": "SE5561234711"
+        },
+        "shipTo": {
+          "partyIdentification": {
+            "partyId": "00000000",
+            "partyIdType": "160"
+          },
+          "name": "Jane Receiver",
+          "streets": ["Terminalvagen 24"],
+          "city": "Solna",
+          "postalCode": "17173",
+          "countryCode": "SE",
+          "contacts": {
+            "name": "Jane Receiver",
+            "phoneNo": "+46709876543",
+            "emailAddress": "receiver@example.com",
+            "smsNo": "+46709876543"
+          },
+          "refItemIds": ["00373500454541020957"]
+        },
+        "invoice": {
+          "invoiceNo": "INV-2026-001",
+          "shippingDate": "2026-06-24",
+          "shippingId": "SHIP-0001",
+          "purchaseOrderNo": "ORDER-7788",
+          "reasonForExportation": "1000",
+          "termsOfSale": "DAP",
+          "importerReference": "1234-customs-ref",
+          "exportReference": "Export reference",
+          "termsOfPayment": "Prepaid",
+          "customsDeclarationId": "Customs Declaration Id"
+        },
+        "ids": [
+          {
+            "id": "00373500454541020957",
+            "idType": "ITEMID"
+          }
+        ],
+        "detailedDescription": [
+          {
+            "quantity": 2,
+            "units": "DTM",
+            "returnHsTariffNumber": "07019010",
+            "hsTariffNumber": "07019010",
+            "hsTariffNumberCountryCode": "SE",
+            "content": "Books",
+            "marksAndNumbers": "050003030",
+            "countryOfOrigin": "SE",
+            "netWeight": {
+              "value": 1.4,
+              "unit": "KGM"
+            },
+            "grossWeight": {
+              "value": 1.5,
+              "unit": "KGM"
+            },
+            "itemValue": {
+              "amount": 250.0,
+              "currency": "SEK"
+            },
+            "refItemIds": ["00373500454541020957"],
+            "articleNumber": "EAN-5901234123457",
+            "orderNumber": "ORDER-7788",
+            "attributeList": [
+              {
+                "type": "ZSD",
+                "value": "0111550"
+              }
+            ],
+            "reasonForExportation": "1000"
+          }
+        ],
+        "totalNetWeight": {
+          "value": 1.4,
+          "unit": "KGM"
+        },
+        "totalGrossWeight": {
+          "value": 1.5,
+          "unit": "KGM"
+        },
+        "totalNumberOfPackages": {
+          "value": 1
+        },
+        "invoiceSubTotal": {
+          "amount": 500.0,
+          "currency": "SEK"
+        },
+        "freightCost": {
+          "amount": 40.0,
+          "currency": "SEK",
+          "typeOfPayment": "INVOICE",
+          "paymentSystem": "PostNord"
+        },
+        "invoiceTotal": {
+          "amount": 540.0,
+          "currency": "SEK"
+        },
+        "transport": {
+          "mrn": "26SE10000000101234",
+          "transportModeBorder": "30",
+          "transportIdentityBorder": "AB1234",
+          "transportNationalityBorder": "SE",
+          "transportName": "PostNord road freight",
+          "transportUniqueId": "TRUCK-001",
+          "truckId": "TRUCK-001",
+          "departurePlace": "Stockholm",
+          "additionalInformation": "Additional transport information",
+          "departureCountryCode": "SE",
+          "destinationCountryCode": "NO",
+          "arrivalDate": "2026-06-26",
+          "arrivalTime": "10:00:00"
+        },
+        "otherRemarks": "Other remarks"
+      }
+    }
+  ]
+}
