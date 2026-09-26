@@ -113,12 +113,16 @@ class CustomsOption(lib.Enum):
 
 
 # The SDK EUCountry enum lists Greece under its VAT prefix EL, so the ISO
-# code GR is added. Special fiscal territories outside the EU VAT area
-# (Tullverket, EU customs and fiscal territories) either carry their own
-# country code (AX, IC, GP, GF, MQ, RE, YT), which is absent from EUCountry,
-# or are identified by postal-code range within a member state.
+# code GR is added, and Monaco, which Tullverket treats as EU, is likewise
+# appended. Special fiscal territories outside the EU VAT area (Tullverket,
+# EU customs and fiscal territories) either carry their own country code
+# (AX, IC, GP, GF, MQ, RE, YT), which is absent from EUCountry, or are
+# identified by postal-code range within a member state. Northern Ireland
+# is inside the EU VAT area for goods and outside it for services; every
+# caller here decides customs handling for goods, so its BT postcode area
+# is admitted by prefix.
 EU_VAT_AREA_COUNTRIES: typing.FrozenSet[str] = frozenset(
-    [*(country.name for country in units.EUCountry), "GR"]
+    [*(country.name for country in units.EUCountry), "GR", "MC"]
 )
 NON_EU_VAT_POSTAL_RANGES: typing.Tuple[typing.Tuple[str, int, int], ...] = (
     ("FI", 22000, 22999),  # Åland
@@ -128,8 +132,12 @@ NON_EU_VAT_POSTAL_RANGES: typing.Tuple[typing.Tuple[str, int, int], ...] = (
     ("ES", 52000, 52999),  # Melilla
     ("DE", 78266, 78266),  # Büsingen
     ("DE", 27498, 27498),  # Heligoland
+    ("GR", 63086, 63086),  # Mount Athos
     ("IT", 23041, 23041),  # Livigno
     ("IT", 22061, 22061),  # Campione d'Italia
+)
+EU_VAT_POSTAL_PREFIXES: typing.Tuple[typing.Tuple[str, str], ...] = (
+    ("GB", "BT"),  # Northern Ireland
 )
 
 
@@ -137,15 +145,20 @@ def in_eu_vat_area(
     country_code: typing.Optional[str],
     postal_code: typing.Optional[str],
 ) -> bool:
-    """Whether an address lies inside the EU VAT area."""
+    """Whether an address lies inside the EU VAT area for goods."""
+    country = (country_code or "").upper()
     postal = str(postal_code or "").replace(" ", "")
     postal_number = int(postal) if postal.isdigit() else None
 
-    return (country_code or "").upper() in EU_VAT_AREA_COUNTRIES and not any(
-        (country_code or "").upper() == country
+    inside_member_state = country in EU_VAT_AREA_COUNTRIES and not any(
+        country == range_country
         and postal_number is not None
         and low <= postal_number <= high
-        for country, low, high in NON_EU_VAT_POSTAL_RANGES
+        for range_country, low, high in NON_EU_VAT_POSTAL_RANGES
+    )
+    return inside_member_state or any(
+        country == prefix_country and postal.upper().startswith(prefix)
+        for prefix_country, prefix in EU_VAT_POSTAL_PREFIXES
     )
 
 
