@@ -85,6 +85,70 @@ class PageType(lib.StrEnum):
     LabelCompact2x2PortraitA4 = "LabelCompact2x2PortraitA4"
 
 
+class CustomsDocumentType(lib.StrEnum):
+    """DHL Freight customs document types (CustomsDocument.type)."""
+
+    CommercialInvoice = "CommercialInvoice"
+    ProformaInvoice = "ProformaInvoice"
+
+
+class TransportMovement(lib.StrEnum):
+    """DHL Freight customs document transport movements."""
+
+    Export = "Export"
+    Import = "Import"
+
+
+class CustomsOption(lib.Enum):
+    """Unified ``customs.options`` registration identifiers.
+
+    ``voec_number`` is not a member of the core
+    ``karrio.core.units.CustomsOption`` enum, and the options helper drops
+    keys unknown to both enums, so customs options are converted with this
+    enum as the ``option_type`` to keep it visible.
+    """
+
+    eori_number = lib.OptionEnum("eori_number")
+    voec_number = lib.OptionEnum("voec_number")
+
+
+# The SDK EUCountry enum lists Greece under its VAT prefix EL, so the ISO
+# code GR is added. Special fiscal territories outside the EU VAT area
+# (Tullverket, EU customs and fiscal territories) either carry their own
+# country code (AX, IC, GP, GF, MQ, RE, YT), which is absent from EUCountry,
+# or are identified by postal-code range within a member state.
+EU_VAT_AREA_COUNTRIES: typing.FrozenSet[str] = frozenset(
+    [*(country.name for country in units.EUCountry), "GR"]
+)
+NON_EU_VAT_POSTAL_RANGES: typing.Tuple[typing.Tuple[str, int, int], ...] = (
+    ("FI", 22000, 22999),  # Åland
+    ("ES", 35000, 35999),  # Canary Islands (Las Palmas)
+    ("ES", 38000, 38999),  # Canary Islands (Santa Cruz de Tenerife)
+    ("ES", 51000, 51999),  # Ceuta
+    ("ES", 52000, 52999),  # Melilla
+    ("DE", 78266, 78266),  # Büsingen
+    ("DE", 27498, 27498),  # Heligoland
+    ("IT", 23041, 23041),  # Livigno
+    ("IT", 22061, 22061),  # Campione d'Italia
+)
+
+
+def in_eu_vat_area(
+    country_code: typing.Optional[str],
+    postal_code: typing.Optional[str],
+) -> bool:
+    """Whether an address lies inside the EU VAT area."""
+    postal = str(postal_code or "").replace(" ", "")
+    postal_number = int(postal) if postal.isdigit() else None
+
+    return (country_code or "").upper() in EU_VAT_AREA_COUNTRIES and not any(
+        (country_code or "").upper() == country
+        and postal_number is not None
+        and low <= postal_number <= high
+        for country, low, high in NON_EU_VAT_POSTAL_RANGES
+    )
+
+
 class ShippingService(lib.StrEnum):
     """DHL Freight product codes.
 
@@ -133,6 +197,27 @@ class ShippingOption(lib.Enum):
     )
     # Access code (int) for home-delivery doorstep delivery.
     dhl_freight_sweden_doorstep_access_code = lib.OptionEnum("doorstepDelivery", int)
+
+    # Customs services each carry a DHL fee, so they are only sent when their
+    # selector is true. Own declaration carries the customs identifier (MRN)
+    # and joint declaration the joint-declaration identifier (SFID) in
+    # separate options, so a selector without its identifier fails fast.
+    dhl_freight_sweden_customs_handling_standard = lib.OptionEnum(
+        "customsHandlingStandard", bool
+    )
+    dhl_freight_sweden_customs_handling_full_service = lib.OptionEnum(
+        "customsHandlingFullService", bool
+    )
+    dhl_freight_sweden_customs_own_declaration = lib.OptionEnum(
+        "customsCustomersOwnDeclaration", bool
+    )
+    dhl_freight_sweden_customs_own_declaration_id = lib.OptionEnum(
+        "customsId", str
+    )
+    dhl_freight_sweden_customs_joint_declaration = lib.OptionEnum(
+        "customsJointDeclaration", bool
+    )
+    dhl_freight_sweden_customs_joint_declaration_id = lib.OptionEnum("sfid", str)
 
     # Driver instructions (maxLength 140 characters each per the
     # transport-instruction spec).

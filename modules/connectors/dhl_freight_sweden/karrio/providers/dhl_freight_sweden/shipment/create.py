@@ -6,9 +6,11 @@ import karrio.schemas.dhl_freight_sweden.print_request as dhl_freight_sweden_pri
 import karrio.schemas.dhl_freight_sweden.print_response as dhl_freight_sweden_report
 
 import base64
+import datetime
 import typing
 import karrio.lib as lib
 import karrio.core.models as models
+import karrio.core.units as units
 import karrio.core.errors as errors
 import karrio.providers.dhl_freight_sweden.error as error
 import karrio.providers.dhl_freight_sweden.utils as provider_utils
@@ -17,6 +19,18 @@ import karrio.providers.dhl_freight_sweden.units as provider_units
 
 class DeclarationCurrencyError(errors.ShippingSDKDetailedError):
     """Raised when commodity value currencies conflict with the declaration."""
+
+    code = "SHIPPING_SDK_FIELD_ERROR"
+
+
+class CustomsServiceIdentifierError(errors.ShippingSDKDetailedError):
+    """Raised when a selected customs service lacks its required identifier."""
+
+    code = "SHIPPING_SDK_FIELD_ERROR"
+
+
+class CustomsInvoiceNumberError(errors.ShippingSDKDetailedError):
+    """Raised when a customs document has neither invoice number nor reference."""
 
     code = "SHIPPING_SDK_FIELD_ERROR"
 
@@ -34,9 +48,15 @@ def parse_shipment_response(
     # The proxy appends address-validation warning messages as optional
     # trailing elements after the booking and print bodies.
     booking, printed, *warnings = _response.deserialize()
+    customs_omitted = (_response.ctx or {}).get("customs_omitted")
     messages = [
         *error.parse_error_response([booking, printed], settings),
         *(lib.to_object(models.Message, warning) for warning in warnings),
+        *lib.identity(
+            [_customs_omitted_message(customs_omitted, settings)]
+            if customs_omitted
+            else []
+        ),
     ]
 
     instruction = (booking or {}).get("transportInstruction") or {}
@@ -45,6 +65,31 @@ def parse_shipment_response(
     )
 
     return details, messages
+
+
+def _customs_omitted_message(
+    countries: dict,
+    settings: provider_utils.Settings,
+) -> models.Message:
+    dropped_services = countries.get("dropped_services") or []
+
+    return models.Message(
+        carrier_name=settings.carrier_name,
+        carrier_id=settings.carrier_id,
+        code="customs_omitted_intra_eu",
+        level="warning",
+        message=(
+            "Customs data was not sent: the shipment from "
+            f"{countries['shipper_country_code']} to "
+            f"{countries['recipient_country_code']} stays within the EU VAT area"
+            + lib.identity(
+                f"; dropped customs services: {', '.join(dropped_services)}"
+                if any(dropped_services)
+                else ""
+            )
+        ),
+        details=countries,
+    )
 
 
 def _extract_details(
@@ -135,20 +180,21 @@ def shipment_request(
         or (payload.customs.incoterm if payload.customs else None)
         or "1"
     )
+    shipping_date = lib.fdate(payload.options.get("shipment_date"))
     procedure_code = (
         options.dhl_freight_sweden_customs_procedure_code.state or "1042"
     )
     service_point_party = _service_point_party(options)
+    customs_options = lib.to_customs_info(
+        payload.customs, option_type=provider_units.CustomsOption
+    ).options
     page_type = provider_units.PageType.map(
         options.dhl_freight_sweden_label_page_type.state
         or settings.connection_config.label_page_type.state
         or provider_units.PageType.Label.value
     ).value_or_key
-    customs = lib.identity(
-        _customs_information(
-            payload.customs, settings, recipient.country_code, procedure_code
-        )
-        if payload.customs
+    has_customs_data = bool(
+        payload.customs
         and any(
             [
                 payload.customs.commodities,
@@ -156,6 +202,38 @@ def shipment_request(
                 payload.customs.invoice_date,
             ]
         )
+    )
+    # Callers may send customs data maximally; within the EU VAT area no
+    # customs declaration is required, so customs information and the priced
+    # customs services are dropped instead of validated.
+    within_eu_vat_area = all(
+        provider_units.in_eu_vat_area(address.country_code, address.postal_code)
+        for address in (shipper, recipient)
+    )
+    requested_customs_services = _customs_services(options, customs_options)
+    customs_services = lib.identity(
+        {} if within_eu_vat_area else requested_customs_services
+    )
+    customs_omitted = within_eu_vat_area and any(
+        [
+            has_customs_data,
+            payload.customs and payload.customs.options,
+            requested_customs_services,
+        ]
+    )
+    if not within_eu_vat_area:
+        _check_customs_service_identifiers(options, customs_options)
+    customs = lib.identity(
+        _customs_information(
+            payload.customs,
+            customs_options,
+            shipper.country_code,
+            recipient.country_code,
+            procedure_code,
+            payload.reference,
+            shipping_date,
+        )
+        if has_customs_data and not within_eu_vat_area
         else None
     )
 
@@ -173,7 +251,7 @@ def shipment_request(
         # productCode is generated as Optional[int]; the SPI product and codes
         # such as 402/502 must serialize as strings on the wire.
         productCode=str(service),
-        shippingDate=lib.fdate(payload.options.get("shipment_date")),
+        shippingDate=shipping_date,
         pickupInstruction=options.dhl_freight_sweden_pickup_instruction.state,
         deliveryInstruction=options.dhl_freight_sweden_delivery_instruction.state,
         totalNumberOfPieces=len(packages),
@@ -232,6 +310,7 @@ def shipment_request(
                 if options.dhl_freight_sweden_insurance.state is not None
                 else None
             ),
+            **customs_services,
         ),
         customsInformation=customs,
     )
@@ -244,15 +323,33 @@ def shipment_request(
     return lib.Serializable(
         request,
         lib.to_dict,
-        dict(print_options=lib.to_dict(print_options)),
+        dict(
+            print_options=lib.to_dict(print_options),
+            customs_omitted=lib.identity(
+                dict(
+                    shipper_country_code=shipper.country_code,
+                    recipient_country_code=recipient.country_code,
+                    **lib.identity(
+                        dict(dropped_services=list(requested_customs_services))
+                        if requested_customs_services
+                        else {}
+                    ),
+                )
+                if customs_omitted
+                else None
+            ),
+        ),
     )
 
 
 def _customs_information(
     customs: models.Customs,
-    settings: provider_utils.Settings,
+    customs_options: units.CustomsOptions,
+    origin_country: str,
     destination_country: str,
     procedure_code: str,
+    reference: typing.Optional[str],
+    shipping_date: typing.Optional[str],
 ) -> dhl_freight_sweden_req.CustomsInformationType:
     duty = customs.duty
     commodities = customs.commodities or []
@@ -286,48 +383,173 @@ def _customs_information(
             },
         )
 
+    invoice_number = customs.invoice or reference
+    if not invoice_number:
+        raise CustomsInvoiceNumberError(
+            "A customs document requires an invoice number "
+            "(customs.invoice) or a shipment reference",
+            details={
+                "customs.invoice": dict(
+                    code="required", message="invoice number is required"
+                )
+            },
+        )
+
     # The API requires at least one customs document whenever the customs
-    # information section is present, so the document is always emitted; an
-    # invoice used for payment is commercial, otherwise a customs-only pro forma.
+    # information section is present, so the document is always emitted.
+    # DHL records a missing invoice date as 0001-01-01 (booking 2906745548),
+    # so it falls back to the shipping date, then the booking date.
     document = dhl_freight_sweden_req.CustomsDocumentType(
-        id=customs.invoice,
+        id=invoice_number,
         type=lib.identity(
-            "CommercialInvoice"
-            if any([customs.commercial_invoice, customs.invoice])
-            else "ProformaInvoice"
+            provider_units.CustomsDocumentType.CommercialInvoice.value
+            if customs.commercial_invoice
+            else provider_units.CustomsDocumentType.ProformaInvoice.value
         ),
-        # The account ships from Sweden, so a foreign destination is an
-        # export declaration; a domestic destination carries no movement.
         transportMovement=lib.identity(
-            "Export"
-            if destination_country and destination_country
-            != settings.account_country_code
+            provider_units.TransportMovement.Export.value
+            if destination_country and destination_country != origin_country
             else None
         ),
-        invoiceDate=lib.fdate(customs.invoice_date),
+        invoiceDate=lib.identity(
+            lib.fdate(customs.invoice_date)
+            or shipping_date
+            or datetime.date.today().isoformat()
+        ),
         invoiceCurrency=declaration_currency,
         invoiceAmount=duty.declared_value if duty else None,
+        eori=customs_options.eori_number.state or None,
     )
 
     return dhl_freight_sweden_req.CustomsInformationType(
         customsDocuments=[document],
         customsCommodities=[
-            dhl_freight_sweden_req.CustomsCommodityType(
-                countryCodeOfOrigin=commodity.origin_country,
-                customsValueCurrency=commodity.value_currency
-                or declaration_currency,
-                customsValue=commodity.value_amount,
-                # hsItemId and procedureCode are strings on the wire even
-                # though the generated type annotates them as int.
-                hsItemId=commodity.hs_code,
-                commodityDescription=commodity.description or commodity.title,
-                procedureCode=procedure_code,
-                netWeight=commodity.weight,
-                numberOfUnits=commodity.quantity,
-            )
+            _customs_commodity(commodity, declaration_currency, procedure_code)
             for commodity in commodities
         ],
     )
+
+
+def _customs_commodity(
+    commodity: models.Commodity,
+    declaration_currency: typing.Optional[str],
+    procedure_code: str,
+) -> dhl_freight_sweden_req.CustomsCommodityType:
+    # DHL stores each line as a quantity total: the line values must sum to
+    # the invoice amount (booking 2906745548 recorded a per-unit value 30
+    # against an invoice amount 60 for 2 units).
+    quantity = commodity.quantity or 1
+
+    return dhl_freight_sweden_req.CustomsCommodityType(
+        countryCodeOfOrigin=commodity.origin_country,
+        customsValueCurrency=commodity.value_currency or declaration_currency,
+        customsValue=lib.identity(
+            lib.to_money(commodity.value_amount * quantity)
+            if commodity.value_amount is not None
+            else None
+        ),
+        # hsItemId and procedureCode are strings on the wire even though the
+        # generated type annotates them as int.
+        hsItemId=commodity.hs_code,
+        commodityDescription=commodity.description or commodity.title,
+        procedureCode=procedure_code,
+        # A commodity without a weight unit keeps the kilogram reading it had
+        # before unit conversion, unlike the SDK Product default of pounds.
+        netWeight=lib.identity(
+            units.Weight(
+                commodity.weight * quantity,
+                commodity.weight_unit or units.WeightUnit.KG.name,
+            ).KG
+            if commodity.weight is not None
+            else None
+        ),
+        numberOfUnits=quantity,
+    )
+
+
+def _customs_services(
+    options: units.ShippingOptions,
+    customs_options: units.CustomsOptions,
+) -> typing.Dict[str, typing.Any]:
+    """Selected DHL customs services keyed by transport-instruction field."""
+    services = dict(
+        customsHandlingStandard=lib.identity(
+            True if options.dhl_freight_sweden_customs_handling_standard.state else None
+        ),
+        customsHandlingFullService=lib.identity(
+            True
+            if options.dhl_freight_sweden_customs_handling_full_service.state
+            else None
+        ),
+        customsCustomersOwnDeclaration=lib.identity(
+            dhl_freight_sweden_req.CustomsCustomersOwnDeclarationType(
+                customsId=options.dhl_freight_sweden_customs_own_declaration_id.state
+            )
+            if options.dhl_freight_sweden_customs_own_declaration.state
+            else None
+        ),
+        customsJointDeclaration=lib.identity(
+            dhl_freight_sweden_req.CustomsJointDeclarationType(
+                sfid=options.dhl_freight_sweden_customs_joint_declaration_id.state
+            )
+            if options.dhl_freight_sweden_customs_joint_declaration.state
+            else None
+        ),
+        voecSupplyVAT=lib.identity(
+            dhl_freight_sweden_req.VoecSupplyVATType(
+                vatId=customs_options.voec_number.state
+            )
+            if customs_options.voec_number.state
+            else None
+        ),
+    )
+
+    return {key: value for key, value in services.items() if value is not None}
+
+
+def _check_customs_service_identifiers(
+    options: units.ShippingOptions,
+    customs_options: units.CustomsOptions,
+) -> None:
+    def is_blank(value: typing.Optional[str]) -> bool:
+        return not (value or "").strip()
+
+    missing = {
+        field: label
+        for field, label, is_missing in [
+            (
+                "customs.options.eori_number",
+                "the EORI number for standard customs handling",
+                bool(options.dhl_freight_sweden_customs_handling_standard.state)
+                and is_blank(customs_options.eori_number.state),
+            ),
+            (
+                "dhl_freight_sweden_customs_own_declaration_id",
+                "the customs identifier (MRN) for customer's own declaration",
+                bool(options.dhl_freight_sweden_customs_own_declaration.state)
+                and is_blank(options.dhl_freight_sweden_customs_own_declaration_id.state),
+            ),
+            (
+                "dhl_freight_sweden_customs_joint_declaration_id",
+                "the joint-declaration identifier (SFID) for joint declaration",
+                bool(options.dhl_freight_sweden_customs_joint_declaration.state)
+                and is_blank(
+                    options.dhl_freight_sweden_customs_joint_declaration_id.state
+                ),
+            ),
+        ]
+        if is_missing
+    }
+
+    if any(missing):
+        raise CustomsServiceIdentifierError(
+            "The selected customs services require "
+            f"{'; '.join(missing.values())}",
+            details={
+                field: dict(code="required", message=label)
+                for field, label in missing.items()
+            },
+        )
 
 
 def _service_point_party(
