@@ -1,0 +1,2068 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Delivery Options",
+    "description": "\n\nDelivery Options (DO) API provides available delivery options between a sender and a recipient.\n\nEach delivery option provided by DO will contain information needed to select the best option matching both sending\nand receiving parties' preferences. This information includes:\n* When the recipient will receive the parcel.\n* Where the parcel will be delivered to.\n* Whether the delivery is fossil free or Swan ecolabelled.\n* Recommended texts that describes the delivery from a recipient's perspective (can be used in a retailer's\ncheckout)\n* Data required to book the delivery option (e.g. EDI information), see BookingInstructions under schemas.\n\n\n## Supported Delivery Types\n\n| Delivery Type | Product Name | Description | Sender | Receiver |\n|---------------|--------------|-------------|--------|----------|\n| home | PostNord Home(17) | Delivered to the recipient's home | SE, DK, NO, FI | SE, DK, NO, FI, Europe |\n| service-point | PostNord Service Point(19) | Delivered to a PostNord service point | SE, DK, NO, FI | SE, DK, NO, FI, Europe |\n| parcel-locker | PostNord Parcel Locker(19) | Delivered to a parcel locker | SE, DK, NO, FI | SE, DK, NO, FI, Europe |\n| parcel-b2b | PostNord Parcel(18) | Delivered to the business's address | SE, DK, NO, FI | SE, DK, NO, FI, Europe |\n| pallet | PostNord Pallet(52) | Pallet delivery to the recipient's home | SE, NO, FI | SE, DK, NO, FI, Europe |\n| pallet-b2b | PostNord Pallet(52) | Pallet delivery to the business's address | SE, NO, FI | SE, DK, NO, FI, Europe |\n| groupage | PostNord Groupage(83) | Groupage delivery to the recipient's home | SE, NO, FI | SE, DK, NO, FI |\n| groupage-b2b | PostNord Groupage(83) | Groupage delivery to the business's address | SE, NO, FI | SE, DK, NO, FI |\n| mailbox | PostNord Home Small(11) | Delivered to the recipient's mailbox or door | SE | SE, NO |\n| express-mailbox | PostNord Home Small Prio(86) | Fast delivery to the recipient's mailbox or door | SE | SE, DK, NO, FI, Europe, International |\n| home-small | MyPack Home Small(30) | Delivered to the recipient's mailbox, or to service point | SE | SE |\n| international-parcel | International Parcel(91) | International parcel delivery | SE | International |\n| postnord-home-small-no | PostNord Home Small(B) | Delivered to the recipient's mailbox or door | NO | NO |\n| mailbox | PostNord Home Small(11) | Delivered to the recipient's mailbox or door | NO | NO |\n\n## Order Handling\n\nThe order handling configuration for a specific 'Warehouse'. It is used to calculate the full transport time,from the current moment until delivery. It is required that one, and only one, of its properties are provided.\n\n-----\n**Cutoff time**\n\nThe latest time an order must be placed to guarantee it will be included in the day's pickup.\nThe date provided should always be today's date. The service compares the current time against the provided cutoff time:\n- If the current time has **not yet passed** the cutoff time, the order is included in today's pickup.\n- If the current time has **already passed** the cutoff time, the pickup is shifted to the next day.\n\n**Field Name:** timeOfLatestOrder\n\n**ETA Response by DO:** 2025-09-11 15:00:00 (Exact date and time)\n\n-----\n**Time when order is handed over to PostNord**\n\nThe time and day when the order will be handed over to PostNord.\n\n**Field Name:** handOverTime\n\n**ETA Response by DO:** 2025-09-11 15:00:00 (Exact date and time)\n\n-----\n**Number of days until the order is ready for pickup**\n\nApproximately how many days it takes for the order to be ready for pickup from the time it is placed\n\n**Field Name:** daysUntilOrderIsReady\n\n**ETA Response by DO:** 0-1 (Business days range)\n\n-----\n## Customer keys\n\nDO API requires the customer's identity to enable follow-up and \nalso to correctly provide certain functionalities, such as fossil-free options. \nIt identifies the customer via the 'customerKey' attribute in the request. \n\nFormat the 'customerKey' attribute as follows:\n* Direct integrations - Use 'CompanyName'\n* Partner integrations - Use 'partnerName-CompanyName'\n* Partner/Direct integrations - For fossil free eligible customers, contact PostNord to get a customer key. \nSee 'fossilFree' for more information about fossil free eligibility. \n\n-----\n## Time Zone Handling\n\nAll date-time values in API responses are returned in the **recipient's local time zone**. \nThe time offset (e.g., +02:00) always reflects the destination country's time zone, \nregardless of the sender's time zone.\n\n**Important considerations:**\n* Response times automatically adjust based on recipient's location\n* Cross-border requests will show different time offsets than sender's local time\n* When providing input timestamps (handOverTime, timeOfLatestOrder), use the sender's/warehouse's local time zone\n* All Nordic countries observe daylight saving time with offsets changing in late March and late October\n* Consider Winter/standard time and Summer/daylight saving time\n\n**Example scenarios (winter time):**\n* Sender in Sweden (UTC+1) → Recipient in Sweden (UTC+1): Response shows +01:00\n* Sender in Sweden (UTC+1) → Recipient in Norway (UTC+1): Response shows +01:00\n* Sender in Denmark (UTC+1) → Recipient in Finland (UTC+2): Response shows +02:00\n* Sender in Finland (UTC+2) → Recipient in Denmark (UTC+1): Response shows +01:00\n\n**Example scenarios (summer time):**\n* Sender in Sweden (UTC+2) → Recipient in Sweden (UTC+2): Response shows +02:00\n* Sender in Finland (UTC+3) → Recipient in Denmark (UTC+2): Response shows +02:00\n\n-----\n**Response time and availability**\n\nOur goal is that 99/100 DO calls should be faster than 300ms (99th percentile). \nRegarding availability we aim for 99.5% successful responses.\n---\n## Language Support\n\nThe Accept-Language request header controls localization of response texts in:\n* descriptiveTexts.checkout.title\n* descriptiveTexts.checkout.briefDescription\n* descriptiveTexts.checkout.fullDescription\n* descriptiveTexts.checkout.friendlyDeliveryInfo\n\nSupported language tags:\n* en (English)\n* sv (Swedish)\n* fi (finnish)\n* no (norwegian)\n* da (danish)\n---\n## Showroom\n\nWebsite to try out the checkout experience in a (fictional) partner's checkout flow built using the PostNord Delivery Options API.\n\n[Visit the showroom](https://atcheckout-showroom.postnord.com/)\n",
+    "contact": {
+      "name": "PostNord Customer Integration",
+      "email": "kundintegration@postnord.com"
+    },
+    "version": "3.4.3"
+  },
+  "servers": [
+    {
+      "url": "https://atapi2.postnord.com/rest/shipment"
+    }
+  ],
+  "paths": {
+    "/v1/deliveryoptions/bywarehouse": {
+      "post": {
+        "tags": [
+          "Delivery Options"
+        ],
+        "summary": "Get Delivery Options by provided warehouses",
+        "description": "Returns delivery options for each warehouse provided in the request body\n",
+        "operationId": "getDeliveryOptions",
+        "parameters": [
+          {
+            "name": "apikey",
+            "in": "query",
+            "description": "The unique consumer (client) identifier, 32 characters\n",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "The language of checkout text can be specified by sending a language tag in the **Accept-Language** header.\nThe format is specified in [RFC 4647](https://datatracker.ietf.org/doc/html/rfc4647).\n\n  Example: sv-se or sv\n\nSupported languages are swedish(sv) and english(en). Default language is english.\n",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryOptionsRequest"
+              },
+              "examples": {
+                "minimal-time-of-latest-order": {
+                  "summary": "Minimal request using 'timeOfLatestOrder' (change date to be today's date)\n",
+                  "value": {
+                    "warehouses": [
+                      {
+                        "id": "warehouse1",
+                        "address": {
+                          "postCode": "17173",
+                          "street": "Terminalvägen 24",
+                          "city": "Solna",
+                          "countryCode": "SE"
+                        },
+                        "orderHandling": {
+                          "timeOfLatestOrder": "2025-09-11T15:00:00+01:00"
+                        }
+                      }
+                    ],
+                    "customer": {
+                      "customerKey": "example_request_customer_key"
+                    },
+                    "recipient": {
+                      "address": {
+                        "postCode": "41104",
+                        "countryCode": "SE"
+                      }
+                    }
+                  }
+                },
+                "minimal-hand-over-time": {
+                  "summary": "Minimal request using 'handOverTime' (change date/timestamp to be in the future)\n",
+                  "value": {
+                    "warehouses": [
+                      {
+                        "id": "warehouse1",
+                        "address": {
+                          "postCode": "17173",
+                          "street": "Terminalvägen 24",
+                          "city": "Solna",
+                          "countryCode": "SE"
+                        },
+                        "orderHandling": {
+                          "handOverTime": "2025-09-11T15:00:00+01:00"
+                        }
+                      }
+                    ],
+                    "customer": {
+                      "customerKey": "example_request_customer_key"
+                    },
+                    "recipient": {
+                      "address": {
+                        "postCode": "41104",
+                        "countryCode": "SE"
+                      }
+                    }
+                  }
+                },
+                "minimal-days-from-order-until-ready": {
+                  "summary": "Minimal request using 'daysFromOrderUntilReady'\n",
+                  "value": {
+                    "warehouses": [
+                      {
+                        "id": "warehouse1",
+                        "address": {
+                          "postCode": "17173",
+                          "street": "Terminalvägen 24",
+                          "city": "Solna",
+                          "countryCode": "SE"
+                        },
+                        "orderHandling": {
+                          "daysUntilOrderIsReady": "0-1"
+                        }
+                      }
+                    ],
+                    "customer": {
+                      "customerKey": "example_request_customer_key"
+                    },
+                    "recipient": {
+                      "address": {
+                        "postCode": "41104",
+                        "countryCode": "SE"
+                      }
+                    }
+                  }
+                },
+                "preferences": {
+                  "summary": "Request using 'preferences'\n",
+                  "value": {
+                    "warehouses": [
+                      {
+                        "id": "warehouse1",
+                        "address": {
+                          "postCode": "17173",
+                          "street": "Terminalvägen 24",
+                          "city": "Solna",
+                          "countryCode": "SE"
+                        },
+                        "orderHandling": {
+                          "daysUntilOrderIsReady": "1-2"
+                        }
+                      }
+                    ],
+                    "customer": {
+                      "customerKey": "example_request_customer_key"
+                    },
+                    "recipient": {
+                      "address": {
+                        "postCode": "41104",
+                        "countryCode": "SE"
+                      }
+                    },
+                    "preferences": {
+                      "parcelLocker": {
+                        "numberOfAdditionalOptions": 15
+                      },
+                      "servicePoint": {
+                        "numberOfAdditionalOptions": 2
+                      }
+                    }
+                  }
+                },
+                "filter": {
+                  "summary": "Request with 'filter'\n",
+                  "value": {
+                    "warehouses": [
+                      {
+                        "id": "warehouse1",
+                        "address": {
+                          "postCode": "17173",
+                          "street": "Terminalvägen 24",
+                          "city": "Solna",
+                          "countryCode": "SE"
+                        },
+                        "orderHandling": {
+                          "daysUntilOrderIsReady": "1-2"
+                        }
+                      }
+                    ],
+                    "customer": {
+                      "customerKey": "example_request_customer_key"
+                    },
+                    "recipient": {
+                      "address": {
+                        "postCode": "41104",
+                        "countryCode": "SE"
+                      }
+                    },
+                    "filter": {
+                      "deliveryTypes": [
+                        "home"
+                      ]
+                    }
+                  }
+                },
+                "parcel-info": {
+                  "summary": "Request with parcel info\n",
+                  "value": {
+                    "warehouses": [
+                      {
+                        "id": "warehouse1",
+                        "address": {
+                          "postCode": "17173",
+                          "street": "Terminalvägen 24",
+                          "city": "Solna",
+                          "countryCode": "SE"
+                        },
+                        "orderHandling": {
+                          "daysUntilOrderIsReady": "1-2"
+                        }
+                      }
+                    ],
+                    "customer": {
+                      "customerKey": "example_request_customer_key"
+                    },
+                    "recipient": {
+                      "address": {
+                        "postCode": "41104",
+                        "countryCode": "SE"
+                      }
+                    },
+                    "parcelInfo": {
+                      "length": "230",
+                      "width": "100",
+                      "height": "100",
+                      "weight": "500",
+                      "temperatureRange": {
+                        "lowest": "-15",
+                        "highest": "30"
+                      }
+                    }
+                  }
+                },
+                "full": {
+                  "summary": "Full request - produces most accurate response (change 'timeOfLatestOrder' to be today's date)\n",
+                  "value": {
+                    "warehouses": [
+                      {
+                        "id": "warehouse1",
+                        "address": {
+                          "postCode": "17173",
+                          "city": "Solna",
+                          "street": "Terminalvägen 24",
+                          "countryCode": "SE"
+                        },
+                        "orderHandling": {
+                          "timeOfLatestOrder": "2025-09-11T15:00:00+01:00"
+                        }
+                      }
+                    ],
+                    "customer": {
+                      "customerKey": "example_request_customer_key"
+                    },
+                    "recipient": {
+                      "address": {
+                        "postCode": "41104",
+                        "city": "Göteborg",
+                        "street": "Kruthusgatan 19",
+                        "countryCode": "SE"
+                      }
+                    },
+                    "parcelInfo": {
+                      "length": "230",
+                      "width": "100",
+                      "height": "100",
+                      "weight": "500",
+                      "temperatureRange": {
+                        "lowest": "-15",
+                        "highest": "30"
+                      }
+                    }
+                  }
+                },
+                "cross-border-timezone": {
+                  "summary": "Cross-border request (Finland to Denmark) - demonstrates recipient timezone in response (winter time)\n",
+                  "value": {
+                    "warehouses": [
+                      {
+                        "id": "warehouse1",
+                        "address": {
+                          "postCode": "00100",
+                          "city": "Helsinki",
+                          "street": "Mannerheimintie 1",
+                          "countryCode": "FI"
+                        },
+                        "orderHandling": {
+                          "timeOfLatestOrder": "2025-11-03T15:00:00+02:00"
+                        }
+                      }
+                    ],
+                    "customer": {
+                      "customerKey": "example_request_customer_key"
+                    },
+                    "recipient": {
+                      "address": {
+                        "postCode": "1050",
+                        "countryCode": "DK"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful operation. \n\n**Important:** All date-time values in the response use the recipient's local time zone, \nindicated by the time offset (e.g., +02:00). This may differ from the sender's time zone \nfor cross-border shipments.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryOptionsResponse"
+                },
+                "examples": {
+                  "success-timeOfLatestOrder-range": {
+                    "summary": "Response when order handling timeOfLatestOrder is used (ETA Range)",
+                    "value": {
+                      "warehouseToDeliveryOptions": [
+                        {
+                          "warehouse": {
+                            "id": "warehouse1",
+                            "address": {
+                              "countryCode": "SE",
+                              "postCode": "17173",
+                              "city": "Solna",
+                              "streetName": "Terminalvägen",
+                              "streetNumber": "24"
+                            },
+                            "orderHandling": {
+                              "timeOfLatestOrder": "2025-09-12T08:08:13.816484Z"
+                            }
+                          },
+                          "deliveryOptions": [
+                            {
+                              "type": "home",
+                              "defaultOption": {
+                                "bookingInstructions": {
+                                  "deliveryOptionId": "aa422ba652a542209d1cfea02b3358c0",
+                                  "serviceCode": "17",
+                                  "additionalServiceCodes": []
+                                },
+                                "descriptiveTexts": {
+                                  "checkout": {
+                                    "title": "Home delivery",
+                                    "briefDescription": "Nordic Swan Ecolabelled delivery to your home. Parcels weighing over 20 kg will be delivered to property front / curbside against signature.",
+                                    "fullDescription": "SATURDAY DELIVERY to over 2 million households in Sweden. You will be notified via sms/email and in the PostNord App where you can change date/time of delivery, personal delivery at the door or pickup at service points. Track your home delivery in real-time, via our live-tracking map function.",
+                                    "friendlyDeliveryInfo": "Wednesday ~ 08:00-13:00"
+                                  }
+                                },
+                                "deliveryTime": {
+                                  "date": {
+                                    "earliest": "2025-09-17T08:00:00+02:00",
+                                    "latest": "2025-09-17T13:00:00+02:00"
+                                  }
+                                },
+                                "sustainability": {
+                                  "fossilFree": false,
+                                  "nordicSwanEcoLabel": true
+                                }
+                              },
+                              "additionalOptions": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "success-timeOfLatestOrder-exact": {
+                    "summary": "Response when order handling timeOfLatestOrder is used (Exact date/time)",
+                    "value": {
+                      "warehouseToDeliveryOptions": [
+                        {
+                          "warehouse": {
+                            "id": "warehouse1",
+                            "address": {
+                              "countryCode": "SE",
+                              "postCode": "17173",
+                              "city": "Solna",
+                              "streetName": "Terminalvägen",
+                              "streetNumber": "24"
+                            },
+                            "orderHandling": {
+                              "timeOfLatestOrder": "2025-09-12T08:08:14.615488Z"
+                            }
+                          },
+                          "deliveryOptions": [
+                            {
+                              "type": "service-point",
+                              "defaultOption": {
+                                "bookingInstructions": {
+                                  "deliveryOptionId": "79ae9a4ac72645f59db43c49353e7c4b",
+                                  "serviceCode": "19",
+                                  "additionalServiceCodes": []
+                                },
+                                "descriptiveTexts": {
+                                  "checkout": {
+                                    "title": "Collect at Service point",
+                                    "briefDescription": "Delivery to a service point near you. You will be notified via SMS/email and in PostNord App.",
+                                    "fullDescription": "If you don´t make a choice, the parcel will be sent to your nearest Service point. Follow your delivery via Postnord App. You will be notified via SMS/email and in PostNord App. SATURDAY DELIVERY to Service points covering over 2 million households in Sweden. Follow your delivery via PostNord App.",
+                                    "friendlyDeliveryInfo": "Thursday ~ 16:00"
+                                  }
+                                },
+                                "deliveryTime": {
+                                  "date": {
+                                    "latest": "2025-09-18T16:00:00+02:00"
+                                  }
+                                },
+                                "sustainability": {
+                                  "fossilFree": false,
+                                  "nordicSwanEcoLabel": false
+                                }
+                              },
+                              "additionalOptions": [
+                                {
+                                  "bookingInstructions": {
+                                    "deliveryOptionId": "9764dc574fbf48d29728f005ac92bea6",
+                                    "serviceCode": "19",
+                                    "additionalServiceCodes": [
+                                      "A7"
+                                    ],
+                                    "servicePointId": "162270"
+                                  },
+                                  "descriptiveTexts": {
+                                    "checkout": {
+                                      "title": "Collect at Service point",
+                                      "briefDescription": "Nordic Swan Ecolabelled delivery to a service point near you. You will be notified via SMS/email and in PostNord App.",
+                                      "fullDescription": "If you don´t make a choice, the parcel will be sent to your nearest Service point. Follow your delivery via Postnord App. You will be notified via SMS/email and in PostNord App. SATURDAY DELIVERY to Service points covering over 2 million households in Sweden. Follow your delivery via PostNord App.",
+                                      "friendlyDeliveryInfo": "Direkten Rocent (Thursday ~ 16:00)"
+                                    }
+                                  },
+                                  "deliveryTime": {
+                                    "date": {
+                                      "latest": "2025-09-18T16:00:00+02:00"
+                                    }
+                                  },
+                                  "sustainability": {
+                                    "fossilFree": false,
+                                    "nordicSwanEcoLabel": true
+                                  },
+                                  "location": {
+                                    "name": "Direkten Rocent",
+                                    "distanceFromRecipientAddress": 644,
+                                    "address": {
+                                      "countryCode": "SE",
+                                      "postCode": "21365",
+                                      "city": "MALMÖ",
+                                      "streetName": "Adlerfelts Väg",
+                                      "streetNumber": "4F"
+                                    },
+                                    "coordinate": {
+                                      "latitude": 55.5857899,
+                                      "longitude": 13.0441512
+                                    },
+                                    "openingHours": {
+                                      "regular": {
+                                        "monday": {
+                                          "open": true,
+                                          "timeRanges": [
+                                            {
+                                              "from": "08:00",
+                                              "to": "19:00"
+                                            }
+                                          ]
+                                        },
+                                        "tuesday": {
+                                          "open": true,
+                                          "timeRanges": [
+                                            {
+                                              "from": "08:00",
+                                              "to": "19:00"
+                                            }
+                                          ]
+                                        },
+                                        "wednesday": {
+                                          "open": true,
+                                          "timeRanges": [
+                                            {
+                                              "from": "08:00",
+                                              "to": "19:00"
+                                            }
+                                          ]
+                                        },
+                                        "thursday": {
+                                          "open": true,
+                                          "timeRanges": [
+                                            {
+                                              "from": "08:00",
+                                              "to": "19:00"
+                                            }
+                                          ]
+                                        },
+                                        "friday": {
+                                          "open": true,
+                                          "timeRanges": [
+                                            {
+                                              "from": "08:00",
+                                              "to": "19:00"
+                                            }
+                                          ]
+                                        },
+                                        "saturday": {
+                                          "open": true,
+                                          "timeRanges": [
+                                            {
+                                              "from": "09:00",
+                                              "to": "17:00"
+                                            }
+                                          ]
+                                        },
+                                        "sunday": {
+                                          "open": true,
+                                          "timeRanges": [
+                                            {
+                                              "from": "09:00",
+                                              "to": "17:00"
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "success-handOverTime-exact": {
+                    "summary": "Response when order handling handOverTime is used (Exact date/time)",
+                    "value": {
+                      "warehouseToDeliveryOptions": [
+                        {
+                          "warehouse": {
+                            "id": "warehouse1",
+                            "address": {
+                              "countryCode": "SE",
+                              "postCode": "17173",
+                              "city": "Solna",
+                              "streetName": "Terminalvägen",
+                              "streetNumber": "24"
+                            },
+                            "orderHandling": {
+                              "handOverTime": "2025-09-12T08:28:45.347526Z"
+                            }
+                          },
+                          "deliveryOptions": [
+                            {
+                              "type": "service-point",
+                              "defaultOption": {
+                                "bookingInstructions": {
+                                  "deliveryOptionId": "d78e0dd824924c598b96b0dd747b9d71",
+                                  "serviceCode": "19",
+                                  "additionalServiceCodes": []
+                                },
+                                "descriptiveTexts": {
+                                  "checkout": {
+                                    "title": "Collect at Service point",
+                                    "briefDescription": "Delivery to a service point near you. You will be notified via SMS/email and in PostNord App.",
+                                    "fullDescription": "If you don´t make a choice, the parcel will be sent to your nearest Service point. Follow your delivery via Postnord App. You will be notified via SMS/email and in PostNord App. SATURDAY DELIVERY to Service points covering over 2 million households in Sweden. Follow your delivery via PostNord App.",
+                                    "friendlyDeliveryInfo": "Tuesday ~ 16:00"
+                                  }
+                                },
+                                "deliveryTime": {
+                                  "date": {
+                                    "latest": "2025-09-16T16:00:00+02:00"
+                                  }
+                                },
+                                "sustainability": {
+                                  "fossilFree": false,
+                                  "nordicSwanEcoLabel": false
+                                }
+                              },
+                              "additionalOptions": [
+                                {
+                                  "bookingInstructions": {
+                                    "deliveryOptionId": "0b918c1b38cc4737b7d349e0ea6e5e6b",
+                                    "serviceCode": "19",
+                                    "additionalServiceCodes": [
+                                      "A7"
+                                    ],
+                                    "servicePointId": "164074"
+                                  },
+                                  "descriptiveTexts": {
+                                    "checkout": {
+                                      "title": "Collect at Service point",
+                                      "briefDescription": "Nordic Swan Ecolabelled delivery to a service point near you. You will be notified via SMS/email and in PostNord App.",
+                                      "fullDescription": "If you don´t make a choice, the parcel will be sent to your nearest Service point. Follow your delivery via Postnord App. You will be notified via SMS/email and in PostNord App. SATURDAY DELIVERY to Service points covering over 2 million households in Sweden. Follow your delivery via PostNord App.",
+                                      "friendlyDeliveryInfo": "Coop Karolingatan (Tuesday ~ 16:00)"
+                                    }
+                                  },
+                                  "deliveryTime": {
+                                    "date": {
+                                      "latest": "2025-09-16T16:00:00+02:00"
+                                    }
+                                  },
+                                  "sustainability": {
+                                    "fossilFree": false,
+                                    "nordicSwanEcoLabel": true
+                                  },
+                                  "location": {
+                                    "name": "Coop Karolingatan",
+                                    "distanceFromRecipientAddress": 1014,
+                                    "address": {
+                                      "countryCode": "SE",
+                                      "postCode": "21234",
+                                      "city": "MALMÖ",
+                                      "streetName": "Karolingatan",
+                                      "streetNumber": "1"
+                                    },
+                                    "coordinate": {
+                                      "latitude": 55.5820781,
+                                      "longitude": 13.0651723
+                                    },
+                                    "openingHours": {
+                                      "regular": {
+                                        "monday": {
+                                          "open": true,
+                                          "timeRanges": [
+                                            {
+                                              "from": "07:00",
+                                              "to": "19:00"
+                                            }
+                                          ]
+                                        },
+                                        "tuesday": {
+                                          "open": true,
+                                          "timeRanges": [
+                                            {
+                                              "from": "07:00",
+                                              "to": "19:00"
+                                            }
+                                          ]
+                                        },
+                                        "wednesday": {
+                                          "open": true,
+                                          "timeRanges": [
+                                            {
+                                              "from": "07:00",
+                                              "to": "19:00"
+                                            }
+                                          ]
+                                        },
+                                        "thursday": {
+                                          "open": true,
+                                          "timeRanges": [
+                                            {
+                                              "from": "07:00",
+                                              "to": "19:00"
+                                            }
+                                          ]
+                                        },
+                                        "friday": {
+                                          "open": true,
+                                          "timeRanges": [
+                                            {
+                                              "from": "07:00",
+                                              "to": "19:00"
+                                            }
+                                          ]
+                                        },
+                                        "saturday": {
+                                          "open": true,
+                                          "timeRanges": [
+                                            {
+                                              "from": "07:00",
+                                              "to": "19:00"
+                                            }
+                                          ]
+                                        },
+                                        "sunday": {
+                                          "open": true,
+                                          "timeRanges": [
+                                            {
+                                              "from": "07:00",
+                                              "to": "19:00"
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "success-daysUntilOrderIsReady-day-range": {
+                    "summary": "Response when order handling daysUntilOrderIsReady is used (Business day range)",
+                    "value": {
+                      "warehouseToDeliveryOptions": [
+                        {
+                          "warehouse": {
+                            "id": "warehouse1",
+                            "address": {
+                              "countryCode": "SE",
+                              "postCode": "17173",
+                              "city": "Solna",
+                              "streetName": "Terminalvägen",
+                              "streetNumber": "24"
+                            },
+                            "orderHandling": {
+                              "daysUntilOrderIsReady": "0-2"
+                            }
+                          },
+                          "deliveryOptions": [
+                            {
+                              "type": "home",
+                              "defaultOption": {
+                                "bookingInstructions": {
+                                  "deliveryOptionId": "ef7e91a963a8470992de4d2b2871177c",
+                                  "serviceCode": "17",
+                                  "additionalServiceCodes": []
+                                },
+                                "descriptiveTexts": {
+                                  "checkout": {
+                                    "title": "Home delivery",
+                                    "briefDescription": "Nordic Swan Ecolabelled delivery to your home. Parcels weighing over 20 kg will be delivered to property front / curbside against signature.",
+                                    "fullDescription": "SATURDAY DELIVERY to over 2 million households in Sweden. You will be notified via sms/email and in the PostNord App where you can change date/time of delivery, personal delivery at the door or pickup at service points. Track your home delivery in real-time, via our live-tracking map function.",
+                                    "friendlyDeliveryInfo": "1-3 days"
+                                  }
+                                },
+                                "deliveryTime": {
+                                  "dayRange": {
+                                    "days": "1-3"
+                                  }
+                                },
+                                "sustainability": {
+                                  "fossilFree": false,
+                                  "nordicSwanEcoLabel": true
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "success-full": {
+                    "summary": "Full response",
+                    "value": {
+                      "warehouseToDeliveryOptions": [
+                        {
+                          "warehouse": {
+                            "id": "warehouse1",
+                            "address": {
+                              "countryCode": "SE",
+                              "postCode": "17173",
+                              "city": "Solna",
+                              "streetName": "Terminalvägen",
+                              "streetNumber": "24"
+                            },
+                            "orderHandling": {
+                              "handOverTime": "2025-09-12T08:28:45.347526Z"
+                            }
+                          },
+                          "deliveryOptions": [
+                            {
+                              "type": "home",
+                              "defaultOption": {
+                                "bookingInstructions": {
+                                  "deliveryOptionId": "3b17a3cdb7f74d71bb2e461ed9f5c300",
+                                  "serviceCode": "17",
+                                  "additionalServiceCodes": []
+                                },
+                                "descriptiveTexts": {
+                                  "checkout": {
+                                    "title": "Home delivery",
+                                    "briefDescription": "Nordic Swan Ecolabelled delivery to your home. Parcels weighing over 20 kg will be delivered to property front / curbside against signature.",
+                                    "fullDescription": "SATURDAY DELIVERY to over 2 million households in Sweden. You will be notified via sms/email and in the PostNord App where you can change date/time of delivery, personal delivery at the door or pickup at service points. Track your home delivery in real-time, via our live-tracking map function.",
+                                    "friendlyDeliveryInfo": "Monday ~ 09:00-14:00"
+                                  }
+                                },
+                                "deliveryTime": {
+                                  "date": {
+                                    "earliest": "2025-09-15T09:00:00+02:00",
+                                    "latest": "2025-09-15T14:00:00+02:00"
+                                  }
+                                },
+                                "sustainability": {
+                                  "fossilFree": true,
+                                  "nordicSwanEcoLabel": true
+                                }
+                              },
+                              "additionalOptions": []
+                            },
+                            {
+                              "type": "parcel-locker",
+                              "additionalOptions": [
+                                {
+                                  "bookingInstructions": {
+                                    "deliveryOptionId": "f8b474ee54be40329500af0190a5e595",
+                                    "serviceCode": "19",
+                                    "additionalServiceCodes": [
+                                      "A7"
+                                    ],
+                                    "servicePointId": "2559827"
+                                  },
+                                  "descriptiveTexts": {
+                                    "checkout": {
+                                      "title": "Collect at parcel locker",
+                                      "briefDescription": "Nordic Swan Ecolabelled delivery to a parcel locker near you and opened via PostNord App with Mobile BankID. You will be notified via SMS/email and in the PostNord App.",
+                                      "fullDescription": "The parcel lockers are available 24 hours a day, all year round. You open your locker with secure identification, via PostNord App and Mobile BankID. You will be notified via sms/email and in the PostNord App where you can track your parcel. If we are unable to deliver to the parcel locker, e.g. due to the size of the parcel or if the locker is full, the parcel will be delivered to the nearest Service point.",
+                                      "friendlyDeliveryInfo": "Paketbox Thomsons Väg (Tomorrow ~ 15:00)"
+                                    }
+                                  },
+                                  "deliveryTime": {
+                                    "date": {
+                                      "latest": "2025-09-13T15:00:00+02:00"
+                                    }
+                                  },
+                                  "sustainability": {
+                                    "fossilFree": true,
+                                    "nordicSwanEcoLabel": true
+                                  },
+                                  "location": {
+                                    "name": "Paketbox Thomsons Väg",
+                                    "distanceFromRecipientAddress": 413,
+                                    "address": {
+                                      "countryCode": "SE",
+                                      "postCode": "21372",
+                                      "city": "MALMÖ",
+                                      "streetName": "Thomsons Väg",
+                                      "streetNumber": "28C"
+                                    },
+                                    "coordinate": {
+                                      "latitude": 55.58683291,
+                                      "longitude": 13.0548913
+                                    },
+                                    "accessibility": {
+                                      "parcelLockerLocation": "outdoor"
+                                    },
+                                    "openingHours": {
+                                      "regular": {
+                                        "monday": {
+                                          "open": true,
+                                          "timeRanges": [
+                                            {
+                                              "from": "00:00",
+                                              "to": "23:59"
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "deviations": []
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "type": "service-point",
+                              "defaultOption": {
+                                "bookingInstructions": {
+                                  "deliveryOptionId": "c4dc3037402c4ce6b76af81e43ea002e",
+                                  "serviceCode": "19",
+                                  "additionalServiceCodes": []
+                                },
+                                "descriptiveTexts": {
+                                  "checkout": {
+                                    "title": "Collect at Service point",
+                                    "briefDescription": "Delivery to a service point near you. You will be notified via SMS/email and in PostNord App.",
+                                    "fullDescription": "If you don´t make a choice, the parcel will be sent to your nearest Service point. Follow your delivery via Postnord App. You will be notified via SMS/email and in PostNord App. SATURDAY DELIVERY to Service points covering over 2 million households in Sweden. Follow your delivery via PostNord App.",
+                                    "friendlyDeliveryInfo": "Tomorrow ~ 16:00"
+                                  }
+                                },
+                                "deliveryTime": {
+                                  "date": {
+                                    "latest": "2025-09-13T16:00:00+02:00"
+                                  }
+                                },
+                                "sustainability": {
+                                  "fossilFree": false,
+                                  "nordicSwanEcoLabel": false
+                                }
+                              },
+                              "additionalOptions": [
+                                {
+                                  "bookingInstructions": {
+                                    "deliveryOptionId": "b68e3eba9e87489bb22ff15f1377cdf8",
+                                    "serviceCode": "19",
+                                    "additionalServiceCodes": [
+                                      "A7"
+                                    ],
+                                    "servicePointId": "164074"
+                                  },
+                                  "descriptiveTexts": {
+                                    "checkout": {
+                                      "title": "Collect at Service point",
+                                      "briefDescription": "Nordic Swan Ecolabelled delivery to a service point near you. You will be notified via SMS/email and in PostNord App.",
+                                      "fullDescription": "If you don´t make a choice, the parcel will be sent to your nearest Service point. Follow your delivery via Postnord App. You will be notified via SMS/email and in PostNord App. SATURDAY DELIVERY to Service points covering over 2 million households in Sweden. Follow your delivery via PostNord App.",
+                                      "friendlyDeliveryInfo": "Coop Karolingatan (Tomorrow ~ 16:00)"
+                                    }
+                                  },
+                                  "deliveryTime": {
+                                    "date": {
+                                      "latest": "2025-09-13T16:00:00+02:00"
+                                    }
+                                  },
+                                  "sustainability": {
+                                    "fossilFree": true,
+                                    "nordicSwanEcoLabel": true
+                                  },
+                                  "location": {
+                                    "name": "Coop Karolingatan",
+                                    "distanceFromRecipientAddress": 1014,
+                                    "address": {
+                                      "countryCode": "SE",
+                                      "postCode": "21234",
+                                      "city": "MALMÖ",
+                                      "streetName": "Karolingatan",
+                                      "streetNumber": "1"
+                                    },
+                                    "coordinate": {
+                                      "latitude": 55.5820781,
+                                      "longitude": 13.0651723
+                                    },
+                                    "openingHours": {
+                                      "regular": {
+                                        "monday": {
+                                          "open": true,
+                                          "timeRanges": [
+                                            {
+                                              "from": "07:00",
+                                              "to": "19:00"
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "deviations": []
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "type": "express-mailbox",
+                              "defaultOption": {
+                                "bookingInstructions": {
+                                  "deliveryOptionId": "f62427032e5647b78df0cea710deda44",
+                                  "serviceCode": "86",
+                                  "additionalServiceCodes": []
+                                },
+                                "descriptiveTexts": {
+                                  "checkout": {
+                                    "title": "Fast delivery to mailbox/door",
+                                    "briefDescription": "Fast, traceable Nordic Swan Ecolabelled delivery to your mailbox or door.",
+                                    "fullDescription": "If we are unable to deliver to your mailbox, e.g. due to size, it will be delivered at your door or in a bag on the outside of your mailbox. You will be notified via the PostNord App and via sms/email.",
+                                    "friendlyDeliveryInfo": "Monday ~ 22:00"
+                                  }
+                                },
+                                "deliveryTime": {
+                                  "date": {
+                                    "latest": "2025-09-15T22:00:00+02:00"
+                                  }
+                                },
+                                "sustainability": {
+                                  "fossilFree": true,
+                                  "nordicSwanEcoLabel": true
+                                }
+                              },
+                              "additionalOptions": []
+                            },
+                            {
+                              "type": "mailbox",
+                              "defaultOption": {
+                                "bookingInstructions": {
+                                  "deliveryOptionId": "9769d0a97a5b41a9bc7020e13ab3990a",
+                                  "serviceCode": "11",
+                                  "additionalServiceCodes": []
+                                },
+                                "descriptiveTexts": {
+                                  "checkout": {
+                                    "title": "To your mailbox or at your door",
+                                    "briefDescription": "Simple, traceable Nordic Swan Ecolabelled delivery to your mailbox or door.",
+                                    "fullDescription": "If we are unable to deliver to your mailbox, e.g. due to size, it will be delivered at your door or in a bag on the outside of your mailbox. You will be notified via sms/email and in the PostNord App where you can track you parcel.",
+                                    "friendlyDeliveryInfo": "Tuesday ~ 08:39"
+                                  }
+                                },
+                                "deliveryTime": {
+                                  "date": {
+                                    "latest": "2025-09-16T08:39:00+02:00"
+                                  }
+                                },
+                                "sustainability": {
+                                  "fossilFree": true,
+                                  "nordicSwanEcoLabel": true
+                                }
+                              },
+                              "additionalOptions": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "success-cross-border": {
+                    "summary": "Cross-border response (Finland to Denmark) - note recipient timezone UTC+1 (winter time)",
+                    "value": {
+                      "warehouseToDeliveryOptions": [
+                        {
+                          "warehouse": {
+                            "id": "warehouse1",
+                            "address": {
+                              "countryCode": "FI",
+                              "postCode": "00100",
+                              "city": "Helsinki",
+                              "streetName": "Mannerheimintie",
+                              "streetNumber": "1"
+                            },
+                            "orderHandling": {
+                              "timeOfLatestOrder": "2025-11-03T15:00:00+02:00"
+                            }
+                          },
+                          "deliveryOptions": [
+                            {
+                              "type": "home",
+                              "defaultOption": {
+                                "bookingInstructions": {
+                                  "deliveryOptionId": "abc123def456789012345678901234ab",
+                                  "serviceCode": "17",
+                                  "additionalServiceCodes": []
+                                },
+                                "descriptiveTexts": {
+                                  "checkout": {
+                                    "title": "Home delivery",
+                                    "briefDescription": "Delivery to your home address",
+                                    "fullDescription": "You will be notified via SMS/email and in the PostNord App where you can track your parcel.",
+                                    "friendlyDeliveryInfo": "Wednesday ~ 10:00-15:00"
+                                  }
+                                },
+                                "deliveryTime": {
+                                  "date": {
+                                    "earliest": "2025-11-05T10:00:00+01:00",
+                                    "latest": "2025-11-05T15:00:00+01:00"
+                                  }
+                                },
+                                "sustainability": {
+                                  "fossilFree": false,
+                                  "nordicSwanEcoLabel": true
+                                }
+                              },
+                              "additionalOptions": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The server cannot or will not process the request due to something that is perceived to be a client error\n(e.g., malformed request syntax, invalid request message framing, or deceptive request routing)\n\nFault codes:\n* **API-003:** No delivery options available.\n* **API-005:** Missing required field.\n* **API-008:** Invalid input.\n* **API-009:** Invalid field combination.\n* **API-100:** Undefined validation error.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The user did not provide or have a valid apikey.\n",
+            "content": {}
+          },
+          "404": {
+            "description": "The origin server did not find a current representation for the target resource or is not willing to\ndisclose that one exists. (e.g.) - \"The server did not find the target resource\".\n\nFault codes:\n* Delivery options not found API-003.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The server encountered an unexpected condition that prevented it from fulfilling the request.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-codegen-request-body-name": "DeliveryOptionsRequest"
+      }
+    },
+    "/v1/deliveryoptions/manage/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Health check of Delivery Options API",
+        "description": "API will respond with \"UP\" if healthy\n",
+        "parameters": [
+          {
+            "name": "apikey",
+            "in": "query",
+            "description": "The unique consumer (client) identifier, 32 characters\n",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful operation\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "DeliveryOptionsRequest": {
+        "required": [
+          "customer",
+          "recipient",
+          "warehouses"
+        ],
+        "type": "object",
+        "properties": {
+          "customer": {
+            "$ref": "#/components/schemas/Customer"
+          },
+          "warehouses": {
+            "maxItems": 3,
+            "minItems": 1,
+            "type": "array",
+            "description": "List of warehouses that the customer wants to send from, maximum three warehouses.\nAll warehouses in the request must be in the same country.\n",
+            "items": {
+              "$ref": "#/components/schemas/Warehouse"
+            }
+          },
+          "recipient": {
+            "$ref": "#/components/schemas/Recipient"
+          },
+          "parcelInfo": {
+            "$ref": "#/components/schemas/ParcelInfo"
+          },
+          "filter": {
+            "$ref": "#/components/schemas/Filter"
+          },
+          "preferences": {
+            "$ref": "#/components/schemas/Preferences"
+          }
+        },
+        "xml": {
+          "name": "DeliveryOptionsRequest"
+        }
+      },
+      "Customer": {
+        "required": [
+          "customerKey"
+        ],
+        "type": "object",
+        "properties": {
+          "customerKey": {
+            "maxLength": 64,
+            "pattern": "^[a-zA-Z0-9åäöÅÄÖ\\-_]+$",
+            "type": "string",
+            "description": "A unique customer key. Provision of this enables a custom tailored response based on the sending\ncustomer's configuration in PostNord.\n\n**Important:** For setups without a PostNord provided customerKey,\nformat the 'customerKey' as follows:\n* Direct integrations - Use 'consignorCompanyName'\n* Partner integrations - Use 'partnerName-consignorCompanyName'\n"
+          }
+        },
+        "description": "Information related to the sending customer.\n",
+        "xml": {
+          "name": "Customer"
+        }
+      },
+      "Warehouse": {
+        "required": [
+          "address",
+          "orderHandling"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Customer provided identifier for warehouse. The id is returned in response to simplify\nidentification of warehouse.\n",
+            "example": "my_identifier"
+          },
+          "address": {
+            "$ref": "#/components/schemas/FullAddress"
+          },
+          "orderHandling": {
+            "$ref": "#/components/schemas/OrderHandling"
+          }
+        },
+        "description": "Warehouse from which the customer wants to send from.\nCurrently only warehouses in the following countries are supported:\n* Sweden (SE)\n* Denmark (DK)\n* Norway (NO)\n* Finland (FI)\n",
+        "xml": {
+          "name": "Warehouse"
+        }
+      },
+      "OrderHandling": {
+        "type": "object",
+        "properties": {
+          "handOverTime": {
+            "type": "string",
+            "description": "Time and date when the order will be handed over to PostNord. The sender must take the pick up time as well\nas their pick and pack time into account so that the order is guaranteed to be handed over to PostNord\non the provided handOverTime.\n'handOverTime' can maximum be 14 days ahead in time and maximum 5 minutes in the past.\n\n**Time Zone:** Provide this timestamp in the sender's/warehouse's local time zone (e.g., +01:00 for Sweden, +02:00 for Finland in winter).\n",
+            "format": "date-time",
+            "example": "2025-10-30T18:00:00+01:00"
+          },
+          "timeWhenOrderIsReady": {
+            "type": "string",
+            "description": "**Important:** Not yet supported. Please use one of the other order handling alternatives instead.\nContact us with your use case if you need this functionality.\n\nTime and date when order is ready for pick up. The time and date must be in the future and maximum 14\ndays ahead in time.\n\n**Time Zone:** Provide this timestamp in the sender's/warehouse's local time zone.\n",
+            "format": "date-time",
+            "example": "2025-10-30T15:32:28+01:00"
+          },
+          "daysUntilOrderIsReady": {
+            "pattern": "^[0-9]{1,2}-[0-9]{1,2}$",
+            "type": "string",
+            "description": "A range of days it will take before the item is ready for pick up, where the first number is the minimum\namount of days to have the item ready for pick up and the second number is the maximum.\n",
+            "example": "2-4"
+          },
+          "pickAndPackTime": {
+            "type": "integer",
+            "description": "**Important:** Not yet supported. Please use one of the other order handling alternatives instead.\nContact us with your use case if you need this functionality. \n\nThe number of minutes it takes from completion of order, i.e., the purchase, until the order is ready for\npick up.\n\n## Example\nThe recipient chooses items to buy - proceeds to checkout and completes the purchase. The pick and pack time\nis the duration between when the purchase is completed until:\n1. The order's items are picked up from the warehouse.\n2. The items are wrapped and packed with a label printed and attached.\n3. The order is ready for pick up.\n",
+            "format": "int32"
+          },
+          "timeOfLatestOrder": {
+            "type": "string",
+            "description": "The latest time (cutoff) an order can be placed for it to be included in today's pickup. The date provided should always be today's date.\n\nThe service compares the current time against the provided cutoff time on the same day:\n- If the current time has **not yet passed** the cutoff time, the order is included in today's pickup and shipping starts today.\n- If the current time has **already passed** the cutoff time, the pickup is shifted to the next day (cutoff time + 1 day).\n\n**Time Zone:** Provide this timestamp in the sender's/warehouse's local time zone (e.g., +01:00 for Sweden in winter, +02:00 for Sweden in summer).\n",
+            "format": "date-time",
+            "example": "2025-10-30T17:32:28+01:00"
+          }
+        },
+        "description": "The order handling configuration for a specific 'Warehouse'. It is used to calculate the full transport time,\nfrom the current moment until delivery. \n\n**Time Zone for Input:** When providing timestamps (handOverTime, timeOfLatestOrder, timeWhenOrderIsReady), \nuse the sender's/warehouse's local time zone with the appropriate offset. The API will automatically calculate \ndelivery times and return them in the recipient's time zone.\n\nIt is required that one, and only one, of its properties are provided.\n",
+        "xml": {
+          "name": "OrderHandling"
+        }
+      },
+      "Address": {
+        "type": "object",
+        "properties": {
+          "countryCode": {
+            "type": "string",
+            "example": "SE"
+          },
+          "postCode": {
+            "maxLength": 10,
+            "minLength": 3,
+            "type": "string",
+            "example": "12345"
+          },
+          "city": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string",
+            "example": "Stockholm"
+          },
+          "street": {
+            "maxLength": 150,
+            "minLength": 1,
+            "type": "string",
+            "example": "Storgatan 9"
+          },
+          "streetName": {
+            "maxLength": 150,
+            "minLength": 1,
+            "type": "string",
+            "example": "Storgatan"
+          },
+          "streetNumber": {
+            "maxLength": 20,
+            "minLength": 1,
+            "type": "string",
+            "example": "14C"
+          }
+        },
+        "xml": {
+          "name": "Address"
+        }
+      },
+      "Recipient": {
+        "required": [
+          "address"
+        ],
+        "type": "object",
+        "properties": {
+          "address": {
+            "$ref": "#/components/schemas/RecipientAddress"
+          }
+        },
+        "xml": {
+          "name": "Recipient"
+        }
+      },
+      "RecipientAddress": {
+        "required": [
+          "countryCode",
+          "postCode"
+        ],
+        "type": "object",
+        "description": "Address to which the customer wants to send to. Street can't be combined with streetName/streetNumber.\nThe following recipient countries are currently supported:\n* Sweden (SE)\n* Denmark (DK)\n* Norway (NO)\n* Finland (FI)\n",
+        "xml": {
+          "name": "RecipientAddress"
+        },
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Address"
+          }
+        ]
+      },
+      "FullAddress": {
+        "required": [
+          "city",
+          "countryCode",
+          "postCode"
+        ],
+        "type": "object",
+        "description": "Either street or both streetName and streetNumber are required.\n",
+        "xml": {
+          "name": "FullAddress"
+        },
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Address"
+          }
+        ]
+      },
+      "ParcelInfo": {
+        "type": "object",
+        "properties": {
+          "length": {
+            "type": "integer",
+            "description": "Parcel length in millimeters\n",
+            "format": "int32",
+            "example": 130
+          },
+          "width": {
+            "type": "integer",
+            "description": "Parcel width in millimeters\n",
+            "format": "int32",
+            "example": 270
+          },
+          "height": {
+            "type": "integer",
+            "description": "Parcel height in millimeters\n",
+            "format": "int32",
+            "example": 100
+          },
+          "weight": {
+            "type": "integer",
+            "description": "Parcel weight in grams\n",
+            "format": "int32",
+            "example": 145
+          },
+          "temperatureRange": {
+            "$ref": "#/components/schemas/TemperatureRange"
+          }
+        },
+        "description": "**Important:** The logic for this property is not implemented yet. However, if this information is sent it\nstill needs to be correct, otherwise requests could result in regression bugs once new features are implemented.\n\nInformation about the parcel. If provided, this information is used to filter out delivery options that are\nnot suitable for the parcel.\n",
+        "xml": {
+          "name": "ParcelInfo"
+        }
+      },
+      "TemperatureRange": {
+        "required": [
+          "highest",
+          "lowest"
+        ],
+        "type": "object",
+        "properties": {
+          "lowest": {
+            "type": "integer",
+            "description": "Lowest temperature that the parcel can tolerate.\n",
+            "format": "int32"
+          },
+          "highest": {
+            "type": "integer",
+            "description": "Highest temperature that the parcel can tolerate.\n",
+            "format": "int32"
+          }
+        },
+        "description": "A temperature range in Celsius that the parcel can tolerate. Temperatures outside of this range could lead to\ndamage to the parcel.\n",
+        "xml": {
+          "name": "TemperatureRange"
+        }
+      },
+      "Filter": {
+        "required": [
+          "deliveryTypes"
+        ],
+        "type": "object",
+        "properties": {
+          "deliveryTypes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeliveryType"
+            }
+          }
+        },
+        "description": "An optional filter for retrieving a subset of delivery options based on a certain property.\nIf this object is omitted it is assumed that all delivery options are requested\nand will be present in the response. \n\nCurrently the following filters are supported:\n* deliveryTypes: A filter that matches on delivery types. \n\nIf empty, the following delivery types are evaluated to be matched and included in the response (based on if\nthey are valid given the warehouse's location and recipient's location):\n* home\n* parcel-locker\n* service-point\n* mailbox\n* express-mailbox\n",
+        "xml": {
+          "name": "Filter"
+        }
+      },
+      "Preferences": {
+        "type": "object",
+        "properties": {
+          "parcelLocker": {
+            "$ref": "#/components/schemas/ParcelLockerPreferences"
+          },
+          "servicePoint": {
+            "$ref": "#/components/schemas/ServicePointPreferences"
+          }
+        },
+        "description": "Preferences regarding what should be returned in the response.\n",
+        "xml": {
+          "name": "Preferences"
+        }
+      },
+      "ParcelLockerPreferences": {
+        "required": [
+          "numberOfAdditionalOptions"
+        ],
+        "type": "object",
+        "properties": {
+          "numberOfAdditionalOptions": {
+            "maximum": 15,
+            "minimum": 1,
+            "type": "integer",
+            "description": "Desired number of additional options to be returned, if available.",
+            "default": 5
+          }
+        }
+      },
+      "ServicePointPreferences": {
+        "required": [
+          "numberOfAdditionalOptions"
+        ],
+        "type": "object",
+        "properties": {
+          "numberOfAdditionalOptions": {
+            "maximum": 15,
+            "minimum": 1,
+            "type": "integer",
+            "description": "Desired number of additional options to be returned, if available.",
+            "default": 5
+          }
+        }
+      },
+      "DeliveryOptionsResponse": {
+        "type": "object",
+        "properties": {
+          "warehouseToDeliveryOptions": {
+            "type": "array",
+            "description": "A list containing one 'DeliveryOptionsPerWarehouse' for each warehouse provided in the request.\nWarehouses without available options will be excluded from the list.\n",
+            "items": {
+              "$ref": "#/components/schemas/DeliveryOptionsPerWarehouse"
+            }
+          }
+        },
+        "xml": {
+          "name": "DeliveryOptionsResponse"
+        }
+      },
+      "DeliveryOptionsPerWarehouse": {
+        "required": [
+          "deliveryOptions",
+          "warehouse"
+        ],
+        "type": "object",
+        "properties": {
+          "warehouse": {
+            "$ref": "#/components/schemas/Warehouse"
+          },
+          "deliveryOptions": {
+            "type": "array",
+            "description": "A list containing one 'DeliveryOptionsPerType' for each possible delivery type (based on warehouse's location, \nrecipient's location and request filter).\nIf a delivery type has no available options it will be excluded.\n",
+            "items": {
+              "$ref": "#/components/schemas/DeliveryOptionsPerType"
+            }
+          }
+        },
+        "description": "Delivery options for a warehouse provided in the request.\n",
+        "xml": {
+          "name": "DeliveryOptionsPerWarehouse"
+        }
+      },
+      "DeliveryOptionsPerType": {
+        "required": [
+          "additionalOptions",
+          "type"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "$ref": "#/components/schemas/DeliveryType"
+          },
+          "defaultOption": {
+            "$ref": "#/components/schemas/DeliveryOption"
+          },
+          "additionalOptions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeliveryOption"
+            }
+          }
+        },
+        "description": "## Summary\nDescribes the available options for a specific delivery type. Each delivery type\nhas a 'defaultOption' as  well as 'additionalOptions'.\n\n## Default option\nA 'defaultOption' is an option gets the default behavior for a delivery type when\nbooked. The behavior when booking a 'defaultOption' for each delivery type is\ndescribed below.\n\n### home\nThe default behavior for 'home' is for the parcel to be delivered without a\nspecific delivery time booked, thus it will be delivered as soon as possible.\n\n### service-point\nThe default behavior for 'service-point' is to have the parcel delivered to the\ndefault service point that is assigned to recipient's post code (each post code\nhas one of these).\n\n### mailbox\nThe default behavior for 'mailbox' is for it to be delivered as soon as possible,\ngiven more economical and slower means of transportation than 'express-mailbox'.\nNote that 'mailbox' only has a default behavior.\n\n### express-mailbox\nThe default behavior for 'express-mailbox' is for it to be delivered as soon as\npossible. Note that 'express-mailbox' only has a default behavior.\n\n### home-small\nThe default behavior for 'home-small' is for it to be delivered as soon as\npossible. Note that 'home-small' only has a default behavior.\n\n### pallet\nThe default behavior for 'pallet' is for the parcel to be delivered without a\nspecific delivery time booked, thus it will be delivered as soon as possible.\nNote that 'pallet' only has a default behavior.\n\n### groupage\nThe default behavior for 'groupage' is for the parcel to be delivered without a\nspecific delivery time booked, thus it will be delivered as soon as possible.\nNote that 'groupage' only has a default behavior.\n\n### parcel-b2b\nThe default behavior for 'parcel-b2b' is for the parcel to be delivered without a\nspecific delivery time booked, thus it will be delivered as soon as possible.\nNote that 'parcel-b2b' only has a default behavior.\n\n### pallet-b2b\nThe default behavior for 'pallet-b2b' is for the parcel to be delivered without a\nspecific delivery time booked, thus it will be delivered as soon as possible.\nNote that 'pallet-b2b' only has a default behavior.\n\n### groupage-b2b\nThe default behavior for 'groupage-b2b' is for the parcel to be delivered without a\nspecific delivery time booked, thus it will be delivered as soon as possible.\nNote that 'groupage-b2b' only has a default behavior.\n\n### international-parcel\nThe default behavior for 'international-parcel' is for the parcel to be delivered without a\nspecific delivery time booked, thus it will be delivered as soon as possible.\nNote that 'international-parcel' only has a default behavior.\n\n ### postnord-home-small-no\nThe default behavior for 'postnord-home-small-no' is for it to be delivered as soon as possible.\nNote that 'postnord-home-small-no' only has a default behavior. Only available for Norway.\n\n### Delivery types without default option\nThe following delivery types does not have a default behavior and therefore not a\n'defaultOption' either:\n* parcel-locker\n\n## Additional Options\n'additionalOptions' typically contain more information and support a higher degree\nof choice than 'defaultOption'. Each additional option represents a choice within\na delivery type (e.g. a different delivery time or location). The behaviors when\nbooking different 'additionalOptions' within a delivery type are described below,\nalong with how the options are sorted.\n\n### home\nAn additional option corresponds to a specific delivery time, thus booking it also\nmeans that a specific delivery time is booked. The options are sorted by delivery\ntime.\n\n### parcel-locker\nAn additional option corresponds to a specific parcel locker. The list is sorted\nbased of distance from the recipient's address.\n\n### service-point\nAn additional option represents a specific service point. The list is sorted based\nof distance from the recipient's address.\n\n### Delivery types without additional options\nThe following delivery types are currently only supported according to default\nbehavior and therefore do not have any 'additionalOptions' either:\n* mailbox\n* express-mailbox\n* home-small\n* pallet\n* groupage\n* parcel-b2b\n* pallet-b2b\n* groupage-b2b\n* international-parcel\n* postnord-home-small-no (Only for Norway)\n\n\n## Recommendations\nIt is strongly recommended to use 'additionalOptions' instead of 'defaultOption'\nsince it offers a higher degree of choice, which makes it more likely for the\nrecipient's needs to be met.\n\nHowever, 'additionalOptions' need more information from underlying services, and\nare therefore more susceptible to operational disturbances. It is therefore\nrecommended to use 'defaultOption' as a fallback if 'additionalOptions' is empty.\n",
+        "xml": {
+          "name": "DeliveryOptionsPerType"
+        }
+      },
+      "DeliveryType": {
+        "required": [
+          "type"
+        ],
+        "type": "string",
+        "description": "## Summary\nDescribes what type of delivery a delivery option is. The recipient experience differs enough between different\ndelivery types to justify that they should not be grouped together in a manner where they look interchangeable\n(e.g. presented in the same drop-down menu in a freight picker).\n\n## Supported delivery types\nThe supported delivery types are listed below. Note that the description of each delivery type might not\nbe updated according to the latest changes in PostNord's terms and conditions for our services. Please refer to\nthe terms and conditions for the latest information.\n\n### home\nDelivered to the recipient's home. All home options in Nordic countries have service code 17.\n\n### parcel-locker\nDelivered to a parcel locker. All parcel-locker options in Nordic countries have service code 19.\n\n### service-point\nDelivered to a PostNord service point. All service-point options in Nordic countries have service code 19.\n\n### mailbox\nDelivered to the recipient's mailbox or door. mailbox options in Sweden (SE) have service code 11.\n\n### express-mailbox\nDelivered to the recipient's mailbox or door. A faster variant of mailbox. express-mailbox options in Sweden (SE)\nhave service code 86.\n\n### home-small\nDelivered to the recipient's mailbox or to service point if too large. home-small options in Sweden (SE) have\nservice code 30.\n\n## pallet\nDelivered to the recipient's home. All pallet options in Nordic countries  have service code 52\nwith additional service code 65.\n\n## groupage\nDelivered to the recipient's home. All groupage options in Nordic countries  have service code 83\nwith additional service code 65.\n\n## parcel-b2b\nDelivered to the business's address. All parcel-b2b options in Nordic countries have service code 18.\n\n## pallet-b2b\nDelivered to the business's address. All pallet-b2b options in Nordic countries have service code 52.\n\n## groupage-b2b\nDelivered to the business's address. All groupage-b2b options in Nordic countries have service code 83.\n\n## international-parcel\nDelivered to the recipient's home. This is for delivering parcels out of Europe.\n\n## postnord-home-small-no\nDelivered to the recipient's mailbox or door.\n",
+        "xml": {
+          "name": "DeliveryType"
+        },
+        "enum": [
+          "home",
+          "parcel-locker",
+          "service-point",
+          "mailbox",
+          "express-mailbox",
+          "home-small",
+          "pallet",
+          "groupage",
+          "parcel-b2b",
+          "pallet-b2b",
+          "groupage-b2b",
+          "international-parcel",
+          "postnord-home-small-no"
+        ]
+      },
+      "DeliveryOption": {
+        "required": [
+          "bookingInstructions",
+          "deliveryTime",
+          "descriptiveTexts",
+          "sustainability"
+        ],
+        "type": "object",
+        "properties": {
+          "bookingInstructions": {
+            "$ref": "#/components/schemas/BookingInstructions"
+          },
+          "descriptiveTexts": {
+            "$ref": "#/components/schemas/DescriptiveTexts"
+          },
+          "deliveryTime": {
+            "$ref": "#/components/schemas/DeliveryTime"
+          },
+          "sustainability": {
+            "$ref": "#/components/schemas/Sustainability"
+          },
+          "location": {
+            "$ref": "#/components/schemas/DeliveryLocation"
+          }
+        },
+        "description": "Includes information needed to display and book a delivery option.\n",
+        "xml": {
+          "name": "DeliveryOption"
+        }
+      },
+      "BookingInstructions": {
+        "required": [
+          "additionalServiceCodes",
+          "deliveryOptionId",
+          "serviceCode"
+        ],
+        "type": "object",
+        "properties": {
+          "deliveryOptionId": {
+            "maxLength": 32,
+            "minLength": 32,
+            "type": "string",
+            "description": "Unique identifier for this delivery option. This ID should be specified when booking the delivery (via\nBooking API or EDI). It should be sent as reference type ZDO as a shipment reference.\n",
+            "example": "0e39e247b9844685bf9b6889532f1386"
+          },
+          "serviceCode": {
+            "type": "string",
+            "description": "The code of the service. This should be specified when booking the delivery.\n",
+            "example": "17"
+          },
+          "additionalServiceCodes": {
+            "type": "array",
+            "description": "Additional service codes associated with this delivery option. It is necessary to specify\nthese when booking the delivery.\n",
+            "items": {
+              "type": "string",
+              "example": "37"
+            }
+          },
+          "servicePointId": {
+            "type": "string",
+            "description": "The id of the delivery location. This is only set if the delivery location is not the recipient's address.\n"
+          },
+          "timeSlot": {
+            "$ref": "#/components/schemas/TimeSlot"
+          }
+        },
+        "description": "Includes all delivery option specific information needed to make a booking through the Booking API or via an EDI.\n",
+        "xml": {
+          "name": "BookingInstructions"
+        }
+      },
+      "TimeSlot": {
+        "required": [
+          "earliest",
+          "latest"
+        ],
+        "type": "object",
+        "properties": {
+          "earliest": {
+            "type": "string",
+            "description": "The earliest date and time at which the delivery is expected to be delivered.\nTime is in the recipient's local time zone.\n",
+            "format": "date-time",
+            "example": "2025-11-05T14:00:00+01:00"
+          },
+          "latest": {
+            "type": "string",
+            "description": "The latest date and time at which the delivery is expected to be delivered.\nTime is in the recipient's local time zone.\n",
+            "format": "date-time",
+            "example": "2025-11-05T20:00:00+01:00"
+          }
+        },
+        "description": "Contains the timeslot for this delivery option.\n\n**Time Zone:** All times are expressed in the recipient's local time zone.\n",
+        "xml": {
+          "name": "TimeSlot"
+        }
+      },
+      "DescriptiveTexts": {
+        "required": [
+          "checkout"
+        ],
+        "type": "object",
+        "properties": {
+          "checkout": {
+            "$ref": "#/components/schemas/CheckoutTexts"
+          }
+        },
+        "description": "Recommended texts that describes the delivery option.\n\nEach property contains texts suited for a certain use-case. Read each properties description for more\ninformation on their intended use-case. Currently there is only one supported use-case, i.e. 'checkout'.\n\nThese texts are specific for each delivery option and can differ between delivery options of the same type. If\ndelivery options are grouped together by type when displayed it is therefore necessary to continuously update\nthe texts that are shown to the end-user (e.g. in a freight picker) based on the currently selected delivery\noption.\n\nThe language can be specified by sending a language tag in the **Accept-Language** header.\n",
+        "xml": {
+          "name": "DescriptiveTexts"
+        }
+      },
+      "CheckoutTexts": {
+        "required": [
+          "briefDescription",
+          "fullDescription",
+          "title"
+        ],
+        "type": "object",
+        "properties": {
+          "title": {
+            "maxLength": 100,
+            "type": "string",
+            "description": "The distinguishing name for the delivery option.\n",
+            "example": "Collect at parcel locker."
+          },
+          "briefDescription": {
+            "maxLength": 200,
+            "type": "string",
+            "description": "A brief description with the most important information about the delivery option,\nsuch as where the parcel will be delivered.\n",
+            "example": "The parcel is delivered to your choice of parcel locker."
+          },
+          "fullDescription": {
+            "maxLength": 500,
+            "type": "string",
+            "description": "Full description containing additional information about the delivery option.\n",
+            "example": "You open your locker with secure identification, via PostNord App and Mobile BankID. You will be notified via PostNord App and via sms/email."
+          },
+          "friendlyDeliveryInfo": {
+            "type": "string",
+            "description": "Friendly delivery information. This is a short text that describes essential parts of the delivery\nin human readable way.\n\nIts contents will follow one of either two patterns:\n\n* \"{location} ({day&time})\"\n* \"{day&time}\"\n\nThe contents will follow the first pattern, \"{location} ({day&time})\", if the delivery is to a location\nother than the recipient's address. Otherwise the contents will follow the second pattern \"{day&time}\".\n\nThe components are defined as follows:\n* {location} is the name of the delivery location if not the recipient's address.\n* {day&time} is the expected time when the delivery will happen, formatted in a human readable way.\nIt in turn consists of two parts: \"{day} ~ {time}\" where {day} is a human friendly day descriptor of the\nexpected delivery day, and {time} is the expected time when the delivery will happen.\n\n* {day} is a human friendly day descriptor. Its value is based on rules dependent on when the delivery\nwill happen relative today. If the delivery is expected to happen:\n\n  * today, the value will be today localized to the locale, e.g., \"Idag\".\n  * tomorrow, the value will be tomorrow localized to the locale, e.g., \"Imorgon\".\n  * two to six days later from today, the value will be the weekday localized to the locale, e.g., \"fredag\".\n  * seven or more days later from today, the value will be the date in the format \"YYYY-MM-DD\", e.g., \"2021-12-31\".\n  * a day range later, the value will be the day range localized to the locale, e.g., \"1-3 dagar\".\n\n* {time} is a human friendly time descriptor. It will be either:\n  * \"HH:mm\" if there is a latest time the delivery will happen. E.g., \"14:00\".\n  * \"HH:mm-HH:mm\" if there is a time range during which the delivery will happen. E.g., \"17:00 - 22:00\".\n  * potentially omitted if the {day} descriptor is a day range.\n\nexamples:\n* \"Paketbox Västra skogen (Idag ~ 14:00)\"\n* \"Paketbox Västra skogen (Imorgon ~ 14:00)\"\n* \"Paketbox Västra skogen (fredag ~ 14:00)\"\n* \"Paketbox Västra skogen (1-3 dagar)\"\n* \"Idag ~ 14:00\"\n* \"Idag ~ 17:00-22:00\"\n* \"Imorgon ~ 14:00\"\n* \"Onsdag ~ 17:00-22:00\"\n* \"2023-04-14 ~ 14:00\"\n* \"2023-04-14 ~ 17:00-22:00\"\n",
+            "example": "Paketbox Västra skogen (Idag ~ 14:00)"
+          }
+        },
+        "description": "Recommended texts to be displayed in a checkout when a recipient is picking a delivery option.\n\nThe texts describe the recipients delivery experience along with prerequisites for the recipient to retrieve the\nparcel (e.g. if Mobile BankID or the PostNord App is needed).\n",
+        "xml": {
+          "name": "Texts"
+        }
+      },
+      "DeliveryTime": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "$ref": "#/components/schemas/SpecificDate"
+          },
+          "dayRange": {
+            "$ref": "#/components/schemas/DayRange"
+          }
+        },
+        "description": "Specifies the time when the delivery will arrive at its destination. \n\n**Time Zone Handling:** All date-time values are expressed in the recipient's local time zone. \nThe time offset in the response (e.g., +02:00 for Denmark, +03:00 for Finland) corresponds to the \ndestination country's time zone, not the sender's time zone. This is especially important for \ncross-border shipments where the sender and recipient are in different time zones.\n\nThe granularity depends on the provided 'OrderHandling' configuration and the selected service type. \nIt can range from a very fine grained time range to a wider range spanning a number of days. \n\nNote that the delivery time is an estimate, and that all deliveries are subject to the PostNord \nterms and conditions specific to each service.\n\n**Important:** It is the sender's responsibility to provide accurate 'OrderHandling' configuration.\nPostNord reserves the right to make adjustments to the granularity of the delivery time estimate,\nin cases where the provided order handling configuration is not adhered to \n(for instance, leading to a delayed pick-up time and subsequently a later delivery time).\n\n'date' and 'dayRange' are mutually exclusive, and at least one of them will be present.\n",
+        "xml": {
+          "name": "DeliveryTime"
+        }
+      },
+      "SpecificDate": {
+        "required": [
+          "latest"
+        ],
+        "type": "object",
+        "properties": {
+          "earliest": {
+            "type": "string",
+            "description": "Earliest date and time the delivery can arrive, in the recipient's local time zone.\n",
+            "format": "date-time",
+            "example": "2025-11-05T14:00:00+01:00"
+          },
+          "latest": {
+            "type": "string",
+            "description": "Latest date and time the delivery will arrive, in the recipient's local time zone.\n",
+            "format": "date-time",
+            "example": "2025-11-05T20:00:00+01:00"
+          }
+        },
+        "description": "Specifies the date and time when the delivery will arrive at its destination.\n\n**Important Time Zone Information:** \n* All timestamps ('earliest' and 'latest') are expressed in the recipient's local time zone\n* The time offset (e.g., +01:00) reflects the recipient's location, not the sender's\n* Both timestamps will always have the same date\n* For cross-border shipments, the time zone offset may differ from the sender's time zone\n\n**Time zone examples by country:**\n* Sweden: +01:00 (winter), +02:00 (summer)\n* Denmark: +01:00 (winter), +02:00 (summer)\n* Finland: +02:00 (winter), +03:00 (summer)\n* Norway: +01:00 (winter), +02:00 (summer)\n",
+        "xml": {
+          "name": "SpecificDate"
+        }
+      },
+      "DayRange": {
+        "required": [
+          "days"
+        ],
+        "type": "object",
+        "properties": {
+          "days": {
+            "type": "string",
+            "description": "A range of business days, from now, in which the delivery will arrive. Note\nthat these are business days and should not be translated to a specific dates.\n",
+            "example": "2-3"
+          },
+          "latest": {
+            "type": "string",
+            "description": "The latest time during each day when the delivery will made during the day interval. \nTime is in the recipient's local time zone.\n"
+          }
+        },
+        "description": "A range of business days, from now, in which the delivery will arrive.\n",
+        "xml": {
+          "name": "DayRange"
+        }
+      },
+      "Sustainability": {
+        "required": [
+          "fossilFree",
+          "nordicSwanEcoLabel"
+        ],
+        "type": "object",
+        "properties": {
+          "fossilFree": {
+            "type": "boolean",
+            "description": "Indicates if the entire transport, from sending warehouse to recipient, is fossil free\naccording to the Industry Agreement for fossil-free delivery as defined by Svensk Handel and ASTER.\n\n**PostNord provided customer keys**\nOnly senders who have fossil free pick-ups and have signed the above mentioned\nIndustry Agreement for fossil-free delivery, can get fossil-free options.\nTherefore DO API requires knowledge of the customer's identity to correctly provide those.\nIn this case, a PostNord provided customer key should be used.\n"
+          },
+          "nordicSwanEcoLabel": {
+            "type": "boolean",
+            "description": "Indicates if the entire transport is nordic swan ecolabelled.\n"
+          }
+        },
+        "description": "Provides sustainability information for the delivery option by showing whether it is fossil free, \nand/or nordic swan ecolabelled. The entire transport is taken into account, i.e. first mile, line haul and last mile.\n",
+        "xml": {
+          "name": "Sustainability"
+        }
+      },
+      "DeliveryLocation": {
+        "required": [
+          "address",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Human readable name of the location. This name can, for example, be presented in a checkout.\n",
+            "example": "PostNord Delivery Point Storgatan"
+          },
+          "distanceFromRecipientAddress": {
+            "type": "integer",
+            "description": "Walking distance from the recipient's address in meters.\n",
+            "format": "int32"
+          },
+          "address": {
+            "$ref": "#/components/schemas/FullAddress"
+          },
+          "coordinate": {
+            "$ref": "#/components/schemas/Coordinate"
+          },
+          "accessibility": {
+            "$ref": "#/components/schemas/Accessibility"
+          },
+          "openingHours": {
+            "$ref": "#/components/schemas/OpeningHours"
+          }
+        },
+        "description": "Delivery location if not the recipient's address, typically a parcel locker or a service point.\n",
+        "xml": {
+          "name": "DeliveryLocation"
+        }
+      },
+      "Coordinate": {
+        "required": [
+          "latitude",
+          "longitude"
+        ],
+        "type": "object",
+        "properties": {
+          "latitude": {
+            "type": "number",
+            "format": "double",
+            "example": 18.009889600000005
+          },
+          "longitude": {
+            "type": "number",
+            "format": "double",
+            "example": 59.35014139999998
+          }
+        },
+        "description": "Coordinates according to the EPSG:4326 (World Geodetic System reference) standard.\n",
+        "xml": {
+          "name": "Coordinate"
+        }
+      },
+      "Accessibility": {
+        "type": "object",
+        "properties": {
+          "parcelLockerLocation": {
+            "type": "string",
+            "description": "Describes if the parcel locker is located indoor or outdoor.\n",
+            "enum": [
+              "indoor",
+              "outdoor"
+            ]
+          }
+        },
+        "description": "Additional information about how to access a delivery location (parcel locker or service point).\n"
+      },
+      "OpeningHours": {
+        "required": [
+          "regular"
+        ],
+        "type": "object",
+        "properties": {
+          "regular": {
+            "$ref": "#/components/schemas/RegularOpeningHours"
+          },
+          "deviations": {
+            "type": "array",
+            "description": "Deviations from regular opening hours for a delivery location. If it is missing then the opening hours can\nvary (e.g. be closed) during holidays. If it is present but empty then it means there are no deviations and\nthe location will have regular opening hours even during holidays.\n",
+            "items": {
+              "$ref": "#/components/schemas/DeviatingOpeningHours"
+            }
+          }
+        },
+        "description": "Times during which the delivery location is open. 'regular' applies unless otherwise specified in 'deviations'.\n"
+      },
+      "RegularOpeningHours": {
+        "required": [
+          "friday",
+          "monday",
+          "saturday",
+          "sunday",
+          "thursday",
+          "tuesday",
+          "wednesday"
+        ],
+        "type": "object",
+        "properties": {
+          "monday": {
+            "$ref": "#/components/schemas/OpenHours"
+          },
+          "tuesday": {
+            "$ref": "#/components/schemas/OpenHours"
+          },
+          "wednesday": {
+            "$ref": "#/components/schemas/OpenHours"
+          },
+          "thursday": {
+            "$ref": "#/components/schemas/OpenHours"
+          },
+          "friday": {
+            "$ref": "#/components/schemas/OpenHours"
+          },
+          "saturday": {
+            "$ref": "#/components/schemas/OpenHours"
+          },
+          "sunday": {
+            "$ref": "#/components/schemas/OpenHours"
+          }
+        },
+        "description": "Regular opening hours during which a delivery location is open. Each day may consist of several non-overlapping\ntime ranges.\n"
+      },
+      "OpenHours": {
+        "required": [
+          "open"
+        ],
+        "type": "object",
+        "properties": {
+          "open": {
+            "type": "boolean",
+            "description": "Indicates whether the delivery location is open.\n"
+          },
+          "timeRanges": {
+            "type": "array",
+            "description": "The time ranges during which the delivery location is open.\n",
+            "items": {
+              "$ref": "#/components/schemas/TimeRange"
+            }
+          }
+        },
+        "description": "Hours during which a delivery location is open for postal services. 'timeRanges' are only present if the field\n'open' is set to true.\n",
+        "xml": {
+          "name": "OpenHours"
+        }
+      },
+      "TimeRange": {
+        "required": [
+          "from",
+          "to"
+        ],
+        "type": "object",
+        "properties": {
+          "from": {
+            "pattern": "^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$",
+            "type": "string",
+            "description": "The time when the delivery location opens. Note the start of day is 00:00.\n",
+            "example": "08:00"
+          },
+          "to": {
+            "pattern": "(?!^00:00$)^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$",
+            "type": "string",
+            "description": "The time when the delivery location closes. Always later than 'from'. Note the end of day is 23:59.\n",
+            "example": "15:00"
+          }
+        },
+        "xml": {
+          "name": "TimeRange"
+        }
+      },
+      "DeviatingOpeningHours": {
+        "required": [
+          "date",
+          "openHours"
+        ],
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "description": "The date for the deviation.\n",
+            "format": "date",
+            "example": "2020-12-24"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Reason for the deviation.\n",
+            "example": "Christmas Eve"
+          },
+          "openHours": {
+            "$ref": "#/components/schemas/OpenHours"
+          }
+        },
+        "description": "Dates during which there are deviations to regular opening hours for a delivery location, for example during\nholidays.\n",
+        "xml": {
+          "name": "DeviatingOpeningHours"
+        }
+      },
+      "ErrorResponse": {
+        "required": [
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "compositeFault": {
+            "$ref": "#/components/schemas/CompositeFault"
+          },
+          "message": {
+            "type": "string",
+            "description": "High level error message.\n",
+            "example": "Query parameter missing"
+          }
+        }
+      },
+      "CompositeFault": {
+        "type": "object",
+        "properties": {
+          "faults": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Fault"
+            }
+          }
+        },
+        "description": "This is a composition of one or more faults.\n"
+      },
+      "Fault": {
+        "required": [
+          "explanationText"
+        ],
+        "type": "object",
+        "properties": {
+          "paramValues": {
+            "uniqueItems": true,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ParamValue"
+            }
+          },
+          "explanationText": {
+            "type": "string",
+            "example": "Missing required field"
+          },
+          "faultCode": {
+            "type": "string",
+            "description": "The defined fault code.\n\n* API-003: Delivery options not found.\n* API-005: Missing required field.\n* API-008: Invalid input.\n* API-009: Invalid field combination.\n* API-100: Undefined validation error.\n",
+            "example": "API-005"
+          }
+        },
+        "description": "The actual fault with a fault code and an explanation\n",
+        "xml": {
+          "name": "Fault"
+        }
+      },
+      "ParamValue": {
+        "type": "object",
+        "properties": {
+          "param": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "description": "A parameter value pair is a set of two linked data items\n"
+      },
+      "Health": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "UP"
+          }
+        },
+        "description": "API will respond with \"UP\" if healthy\n"
+      }
+    }
+  }
+}

@@ -1,0 +1,524 @@
+{
+  "openapi": "3.0.4",
+  "info": {
+    "title": "PickupRequest API",
+    "version": "2.10.0"
+  },
+  "servers": [
+    {
+      "url": "https://test-api.freight-logistics.dhl.com/pickuprequestapi/v1/"
+    }
+  ],
+  "paths": {
+    "/pickuprequest/pickuprequest": {
+      "post": {
+        "tags": [
+          "PickupRequest"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PickupRequestModel"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PickupRequestModel"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PickupRequestModel"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PickupRequestModel"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Pickuprequest response",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PickupRequestResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PickupRequestResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PickupRequestResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AdditionalServicesDTO": {
+        "type": "object",
+        "properties": {
+          "cashOnDelivery": {
+            "$ref": "#/components/schemas/CashOnDeliveryOptions"
+          },
+          "dangerousGoods": {
+            "type": "boolean"
+          },
+          "dangerousGoodsDomestic": {
+            "type": "boolean"
+          },
+          "deliveryAtConstructionSite": {
+            "type": "boolean"
+          },
+          "deliveryWithoutProofOfDelivery": {
+            "type": "boolean"
+          },
+          "dangerousGoodsLimitedQuantity": {
+            "type": "boolean"
+          },
+          "emptyPalletPickup": {
+            "type": "boolean"
+          },
+          "indoorDelivery": {
+            "type": "boolean"
+          },
+          "notification": {
+            "type": "boolean"
+          },
+          "insurance": {
+            "$ref": "#/components/schemas/InsuranceOptions"
+          },
+          "preAdviceByDriver": {
+            "$ref": "#/components/schemas/PreAdviceByDriverOptions"
+          },
+          "tailLiftLoading": {
+            "type": "boolean"
+          },
+          "tailLiftUnloading": {
+            "type": "boolean"
+          },
+          "thermoCold": {
+            "$ref": "#/components/schemas/ThermoColdOptions"
+          },
+          "thermoFreeze": {
+            "$ref": "#/components/schemas/ThermoFreezeOptions"
+          },
+          "thermoWarm": {
+            "$ref": "#/components/schemas/ThermoWarmOptions"
+          },
+          "timeDefiniteLoading": {
+            "$ref": "#/components/schemas/TimeDefiniteLoadingOptions"
+          },
+          "timeDefiniteUnloading": {
+            "$ref": "#/components/schemas/TimeDefiniteUnloadingOptions"
+          },
+          "twoManHandling": {
+            "type": "boolean"
+          },
+          "priorityServiceG7": {
+            "type": "boolean"
+          },
+          "priorityServiceG10": {
+            "type": "boolean"
+          },
+          "priorityServiceG12": {
+            "type": "boolean"
+          },
+          "truck": {
+            "type": "boolean"
+          },
+          "preAdvicePickup": {
+            "type": "boolean"
+          },
+          "preAdviceByDriverPickup": {
+            "$ref": "#/components/schemas/PreAdviceByDriverPickupOptions"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Address": {
+        "type": "object",
+        "properties": {
+          "street": {
+            "type": "string"
+          },
+          "streetNumber": {
+            "type": "string"
+          },
+          "additionalAddressInfo": {
+            "type": "string"
+          },
+          "cityName": {
+            "type": "string"
+          },
+          "postalCode": {
+            "type": "string"
+          },
+          "countryCode": {
+            "type": "string"
+          },
+          "accessCode": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CashOnDeliveryOptions": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "bankGiroNumber": {
+            "type": "string"
+          },
+          "plusGiroNumber": {
+            "type": "string"
+          },
+          "reference": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "InsuranceOptions": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "number",
+            "format": "double"
+          },
+          "currency": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Party": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/PartyType"
+          },
+          "name": {
+            "type": "string"
+          },
+          "contactName": {
+            "type": "string"
+          },
+          "references": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "address": {
+            "$ref": "#/components/schemas/Address"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "fax": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PartyType": {
+        "enum": [
+          "AccessPoint",
+          "Consignor",
+          "Consignee",
+          "Delivery",
+          "FreightPayer",
+          "Pickup"
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "PayerCode": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PickupRequestModel": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "productCode": {
+            "type": "string"
+          },
+          "pickupDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "pickupInstruction": {
+            "type": "string"
+          },
+          "deliveryInstruction": {
+            "type": "string"
+          },
+          "totalNumberOfPieces": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalWeight": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalVolume": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalLoadingMeters": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalLoadingMetres": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalPalletPlaces": {
+            "type": "number",
+            "format": "double"
+          },
+          "payerCode": {
+            "$ref": "#/components/schemas/PayerCode"
+          },
+          "parties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Party"
+            }
+          },
+          "pieces": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Piece"
+            }
+          },
+          "additionalServices": {
+            "$ref": "#/components/schemas/AdditionalServicesDTO"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PickupRequestResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/ResponseStatus"
+          },
+          "bookingNumber": {
+            "type": "string"
+          },
+          "pickupDateTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Piece": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "goodsType": {
+            "type": "string"
+          },
+          "packageType": {
+            "type": "string"
+          },
+          "marksAndNumbers": {
+            "type": "string"
+          },
+          "numberOfPieces": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "weight": {
+            "type": "number",
+            "format": "double"
+          },
+          "volume": {
+            "type": "number",
+            "format": "double"
+          },
+          "loadingMeters": {
+            "type": "number",
+            "format": "double"
+          },
+          "loadingMetres": {
+            "type": "number",
+            "format": "double"
+          },
+          "palletPlaces": {
+            "type": "number",
+            "format": "double"
+          },
+          "width": {
+            "type": "number",
+            "format": "double"
+          },
+          "height": {
+            "type": "number",
+            "format": "double"
+          },
+          "length": {
+            "type": "number",
+            "format": "double"
+          },
+          "stackable": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PreAdviceByDriverOptions": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PreAdviceByDriverPickupOptions": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ResponseStatus": {
+        "enum": [
+          "Accepted",
+          "Rejected",
+          "Moved",
+          "InternalError"
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "ThermoColdOptions": {
+        "type": "object",
+        "properties": {
+          "min": {
+            "type": "number",
+            "format": "double"
+          },
+          "max": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ThermoFreezeOptions": {
+        "type": "object",
+        "properties": {
+          "min": {
+            "type": "number",
+            "format": "double"
+          },
+          "max": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ThermoWarmOptions": {
+        "type": "object",
+        "properties": {
+          "min": {
+            "type": "number",
+            "format": "double"
+          },
+          "max": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TimeDefiniteLoadingOptions": {
+        "type": "object",
+        "properties": {
+          "dateTime": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TimeDefiniteUnloadingOptions": {
+        "type": "object",
+        "properties": {
+          "dateTime": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "Client key": {
+        "type": "apiKey",
+        "description": "Please insert your client key",
+        "name": "client-key",
+        "in": "header"
+      }
+    }
+  },
+  "security": [
+    {
+      "Client key": [
+        "client-key"
+      ]
+    }
+  ],
+  "tags": [
+    {
+      "name": "PickupRequest"
+    }
+  ]
+}

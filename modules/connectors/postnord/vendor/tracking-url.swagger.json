@@ -1,0 +1,134 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "description": "Fetch tracking url of shipment by country and shipment id",
+    "version": "1.0.2",
+    "title": "Track Shipment URL"
+  },
+  "host": "api2.postnord.com",
+  "basePath": "/rest/links",
+  "schemes": [
+    "https"
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/tracking/{country}/{id}": {
+      "get": {
+        "tags": [
+          "Shipment Tracking URL"
+        ],
+        "summary": "getTrackingUrlQuery",
+        "description": "Get a tracking url with apikey as query parameter",
+        "operationId": "RestLinksV1TrackingByCountryAndIdGet",
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "apikey",
+            "in": "query",
+            "description": "The unique consumer client identifier 32 characters",
+            "required": true,
+            "type": "string",
+            "x-data-threescale-name": "user_keys"
+          },
+          {
+            "name": "country",
+            "in": "path",
+            "description": "Country code in ISO 3166-1. Allowed values are SE, NO, FI and DK",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Shipment or Item identifier. Valid characters: 'A-Z', 'a-z', 0-9 Length: 10-35 characters",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "description": "Allowed values are en, sv, no, da and fi",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "schema": {
+              "$ref": "#/definitions/LinksResponse"
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "schema": {}
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "LinksResponse": {
+      "type": "object",
+      "properties": {
+        "faults": {
+          "type": "array",
+          "description": "",
+          "items": {
+            "$ref": "#/definitions/Fault"
+          }
+        },
+        "url": {
+          "type": "string",
+          "description": ""
+        }
+      },
+      "title": "LinksResponse",
+      "description": "Model containing API response and/or errors"
+    },
+    "ParamValues": {
+      "type": "object",
+      "properties": {
+        "param": {
+          "type": "string",
+          "description": ""
+        },
+        "value": {
+          "type": "string",
+          "description": ""
+        }
+      },
+      "title": "ParamValues",
+      "description": "Key/Value information about errors"
+    },
+    "Fault": {
+      "type": "object",
+      "properties": {
+        "explanationText": {
+          "type": "string",
+          "description": ""
+        },
+        "paramValues": {
+          "type": "array",
+          "description": "",
+          "items": {
+            "$ref": "#/definitions/ParamValues"
+          }
+        },
+        "faultCode": {
+          "type": "string",
+          "description": ""
+        }
+      },
+      "title": "Fault",
+      "description": "Model for API Fault"
+    }
+  }
+}

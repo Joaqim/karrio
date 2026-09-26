@@ -1,0 +1,597 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Assign Items To LoadCarriers",
+    "description": "The intent with the Assign items API. \n\n---\n\n**These are the main uses cases for the APIs**\n\n- Assign items to a loadCarrier AFTER a loadcarrier is created\n\n---\n\n**Important** \n- There are several pre-conditons to use the APIs, so please contact your PostNord organization.\n- You'll find more detailed information and examples in our Integration Guides, https://guides.developer.postnord.com/#be17f42b-fd55-4226-b4d2-e284d0ddd8ce\n\n  - _*Denmark kundeintegration@postnord.com*_\n  - _*Finland it.fi@postnord.com*_\n  - _*Norway edi.no@postnord.com*_ \n  - _*Sweden kundintegration.se@postnord.com*_ \n  - _*Germany logistics.it.de@postnord.com*_ \n\n\n---\n**API Information** \n\n| **Date**   | **Version** | **Description**                                          |\n| ---------- | ----------- | -------------------------------------------------------- |\n| 2026-01-08 | 1.0.1.1      | API added|\n\n| **Feature**| **Setting** | **Description**                                          |\n| ---------- | ----------- | -------------------------------------------------------- |\n| SECURED    | False      |The API do not require a PostNord Oauth2 login         |\n",
+    "termsOfService": "https://developer.postnord.com/support",
+    "version": "1.0.1.1"
+  },
+  "servers": [
+    {
+      "url": "https://virtserver.swaggerhub.com/postnord/shipment-v3-booking-sao-3.0/1.0.1-internal",
+      "description": "SwaggerHub API Auto Mocking"
+    },
+    {
+      "url": "https://atapi2.postnord.com/rest/shipment"
+    },
+    {
+      "url": "https://api2.postnord.com/rest/shipment"
+    }
+  ],
+  "paths": {
+    "/v3/edi": {
+      "put": {
+        "tags": [
+          "Update EDI"
+        ],
+        "summary": "Update EDI",
+        "operationId": "updateEdi",
+        "parameters": [
+          {
+            "name": "apikey",
+            "in": "query",
+            "description": "The unique consumer (client) identifier 32 characters",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "x-data-threescale-name": "user_keys"
+            },
+            "x-data-threescale-name": "user_keys"
+          }
+        ],
+        "requestBody": {
+          "description": "Contains the pickup information based on an EDI Instruction",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/updateEdi"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successfully created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/bookingResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The server cannot or will not process the request due to something that is perceived to be a client error (e.g., malformed request syntax, invalid request message framing, or deceptive request routing).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication token is missing/invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The server understood the request but refuses to authorize it (e.g. API-key, access-token, JWT)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The origin server did not find a current representation for the target resource or is not willing to disclose that one exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "The method received in the request-line is known by the origin server but not supported by the target resource.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "The user has sent too many requests in a given amount of time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "499": {
+            "description": "The server does not support the functionality required to fulfill the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is currently unable to handle the request due to a temporary overload or scheduled maintenance, which will likely be alleviated after some delay.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The server, while acting as a gateway or proxy, did not receive a timely response from an upstream server it needed to access in order to complete the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/errorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-apiclassification": "public"
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "updateEdi": {
+        "required": [
+          "application",
+          "messageDate",
+          "messageFunction",
+          "messageId"
+        ],
+        "type": "object",
+        "properties": {
+          "messageDate": {
+            "$ref": "#/components/schemas/messageDate"
+          },
+          "messageFunction": {
+            "type": "string",
+            "description": "Message Function Identifier\n* Splitshipment - goods are about to be or has already been loaded on a pick-up means of a transport\n",
+            "example": "Splitshipment"
+          },
+          "messageId": {
+            "$ref": "#/components/schemas/messageId"
+          },
+          "application": {
+            "$ref": "#/components/schemas/application"
+          },
+          "language": {
+            "maxLength": 2,
+            "minLength": 2,
+            "type": "string",
+            "description": "An optional attribute indicating the language in which the contents of text elements and code value text equivalents are written. Use ISO 3166 two position alphabetic countrycode",
+            "example": "EN",
+            "default": "EN"
+          },
+          "updateIndicator": {
+            "type": "string",
+            "description": "Indicators must be used\n* Original",
+            "default": "Original"
+          },
+          "testIndicator": {
+            "type": "boolean",
+            "description": "If this is \"true\";\n* The request will only be validate against business rules\n* A \"Test\" label can be fetch using the item ID\n* No EDI will be sent to PostNord",
+            "default": false
+          },
+          "actions": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/splitShipment"
+                },
+                {
+                  "$ref": "#/components/schemas/openShipment"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "errorResponse": {
+        "required": [
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "compositeFault": {
+            "$ref": "#/components/schemas/compositeFault"
+          },
+          "message": {
+            "type": "string",
+            "description": "High level error message.",
+            "example": "Query parameter missing"
+          }
+        },
+        "description": "PostNord standard error response message"
+      },
+      "compositeFault": {
+        "type": "object",
+        "properties": {
+          "faults": {
+            "uniqueItems": true,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/fault"
+            }
+          }
+        },
+        "description": "The composite fault object containing an array of fault objects"
+      },
+      "fault": {
+        "required": [
+          "explanationText"
+        ],
+        "type": "object",
+        "properties": {
+          "paramValues": {
+            "uniqueItems": true,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/paramValue"
+            }
+          },
+          "explanationText": {
+            "type": "string",
+            "example": "Missing parameter"
+          },
+          "faultCode": {
+            "type": "string",
+            "example": "API-005"
+          },
+          "faultReferences": {
+            "type": "array",
+            "example": [
+              {
+                "key": "CustomerOriginValidationError.type",
+                "value": "CUSTOMS_DECLARATION_FAULTY"
+              },
+              {
+                "key": "InvoiceSurchargeFreight.type",
+                "value": "CUSTOMS_DECLARATION_FAULTY"
+              },
+              {
+                "key": "itemId",
+                "value": "00573132900007934544"
+              }
+            ],
+            "items": {
+              "$ref": "#/components/schemas/keyValuePair"
+            }
+          }
+        },
+        "description": "Fault object with the associated code and explanation text"
+      },
+      "paramValue": {
+        "type": "object",
+        "properties": {
+          "param": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "description": "A parameter value pair is a set of two linked data items"
+      },
+      "keyValuePair": {
+        "required": [
+          "key",
+          "value"
+        ],
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "example": "CustomerOriginValidationError.type"
+          },
+          "value": {
+            "type": "string",
+            "example": "CUSTOMS_DECLARATION_FAULTY"
+          }
+        }
+      },
+      "messageDate": {
+        "type": "string",
+        "description": "Refers to the date when the client/system creates the request/message.",
+        "format": "date-time",
+        "example": "2018-11-28T10:40:52Z"
+      },
+      "messageId": {
+        "maxLength": 36,
+        "minLength": 1,
+        "type": "string",
+        "description": "Unique id for the message within the current information exchange setting.",
+        "example": "msg-182721551"
+      },
+      "application": {
+        "required": [
+          "applicationId"
+        ],
+        "type": "object",
+        "properties": {
+          "applicationId": {
+            "maxLength": 4,
+            "minLength": 1,
+            "type": "integer",
+            "description": "The ID is assigned by PostNord for the client.",
+            "example": 9999
+          },
+          "name": {
+            "maxLength": 35,
+            "minLength": 1,
+            "type": "string",
+            "description": "The Name of the client integration, which is decided by the client.",
+            "example": "PostNord Online Shipping Tool"
+          },
+          "version": {
+            "maxLength": 35,
+            "minLength": 1,
+            "type": "string",
+            "description": "The version of the client integration, which is decided by the client.",
+            "example": "1.0"
+          },
+          "userId": {
+            "type": "string",
+            "description": "The ID of the user performing the request. \nOnly applicable to use for configured applicationIds. \n"
+          },
+          "userIdClassification": {
+            "type": "string",
+            "description": "Defined classifications of the incoming userId \n"
+          }
+        },
+        "description": "Object used to identifying the client"
+      },
+      "splitShipment": {
+        "required": [
+          "correlationGuid",
+          "loadCarriers",
+          "parties"
+        ],
+        "type": "object",
+        "properties": {
+          "correlationGuid": {
+            "type": "string",
+            "description": "GUID set by the client, that can be refered to in the response",
+            "example": "dcc410ad-22ef-433f-b122-ac533fb4ed24"
+          },
+          "loadCarriers": {
+            "maxItems": 99,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/splitShipment_loadCarriers"
+            }
+          },
+          "references": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/reference"
+            }
+          },
+          "parties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/parties"
+            }
+          }
+        }
+      },
+      "masterIds": {
+        "required": [
+          "id",
+          "idType"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "maximum": 35,
+            "type": "string",
+            "description": "The id of the load carrier of the items\n",
+            "example": "00373500489530470000"
+          },
+          "idType": {
+            "type": "string",
+            "description": "Defined idTypes\n* ITEMID\n",
+            "default": "ITEMID"
+          }
+        },
+        "description": "The Master ID of the load carrier for the split shipment"
+      },
+      "assignedIds": {
+        "required": [
+          "id",
+          "idType"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "maximum": 35,
+            "type": "string",
+            "description": "The id of the load carrier of the items\n",
+            "example": "00373500489530470000"
+          },
+          "idType": {
+            "type": "string",
+            "description": "Defined idTypes\n* ITEMID\n",
+            "default": "ITEMID"
+          }
+        },
+        "description": "ID of the item loaded into the Master ID carrier"
+      },
+      "reference": {
+        "required": [
+          "referenceNo",
+          "referenceType"
+        ],
+        "type": "object",
+        "properties": {
+          "referenceNo": {
+            "$ref": "#/components/schemas/referenceNo"
+          },
+          "referenceType": {
+            "$ref": "#/components/schemas/referenceType"
+          },
+          "referenceLevel": {
+            "$ref": "#/components/schemas/referenceLevel"
+          }
+        },
+        "description": "Reference Object"
+      },
+      "referenceNo": {
+        "type": "string",
+        "description": "The reference number (value)\n",
+        "example": "splitShipmentReferenceValue"
+      },
+      "referenceType": {
+        "type": "string",
+        "description": "Type giving specific meaning to a reference number.\n* ZCR = split shipment reference\n",
+        "example": "ZCR"
+      },
+      "referenceLevel": {
+        "type": "string",
+        "description": "Level giving specific meaning to a reference value to be added at what level.\n* shipment = add the reference value to shipment level\n",
+        "example": "shipment"
+      },
+      "parties": {
+        "required": [
+          "partyIdentification",
+          "partyType"
+        ],
+        "type": "object",
+        "properties": {
+          "partyType": {
+            "type": "string",
+            "description": "Defines the type of party.\n* CONSIGNOR\n* CONSIGNEE\n* ..\n",
+            "example": "CONSIGNOR",
+            "default": "CONSIGNOR"
+          },
+          "partyIdentification": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/partyIdentification"
+            }
+          }
+        },
+        "description": "Party Object"
+      },
+      "partyIdentification": {
+        "required": [
+          "issuerCode",
+          "partyId",
+          "partyIdType"
+        ],
+        "type": "object",
+        "properties": {
+          "issuerCode": {
+            "$ref": "#/components/schemas/issuerCode"
+          },
+          "partyId": {
+            "$ref": "#/components/schemas/partyId"
+          },
+          "partyIdType": {
+            "$ref": "#/components/schemas/partyIdType"
+          }
+        },
+        "description": "Party identification"
+      },
+      "partyId": {
+        "maxLength": 17,
+        "minLength": 1,
+        "type": "string",
+        "description": "Witholds the information ID associated with the party",
+        "example": "1234567890"
+      },
+      "partyIdType": {
+        "maxLength": 3,
+        "minLength": 1,
+        "type": "string",
+        "description": "Code list qualifier for the partyId; \n* 160 = Customer number\n* 167 = VAT customer number\n* 156 = Service point ID in deliveryParty \n* 229 = Geographic location  \n",
+        "example": "160"
+      },
+      "openShipment": {
+        "type": "object",
+        "properties": {
+          "assignedIds": {
+            "maxItems": 999,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/masterIds"
+            }
+          }
+        }
+      },
+      "splitShipment_loadCarriers": {
+        "required": [
+          "assignedIds",
+          "masterIds"
+        ],
+        "properties": {
+          "masterIds": {
+            "maxItems": 1,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/masterIds"
+            }
+          },
+          "assignedIds": {
+            "maxItems": 999,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/assignedIds"
+            }
+          },
+          "references": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/reference"
+            }
+          }
+        }
+      },
+      "issuerCode": {
+        "maxLength": 3,
+        "minLength": 1,
+        "type": "string",
+        "description": "The customer number country agreement is with:\n* Z11 = PostNord Denmark\n* Z12 = PostNord Sweden\n* Z13 = PostNord Norway\n* Z14 = PostNord Finland\n",
+        "example": "Z11"
+      },
+      "bookingResponse": {
+        "type": "object",
+        "properties": {
+          "bookingId": {
+            "type": "string",
+            "description": "The booking ID created for the sent in EDI Instruction",
+            "example": "3YSFH8NG0LNREZO38UIN68B3RRWL4X"
+          }
+        }
+      }
+    }
+  }
+}
