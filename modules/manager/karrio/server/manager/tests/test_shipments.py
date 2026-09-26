@@ -222,6 +222,80 @@ class TestShipmentPurchase(TestShipmentFixture):
             ).exists()
         )
 
+    def test_purchase_shipment_tracker_inherits_language(self):
+        """The purchase-created tracker inherits the shipment's options.language."""
+        self.shipment.options = {"language": "sv"}
+        self.shipment.save()
+        url = reverse(
+            "karrio.server.manager:shipment-purchase",
+            kwargs=dict(pk=self.shipment.pk),
+        )
+
+        with patch("karrio.server.core.gateway.utils.identity") as mock:
+            mock.return_value = CREATED_SHIPMENT_RESPONSE
+            response = self.client.post(url, SHIPMENT_PURCHASE_DATA)
+
+        self.assertResponseNoErrors(response)
+
+        tracker = models.Tracking.objects.get(
+            tracking_number=CREATED_SHIPMENT_RESPONSE[0].tracking_number
+        )
+        self.assertEqual(
+            tracker.options,
+            {"123456789012": {"carrier": "canadapost"}, "language": "sv"},
+        )
+
+    def test_purchase_shipment_locale_from_carrier_recipient_locale(self):
+        """A carrier's recipient_locale fills options.language for shipment and tracker."""
+        url = reverse(
+            "karrio.server.manager:shipment-purchase",
+            kwargs=dict(pk=self.shipment.pk),
+        )
+
+        with patch(
+            "karrio.core.settings.Settings.recipient_locale", return_value="da"
+        ) as recipient_locale, patch(
+            "karrio.server.core.gateway.utils.identity"
+        ) as mock:
+            mock.return_value = CREATED_SHIPMENT_RESPONSE
+            response = self.client.post(url, SHIPMENT_PURCHASE_DATA)
+
+        self.assertResponseNoErrors(response)
+        recipient_locale.assert_called_once_with(self.shipment.recipient)
+
+        self.shipment.refresh_from_db()
+        self.assertEqual(self.shipment.options.get("language"), "da")
+        tracker = models.Tracking.objects.get(
+            tracking_number=CREATED_SHIPMENT_RESPONSE[0].tracking_number
+        )
+        self.assertEqual(
+            tracker.options,
+            {"123456789012": {"carrier": "canadapost"}, "language": "da"},
+        )
+
+    def test_purchase_shipment_explicit_language_skips_recipient_locale(self):
+        """An explicit options.language is kept and the carrier hook is not consulted."""
+        self.shipment.options = {"language": "sv"}
+        self.shipment.save()
+        url = reverse(
+            "karrio.server.manager:shipment-purchase",
+            kwargs=dict(pk=self.shipment.pk),
+        )
+
+        with patch(
+            "karrio.core.settings.Settings.recipient_locale", return_value="da"
+        ) as recipient_locale, patch(
+            "karrio.server.core.gateway.utils.identity"
+        ) as mock:
+            mock.return_value = CREATED_SHIPMENT_RESPONSE
+            response = self.client.post(url, SHIPMENT_PURCHASE_DATA)
+
+        self.assertResponseNoErrors(response)
+        recipient_locale.assert_not_called()
+
+        self.shipment.refresh_from_db()
+        self.assertEqual(self.shipment.options.get("language"), "sv")
+
     def test_cancel_shipment(self):
         url = reverse(
             "karrio.server.manager:shipment-cancel",

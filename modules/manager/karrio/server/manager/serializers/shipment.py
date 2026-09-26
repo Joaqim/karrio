@@ -695,6 +695,14 @@ def buy_shipment_label(
     )
     pre_purchase_generation = invoice_template is not None and is_paperless_trade
 
+    # Materialized before the request is built and the tracker is created so
+    # booking, label text, and scheduled polls agree on one locale.
+    if not shipment.options.get("language") and (
+        locale := carrier.gateway.settings.recipient_locale(shipment.recipient)
+    ):
+        shipment.options = {**shipment.options, "language": locale}
+        shipment.save(update_fields=["options"])
+
     # Generate invoice in advance if is_paperless_trade
     if pre_purchase_generation:
         # Set carrier snapshot on shipment (consistent with other models)
@@ -971,7 +979,16 @@ def create_shipment_tracker(shipment: typing.Optional[models.Shipment], context)
                 status=TrackerStatus.pending.value,
                 estimated_delivery=estimated_delivery,
                 events=utils.default_tracking_event(event_at=shipment.updated_at),
-                options={shipment.tracking_number: dict(carrier=rate_provider)},
+                options={
+                    shipment.tracking_number: dict(carrier=rate_provider),
+                    # Inherit the booking locale so scheduled polls keep the
+                    # shipment's tracking language.
+                    **(
+                        {"language": (shipment.options or {}).get("language")}
+                        if (shipment.options or {}).get("language")
+                        else {}
+                    ),
+                },
                 meta=_tracker_meta,
                 info=dict(
                     source="api",
