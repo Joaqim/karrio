@@ -10,6 +10,7 @@
 -e ./modules/connectors/canadapost
 -e ./modules/connectors/chronopost
 -e ./modules/connectors/dhl_express
+-e ./modules/connectors/dhl_freight_sweden
 -e ./modules/connectors/dhl_parcel_de
 -e ./modules/connectors/dhl_poland
 -e ./modules/connectors/dhl_universal
