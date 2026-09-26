@@ -111,7 +111,7 @@ Services that require an identifier SHALL fail fast when it is missing: standard
 
 The connector SHALL omit customs information, customs services, and the VOEC service when both the shipper and the recipient are inside the EU VAT area, SHALL NOT apply the customs fail-fast checks to such shipments, and SHALL report the omission, naming any dropped customs services, as a warning message on the response when the caller supplied customs data or customs options.
 Callers may supply customs data maximally; the connector owns the known criteria for when customs is not required.
-The EU VAT area check SHALL treat Greece under its ISO code `GR` as a member state, and SHALL treat the following special fiscal territories as outside it even when their country code is an EU member state: Åland (`AX`, or `FI` with postal codes 22000–22999), the Canary Islands (`IC`, or `ES` with postal codes 35000–35999 and 38000–38999), Ceuta (`ES` 51000–51999), Melilla (`ES` 52000–52999), Büsingen (`DE` 78266), Heligoland (`DE` 27498), Livigno (`IT` 23041), Campione d'Italia (`IT` 22061), and the French overseas departments (`GP`, `GF`, `MQ`, `RE`, `YT`).
+The EU VAT area check SHALL treat Greece under its ISO code `GR` and Monaco (`MC`) as EU, SHALL treat Northern Ireland (`GB` with a postal code beginning `BT`) as EU, because the connector decides customs handling for goods movements and Northern Ireland is inside the EU VAT area for goods, and SHALL treat the following special fiscal territories as outside it even when their country code is an EU member state: Åland (`AX`, or `FI` with postal codes 22000–22999), the Canary Islands (`IC`, or `ES` with postal codes 35000–35999 and 38000–38999), Ceuta (`ES` 51000–51999), Melilla (`ES` 52000–52999), Büsingen (`DE` 78266), Heligoland (`DE` 27498), Livigno (`IT` 23041), Campione d'Italia (`IT` 22061), Mount Athos (`GR` 63086), and the French overseas departments (`GP`, `GF`, `MQ`, `RE`, `YT`).
 
 #### Scenario: Intra-EU shipment omits customs and warns
 
@@ -126,6 +126,21 @@ The EU VAT area check SHALL treat Greece under its ISO code `GR` as a member sta
 #### Scenario: Special fiscal territory keeps customs
 
 - **WHEN** a shipment from Sweden to Åland (`FI`, postal code 22100) is created with customs data
+- **THEN** the transport instruction carries customs information with transport movement Export
+
+#### Scenario: Northern Ireland is treated as EU
+
+- **WHEN** a shipment from Sweden to the United Kingdom (`GB`, postal code BT1 1AA) is created with customs data
+- **THEN** the transport instruction contains no customs information
+
+#### Scenario: Monaco is treated as EU
+
+- **WHEN** a shipment from Sweden to Monaco (`MC`) is created with customs data
+- **THEN** the transport instruction contains no customs information
+
+#### Scenario: Mount Athos keeps customs
+
+- **WHEN** a shipment from Sweden to Greece (`GR`, postal code 630 86) is created with customs data
 - **THEN** the transport instruction carries customs information with transport movement Export
 
 #### Scenario: Non-EU destination keeps customs
