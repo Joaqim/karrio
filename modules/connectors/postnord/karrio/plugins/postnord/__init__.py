@@ -3,6 +3,7 @@ from karrio.core.metadata import PluginMetadata
 from karrio.mappers.postnord.mapper import Mapper
 from karrio.mappers.postnord.proxy import Proxy
 from karrio.mappers.postnord.settings import Settings
+import karrio.providers.postnord.stamping as stamping
 import karrio.providers.postnord.units as units
 import karrio.providers.postnord.utils as utils
 
@@ -24,6 +25,8 @@ METADATA = PluginMetadata(
     services=units.ShippingService,
     connection_configs=units.ConnectionConfig,
     service_levels=units.DEFAULT_SERVICES,
+    # Document stamping
+    stamp_seeds=stamping.STAMP_SEEDS,
     # Extra info
     website="https://www.postnord.com",
     documentation="https://developer.postnord.com",
