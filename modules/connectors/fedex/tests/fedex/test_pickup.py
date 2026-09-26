@@ -40,6 +40,42 @@ class TestFedExPickup(unittest.TestCase):
             "Please ring bell at loading dock.",
         )
 
+    def test_create_pickup_request_maps_qc_to_pq_for_canada(self):
+        payload_with_canadian_address = {
+            **PickupPayload,
+            "address": {
+                **PickupPayload["address"],
+                "city": "Montreal",
+                "postal_code": "H8Z2Z3",
+                "country_code": "CA",
+                "state_code": "QC",
+            },
+        }
+        request = gateway.mapper.create_pickup_request(
+            models.PickupRequest(**payload_with_canadian_address)
+        )
+
+        address = request.serialize()["originDetail"]["pickupLocation"]["address"]
+        self.assertEqual(address["stateOrProvinceCode"], "PQ")
+
+    def test_create_update_pickup_request_maps_qc_to_pq_for_canada(self):
+        payload_with_canadian_address = {
+            **PickupUpdatePayload,
+            "address": {
+                **PickupUpdatePayload["address"],
+                "city": "Montreal",
+                "postal_code": "H8Z2Z3",
+                "country_code": "CA",
+                "state_code": "QC",
+            },
+        }
+        request = gateway.mapper.create_pickup_update_request(
+            models.PickupUpdateRequest(**payload_with_canadian_address)
+        )
+
+        address = request.serialize()["originDetail"]["pickupLocation"]["address"]
+        self.assertEqual(address["stateOrProvinceCode"], "PQ")
+
     def test_create_update_pickup_request(self):
         request = gateway.mapper.create_pickup_update_request(self.PickupUpdateRequest)
 

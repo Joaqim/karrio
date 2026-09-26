@@ -103,6 +103,42 @@ class TestShipments(APITestCase):
         self.assertDictEqual(response_data, SHIPMENT_RESPONSE)
 
 
+class TestShipmentStoredAddressState(APITestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.address: models.Address = models.Address.objects.create(
+            **{
+                "address_line1": "Postgatan 1",
+                "person_name": "Sven Svensson",
+                "phone_number": "+46 31 123 45 67",
+                "city": "Göteborg",
+                "country_code": "SE",
+                "postal_code": "411 18",
+                "residential": False,
+                "state_code": "Västra Götaland",
+                "validate_location": False,
+                "validation": None,
+                "created_by": self.user,
+            }
+        )
+
+    def test_create_shipment_with_shipper_id_normalizes_state(self):
+        url = reverse("karrio.server.manager:shipment-list")
+        data = {**SHIPMENT_DATA, "shipper": {"id": str(self.address.pk)}}
+
+        with patch("karrio.server.core.gateway.utils.identity") as mock:
+            mock.return_value = RETURNED_RATES_VALUE
+            response = self.client.post(url, data)
+            response_data = json.loads(response.content)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response_data)
+        self.assertEqual(response_data["shipper"]["country_code"], "SE")
+        self.assertEqual(response_data["shipper"]["state_code"], "O")
+
+        self.address.refresh_from_db()
+        self.assertEqual(self.address.state_code, "Västra Götaland")
+
+
 class TestShipmentDetails(TestShipmentFixture):
     def test_update_shipment_options(self):
         url = reverse(

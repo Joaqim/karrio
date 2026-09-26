@@ -101,6 +101,68 @@ class TestAddressDetails(APITestCase):
         self.assertFalse(Address.objects.filter(pk=address_pk).exists())
 
 
+class TestAddressStateNormalization(APITestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.url = reverse("karrio.server.manager:address-list")
+
+    def test_create_address_normalizes_state_code(self):
+        for country_code, state_code, expected in STATE_NORMALIZATION_CASES:
+            with self.subTest(country_code=country_code, state_code=state_code):
+                data = {
+                    **MINIMAL_ADDRESS_DATA,
+                    "country_code": country_code,
+                    "state_code": state_code,
+                }
+
+                response = self.client.post(self.url, data)
+                response_data = json.loads(response.content)
+
+                self.assertEqual(
+                    response.status_code, status.HTTP_201_CREATED, response_data
+                )
+                self.assertEqual(response_data["state_code"], expected)
+
+    def test_references_states_exclude_normalization_only_countries(self):
+        response = self.client.get("/v1/references")
+        states = json.loads(response.content)["states"]
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("US", states)
+        self.assertEqual(sorted({"DK", "FI", "NO", "SE"} & states.keys()), [])
+
+    def test_create_address_without_state_keeps_it_absent(self):
+        response = self.client.post(self.url, MINIMAL_ADDRESS_DATA)
+        response_data = json.loads(response.content)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIsNone(response_data["state_code"])
+
+    def test_update_address_normalizes_state_code(self):
+        address = Address.objects.create(
+            **{
+                "address_line1": "Postgatan 1",
+                "person_name": "Sven Svensson",
+                "city": "Göteborg",
+                "country_code": "SE",
+                "validate_location": False,
+                "validation": None,
+                "created_by": self.user,
+            }
+        )
+        url = reverse(
+            "karrio.server.manager:address-details", kwargs=dict(pk=address.pk)
+        )
+
+        response = self.client.patch(
+            url, {"country_code": "SE", "state_code": "Västra Götaland"}
+        )
+        response_data = json.loads(response.content)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response_data)
+        self.assertEqual(response_data["state_code"], "O")
+
+
 ADDRESS_DATA = {
     "address_line1": "5205 rue riviera",
     "person_name": "Old town Daniel",
@@ -161,3 +223,56 @@ ADDRESS_UPDATE_RESPONSE = {
     "validation": None,
     "meta": {},
 }
+
+MINIMAL_ADDRESS_DATA = {
+    "address_line1": "Postgatan 1",
+    "person_name": "Sven Svensson",
+    "city": "Göteborg",
+    "country_code": "SE",
+}
+
+STATE_NORMALIZATION_CASES = [
+    ("SE", "Västra Götaland", "O"),
+    ("SE", "Västra Götalands län", "O"),
+    ("SE", "SE-O", "O"),
+    ("SE", "skåne", "M"),
+    ("NO", "Vestland", "46"),
+    ("NO", "More og Romsdal", "15"),
+    ("NO", "Østfold", "31"),
+    ("NO", "Ostfold", "31"),
+    ("NO", "Akershus", "32"),
+    ("NO", "Buskerud", "33"),
+    ("NO", "Vestfold", "39"),
+    ("NO", "Telemark", "40"),
+    ("NO", "Troms", "55"),
+    ("NO", "Finnmark", "56"),
+    ("NO", "Svalbard", "21"),
+    ("NO", "Jan Mayen", "22"),
+    ("NO", "03", "03"),
+    ("NO", "NO-32", "32"),
+    ("NO", "Aust-Agder", "Aust-Agder"),
+    ("NO", "Vest-Agder", "Vest-Agder"),
+    ("NO", "Hedmark", "Hedmark"),
+    ("NO", "Oppland", "Oppland"),
+    ("NO", "Hordaland", "Hordaland"),
+    ("NO", "Sogn og Fjordane", "Sogn og Fjordane"),
+    ("NO", "Nord-Trøndelag", "Nord-Trøndelag"),
+    ("NO", "Sør-Trøndelag", "Sør-Trøndelag"),
+    ("NO", "Viken", "Viken"),
+    ("NO", "Vestfold og Telemark", "Vestfold og Telemark"),
+    ("NO", "Troms og Finnmark", "Troms og Finnmark"),
+    ("NO", "30", "30"),
+    ("DK", "Region Hovedstaden", "84"),
+    ("DK", "Sjelland", "85"),
+    ("DK", "Sjaelland", "85"),
+    ("FI", "Pirkanmaa", "11"),
+    ("CA", "qc", "QC"),
+    ("CA", "CA-QC", "QC"),
+    ("CA", "PQ", "QC"),
+    ("US", "California", "CA"),
+    ("US", "Washington", "WA"),
+    ("US", "Washington State", "WA"),
+    ("US", "N/A", "N/A"),
+    ("SE", "SE-XX", "SE-XX"),
+    ("DE", "Bayern", "Bayern"),
+]
