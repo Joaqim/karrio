@@ -185,6 +185,7 @@ SDK: `Tracer.drain_records()` returns buffered records and clears the buffer; `b
 | Fragmented locales (worst case 10 partitions of 1) | Up to 10 requests per batch, the per-tracker worst case; inter-batch delay still applies per batch. |
 | Failure mid-batch | Partitions already saved are kept; the rest are retried next cycle. |
 | Existing trackers without a locale | Unchanged until a new purchase or explicit tracker update supplies one. |
+| Purchase fails after `recipient_locale` supplied a locale | The derived `options.language` is saved on the shipment before the carrier request, so a retry treats it as set and skips the hook (D4); the locale stays pinned, even if the recipient changes, until `options.language` is cleared. |
 
 ---
 
