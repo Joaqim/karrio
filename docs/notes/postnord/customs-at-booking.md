@@ -76,11 +76,11 @@ It is not applied to customs invoices, because the sandbox accepted a parcel cus
 ## Composed customs invoice document
 
 PostNord composes the customs invoice into the booking's label printout (`printoutComposition` `{label: 1, customsInvoice: 1}`), and `meta.printout_composition` lists the composed kinds.
-For parcel-product and Export Letter bookings with customs data, the connector also fetches the standalone customs document with `POST /rest/shipment/v3/labels/ids/{pdf,zpl}` and `definePrintout=onlyCustomsDeclarations`, keyed by the booking's `printId` (else the item id), in the label's format.
+For parcel-product bookings with customs data, the connector also fetches the standalone customs document with `POST /rest/shipment/v3/labels/ids/{pdf,zpl}` and `definePrintout=onlyCustomsDeclarations`, keyed by the booking's `printId` (else the item id), in the label's format.
 The document is attached to `docs.extra_documents` with the category PostNord reports, `customsInvoice` for parcel products.
 Because the invoice is also page 2 of the label printout, the standalone document duplicates it.
 A failed fetch never fails the booking; it is reported as messages next to the shipment details.
-Other letter services and International Parcel fetch the standalone CN22 only when `postnord_standalone_customs_documents` is set (shipment option, else connection config); by default their CN22 is composed into `docs.label` in both PDF and ZPL (openspec change `stamp-embedded-customs-forms`, 2026-09-28).
+Letter services, including Export Letter, and International Parcel fetch the standalone CN22 only when `postnord_standalone_customs_documents` is set (shipment option, else connection config); by default their CN22 is composed into `docs.label` in both PDF and ZPL (openspec change `stamp-embedded-customs-forms`, 2026-09-28).
 
 ## Example
 
