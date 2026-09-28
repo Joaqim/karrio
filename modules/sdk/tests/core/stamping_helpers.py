@@ -152,6 +152,85 @@ def text_pdf_b64(*pages: typing.Sequence[str]) -> str:
     return _pdf_b64(writer)
 
 
+class TextRun(typing.NamedTuple):
+    """One text run for :func:`text_runs_pdf_b64`.
+
+    ``tm`` is the run's text matrix. With ``form_cm`` set the run is drawn
+    inside its own form XObject, invoked under that ``cm``; ``form_matrix`` is
+    the form's own ``/Matrix``.
+    """
+
+    text: str
+    tm: typing.Tuple[float, float, float, float, float, float]
+    form_cm: typing.Optional[typing.Tuple[float, ...]] = None
+    form_matrix: typing.Optional[typing.Tuple[float, ...]] = None
+
+
+def _numbers(values) -> str:
+    return " ".join(f"{float(value):.5f}" for value in values)
+
+
+def text_runs_pdf_b64(*pages: typing.Sequence[TextRun]) -> str:
+    """An A4 PDF whose pages set each run at an explicit text matrix.
+
+    Text is standard-14 Helvetica at 10 pt. A page given no runs carries no
+    content stream at all, so it yields no extractable text.
+    """
+    writer = pypdf.PdfWriter()
+    for runs in pages:
+        page = writer.add_blank_page(width=595, height=842)
+        if not runs:
+            continue
+
+        font = DictionaryObject(
+            {
+                NameObject("/Type"): NameObject("/Font"),
+                NameObject("/Subtype"): NameObject("/Type1"),
+                NameObject("/BaseFont"): NameObject("/Helvetica"),
+            }
+        )
+        fonts = DictionaryObject({NameObject("/F1"): writer._add_object(font)})
+        forms = DictionaryObject()
+        commands = []
+        for index, run in enumerate(runs):
+            text = f"BT /F1 10 Tf {_numbers(run.tm)} Tm ({run.text}) Tj ET"
+            if run.form_cm is None:
+                commands.append(text)
+                continue
+
+            form = DecodedStreamObject()
+            form.set_data(text.encode("latin-1"))
+            form.update(
+                {
+                    NameObject("/Type"): NameObject("/XObject"),
+                    NameObject("/Subtype"): NameObject("/Form"),
+                    NameObject("/BBox"): ArrayObject(
+                        [NumberObject(value) for value in (0, 0, 595, 842)]
+                    ),
+                    NameObject("/Resources"): DictionaryObject(
+                        {NameObject("/Font"): fonts}
+                    ),
+                }
+            )
+            if run.form_matrix is not None:
+                form[NameObject("/Matrix")] = ArrayObject(
+                    [pypdf.generic.FloatObject(value) for value in run.form_matrix]
+                )
+            name = f"/Fx{index}"
+            forms[NameObject(name)] = writer._add_object(form)
+            commands.append(f"q {_numbers(run.form_cm)} cm {name} Do Q")
+
+        resources = {NameObject("/Font"): fonts}
+        if forms:
+            resources[NameObject("/XObject")] = forms
+        page[NameObject("/Resources")] = DictionaryObject(resources)
+        content = DecodedStreamObject()
+        content.set_data("\n".join(commands).encode("latin-1"))
+        page[NameObject("/Contents")] = writer._add_object(content)
+
+    return _pdf_b64(writer)
+
+
 def acroform_pdf_b64() -> str:
     """A 2-page PDF whose first page carries one fillable text field."""
     writer = pypdf.PdfWriter()

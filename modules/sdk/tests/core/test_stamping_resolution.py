@@ -390,18 +390,19 @@ class TestKeywordResolution(unittest.TestCase):
         self.assertIn("acme/unknown/ZPL/*", str(ctx.exception))
         self.assertIn("keyword", str(ctx.exception).lower())
 
-    def test_keyword_against_a_pdf_document_is_rejected(self):
+    def test_keyword_against_a_pdf_page_without_text_is_rejected(self):
         with self.assertRaises(ValueError) as ctx:
             lib.stamp_document(
-                pdf_document(),
+                models.ShippingDocument(
+                    category="customs_declaration", format="PDF", base64=blank_pdf_b64()
+                ),
                 image=signature_png_b64(),
-                carrier="acme",
-                doc_type="customs_declaration",
+                placement=stamping.StampPlacement(width=60.0, height=20.0),
                 keyword=KEYWORD,
             )
 
-        self.assertIn("PDF", str(ctx.exception))
-        self.assertIn("keyword", str(ctx.exception).lower())
+        self.assertIn(KEYWORD, str(ctx.exception))
+        self.assertIn("without page text", str(ctx.exception))
 
     def test_keyword_miss_propagates_through_stamp_document(self):
         with self.assertRaises(ValueError) as ctx:

@@ -3,7 +3,7 @@
 | Field | Value |
 |-------|-------|
 | Project | Karrio |
-| Version | 1.1 |
+| Version | 1.2 |
 | Date | 2026-09-28 |
 | Status | In Progress |
 | Owner | Joaqim Planstedt |
@@ -26,7 +26,8 @@
 10. [Risk Assessment](#risk-assessment)
 11. [Migration & Rollback](#migration--rollback)
 12. [Customs composition classification](#customs-composition-classification)
-13. [Appendix A: Contributing a carrier seed](#appendix-a-contributing-a-carrier-seed)
+13. [PDF keyword anchoring](#pdf-keyword-anchoring)
+14. [Appendix A: Contributing a carrier seed](#appendix-a-contributing-a-carrier-seed)
 
 ---
 
@@ -47,6 +48,7 @@ The utility composites pixels only: it stores nothing and asserts nothing about 
 | 5 | Anchor resolution chain: placement, then keyword, then carrier seed | An explicit anchor always wins; a miss raises instead of guessing |
 | 6 | Carrier plugins contribute seeds through `PluginMetadata.stamp_seeds` | The core stays carrier-neutral; seeds are declarative data like `options` and `services` |
 | 7 | Classify a document's customs composition from carrier-declared section markers (`PluginMetadata.document_sections`) | A consumer learns the registry document type to stamp under without inspecting the document; see [Customs composition classification](#customs-composition-classification) |
+| 8 | Anchor PDF stamps by a keyword located in page text, laid out along the text's direction | One seed serves carrier layouts that print the same form upright or turned; see [PDF keyword anchoring](#pdf-keyword-anchoring) |
 
 ### Scope
 
@@ -54,8 +56,8 @@ The utility composites pixels only: it stores nothing and asserts nothing about 
 |----------|--------------|
 | PDF overlay (signature) and underlay (letterhead) | Signature validity, legal assertions, storage of stamped documents |
 | ZPL overlay with an optional `~DY`/`^XG` printer cache | ZPL underlay (no z-order), multi-label ZPL streams |
-| Rotation, a consumer date strip, keyword anchoring on ZPL fields | Date formatting and locale (the caller supplies the string) |
-| Carrier seeds declared by plugins | Stamping PNG documents; keyword anchoring on PDF |
+| Rotation, a consumer date strip, keyword anchoring on ZPL fields and PDF page text | Date formatting and locale (the caller supplies the string) |
+| Carrier seeds declared by plugins | Stamping PNG documents; PDF text set at angles other than multiples of 90 degrees |
 
 ---
 
@@ -164,9 +166,11 @@ stamped = lib.stamp_document(
  |                                                               |
  |  anchor resolution:                                           |
  |   placement(x,y) ------------------------------> placement    |
- |   keyword (+geometry | seed.keyword_placement) -> ^FO origin  |
+ |   keyword (+geometry | seed keyword geometry for FORMAT)     |
+ |            ZPL -> ^FO origin | PDF -> page text run origin    |
  |   neither --> seed lookup carrier/doc_type/FORMAT/paper       |
- |               |  PDF: seed.placement                          |
+ |               |  PDF: seed.keyword + pdf_keyword_placement    |
+ |               |       -> page text run, else seed.placement   |
  |               |  ZPL: seed.keyword -> ^FO origin              |
  |               '--> miss: ValueError naming the key            |
  |                        ^                                      |
@@ -196,8 +200,10 @@ stamped = lib.stamp_document(
 | | `width`, `height` | Pre-rotation extent in millimetres |
 | | `rotation` | Degrees clockwise, default 0 |
 | | `dpi` | ZPL density, default 203; ignored by the PDF backend |
-| `StampSeed` | `placement` | PDF anchor |
-| | `keyword`, `keyword_placement` | ZPL anchor: field text and the strip geometry offset from its `^FO` |
+| `StampSeed` | `placement` | PDF coordinate anchor |
+| | `keyword` | The form's own text beside the signature area, shared by both formats |
+| | `keyword_placement` | ZPL keyword geometry: the strip offset in millimetres from the located `^FO`, in label axes |
+| | `pdf_keyword_placement` | PDF keyword geometry: the strip in millimetres in the keyword's reading frame (see [PDF keyword anchoring](#pdf-keyword-anchoring)); when absent a PDF key resolves `placement` |
 | | `revision` | Supersession counter |
 
 `lib` exports `stamp_document`, `StampPlacement` and `StampSeed`.
@@ -241,8 +247,9 @@ The date strip takes the leading half `d` of the primary axis; both halves are p
 | PNG or unrecognized document bytes | `ValueError` naming the format |
 | No placement, no keyword, no seed for the key | `ValueError` naming `carrier/doc_type/FORMAT/paper` |
 | Keyword with a fully anchored placement | `ValueError`: two contradictory anchors |
-| Keyword on a PDF | `ValueError`: keywords locate ZPL fields only |
-| Keyword matching no `^FD` text | `ValueError` naming the keyword |
+| Keyword matching no `^FD` text, or no text run on the target PDF page | `ValueError` naming the keyword |
+| Keyword on a PDF whose target page carries no extractable text | `ValueError`: the keyword cannot be located without page text |
+| PDF keyword text not turned by a multiple of 90 degrees, skewed or mirrored | `ValueError` naming the keyword |
 | Negative `x`/`y`, non-positive `width`/`height` | `ValueError` naming the field |
 | `page` outside `1..page_count` | `ValueError` naming `StampPlacement.page` |
 | Rotated PDF extent leaving the mediabox | `ValueError` naming the edge |
@@ -341,6 +348,7 @@ The SDK stays carrier-agnostic: markers are declarative plugin data beside `stam
  |  ZPL: kind present when all its markers occur in the stream   |
  |  PDF: per-page text (pypdf), whitespace-collapsed; kind       |
  |       present when all its markers occur on one page          |
+ |  AnyOf(set, set, ...): present when any one set matches       |
  |                                                               |
  |  cn22 absent            --> none                   doc_type - |
  |  cn22, label absent     --> declaration            cn22       |
@@ -357,7 +365,7 @@ A seed's own placement names the page it stamps, which for a combined printout m
 `stamp_document` therefore takes an optional one-based `page` that applies a registry-resolved PDF placement (plugin seed or injected `registry`) on that page instead of the seed's; omitting it, or passing `None` as ZPL classification returns, keeps the seed's page.
 An out-of-range `page` raises through the same bounds check as `StampPlacement.page`.
 A `page` combined with a fully anchored placement raises, because that placement already names its page and two page anchors would contradict, mirroring the keyword-with-placement rule.
-A `page` against ZPL raises, because a ZPL label has no pages to select, mirroring the rejection of a keyword against PDF.
+A `page` against ZPL raises, because a ZPL label has no pages to select.
 The documents endpoint passes an optional `page` field through to `stamp_document`.
 
 The declaration marker alone never implies a lone declaration: a combined printout carries it too, so `declaration` means the declaration kind is present and the label kind is absent.
@@ -369,14 +377,16 @@ Classification performs no I/O beyond the plugin metadata lookup and never modif
 
 | Type | Field | Meaning |
 |------|-------|---------|
-| `PluginMetadata` | `document_sections` | `{FORMAT: {kind: markers}}`; ZPL markers are field-comment substrings of the stream, PDF markers are page-text substrings; a kind is present when all its markers match; a single string is one marker |
+| `PluginMetadata` | `document_sections` | `{FORMAT: {kind: markers}}`; ZPL markers are field-comment substrings of the stream, PDF markers are page-text substrings; a kind is present when all its markers match; a single string is one marker; `lib.AnyOf(set, set, ...)` declares alternative sets, present when any one set fully matches |
+| `AnyOf` | `sets` | Frozen tuple of marker sets, each a string or a sequence with the all-of meaning; a bare string, tuple or list stays a single set |
 | `CustomsComposition` | `none`, `declaration`, `label_with_declaration` | String enum of the composition outcome |
 | `CustomsClassification` | `composition` | A `CustomsComposition` member |
 | | `kinds` | Sorted tuple of composed kinds present, such as `("cn22", "label")` |
 | | `doc_type` | `cn22`, `label_cn22`, or `None` for `none` |
 | | `page` | One-based PDF page carrying the declaration; `None` for ZPL and for `none` |
 
-`lib` exports `classify_customs_composition`, `CustomsClassification` and `CustomsComposition`.
+`lib` exports `classify_customs_composition`, `CustomsClassification`, `CustomsComposition` and `AnyOf`.
+Alternative sets exist because carrier label templates differ: PostNord's sandbox booking PDF prints a tracked letter label without the letter label's text.
 
 ```python
 METADATA = PluginMetadata(
@@ -406,6 +416,7 @@ if result.doc_type:
 | 1.5 | `feat(sdk): export customs classification through karrio.lib` | `modules/sdk/karrio/lib.py`, `stamping.py` (module docstring), `test_stamping_classification.py` |
 | 1.6 | `feat(sdk): apply a registry-resolved stamp placement on a named page` | `stamping.py` (`stamp_document` `page`), `lib.py`, `modules/sdk/tests/core/test_stamping_page_override.py` |
 | 1.6 | `feat(documents): accept a seed page on the stamping endpoint` | `modules/documents/karrio/server/documents/serializers/base.py`, `views/stamping.py`, `tests/test_stamping.py` |
+| 6.1 | `feat(sdk): accept alternative marker sets per document section` | `modules/sdk/karrio/core/utils/stamping.py` (`AnyOf`, `_kinds_present`), `modules/sdk/karrio/lib.py`, `modules/sdk/tests/core/test_stamping_classification.py` |
 
 Carrier markers, combined seeds (`label_cn22/ZPL/*`, `label_cn22/PDF/A4`) and booking-time verification belong to the carrier connector and are out of scope for this SDK section.
 
@@ -423,6 +434,9 @@ Carrier markers, combined seeds (`label_cn22/ZPL/*`, `label_cn22/PDF/A4`) and bo
 | Multi-page PDF with the declaration on page 2 | page 2 |
 | PDF whose text matches no marker, and a PDF with a partial multi-marker kind | `none` |
 | Carrier declaring no sections for the format | `none` |
+| `AnyOf` label kind whose second set alone matches (ZPL and PDF) | label present; PDF names the declaration page |
+| `AnyOf` with no set, or only part of a set, matching | kind absent |
+| `AnyOf` wrapping one set, and a list declaration | same result as the bare set |
 | PNG input | `ValueError` naming `PNG` |
 | Any input | the document's `base64` is unchanged |
 
@@ -442,6 +456,68 @@ python -m unittest discover -v -f modules/sdk/tests
 ```
 
 ---
+
+## PDF keyword anchoring
+
+### Problem
+
+A PostNord sandbox booking of the export letter with a PDF label returned two A4 pages, a tracked letter label and an upright CN22, whereas the single-page combined and customs-only printouts turn the CN22 by 90 degrees beside the label.
+The CN22 form sits at a different offset and orientation in each layout, so one `label_cn22/PDF/A4` coordinate seed cannot serve both, while the signature keyword is printed in every captured layout.
+
+### Design
+
+A keyword supplied for a PDF, or a seed carrying `pdf_keyword_placement`, is located in the page text instead of rejected.
+The target page is the `page` override when given, else the first page whose text contains the keyword.
+pypdf's text visitor reports each run's text matrix and the graphics matrix of the content stream it sits in, but extracts a form XObject from an identity matrix, so the locator tracks the invoking `cm` and each form's `/Matrix` from the operator callbacks and composes `Tm x CTM x form matrices` into page space; the form's whole text, which pypdf reports once more under the invoking stream, is discarded.
+The origin is the start of the first run containing the keyword, and the run's x-axis is the text direction, snapped to a multiple of 90 degrees clockwise; any other direction raises.
+
+```
+ page (top-left mm, y down)            keyword reading frame
+                                                 x (along the text)
+      O = start of the matched run          O ------------------->
+      d = text direction                    |   (x, y)
+      n = d turned 90 deg clockwise         |     +-------------+
+                                            |     |  width      | height
+   upright  d=(1,0)   n=(0,1)               |     +-------------+
+   turned   d=(0,1)   n=(-1,0)              v y (below the baseline)
+   (90 cw)
+                     page rect = O + along*d + across*n  (corner extrema)
+                     page rotation = text angle + geometry rotation
+```
+
+The geometry is a `StampPlacement` in millimetres expressed in that frame: `x` along the text, `y` below the baseline, `width`/`height` the pre-rotation extent, `rotation` clockwise relative to the text; `None` offsets mean 0 and `page`/`dpi` are ignored.
+Its rotated extent is mapped corner by corner onto the page, and the result, on the matched page and with the text angle added to its rotation, flows through the same PDF compositing and bounds validation as a consumer placement.
+Units differ from the ZPL keyword geometry, which is offset in label axes from a dot origin, so the PDF geometry is a separate seed field.
+
+The resolution chain stays placement before consumer keyword before seed.
+A consumer keyword takes its geometry from a geometry-only placement, else from the injected `registry`, else from the seed's keyword geometry for the document's format.
+With neither placement nor keyword, a PDF seed resolves by its keyword only when it carries `pdf_keyword_placement`; a seed with only a coordinate placement resolves there without consulting its keyword, so existing seeds are unchanged.
+Classification's `page` flows into the keyword search as the target page.
+
+Measured on the captures, the keyword run starts at page (157.717, 677.733) pt turned 90 degrees clockwise on the single-page layouts and at (157.717, 371.644) pt upright on page 2 of the two-page booking.
+
+### Implementation plan
+
+| Task | Commit | Files |
+|------|--------|-------|
+| 6.2 | `feat(sdk): anchor pdf stamps by keyword in page text` | `modules/sdk/karrio/core/utils/stamping.py` (`StampSeed.pdf_keyword_placement`, `_TextRunCollector`, `_resolve_pdf_keyword_placement`, `stamp_document`), `modules/sdk/tests/core/stamping_helpers.py` (`text_runs_pdf_b64`), `modules/sdk/tests/core/test_stamping_pdf_keyword.py`, `modules/sdk/tests/core/test_stamping_resolution.py` |
+
+### Testing strategy
+
+`test_stamping_pdf_keyword.py` generates PDFs whose keyword runs sit at explicit text matrices, and asserts the overlay's `cm` against literals derived from the keyword position placed in the test.
+
+| Case | Expected |
+|------|----------|
+| Keyword upright, turned 90 degrees clockwise, and counter-clockwise | stamp at the keyword origin plus the geometry, oriented along the text |
+| Keyword inside a form XObject with a `/Matrix`, drawn under a `cm` | origin composed into page space |
+| Keyword within a longer run | anchored at the run's start |
+| Keyword on pages 1 and 2 with `page=2`; keyword on page 2 only without `page` | stamp on page 2 only |
+| Keyword on no page, or not on the named page | `ValueError` naming the keyword |
+| Target page without text | `ValueError`: cannot be located without page text |
+| Text at 45 degrees | `ValueError` naming the keyword |
+| Seed with `pdf_keyword_placement`, with and without `page` | resolves by keyword on the target page |
+| Seed with only a coordinate PDF placement and a ZPL keyword | resolves at the coordinates wherever the keyword sits |
+| Consumer keyword with seed or injected-registry geometry | seed or registry geometry at the consumer's keyword |
 
 ## Appendix A: Contributing a carrier seed
 
@@ -463,7 +539,8 @@ METADATA = PluginMetadata(
 )
 ```
 
-A PDF key resolves `placement`; a ZPL key resolves `keyword` plus `keyword_placement`, whose `x`/`y` are offsets from the located `^FO`.
+A PDF key resolves `placement`, or `keyword` plus `pdf_keyword_placement` when the seed carries it; a ZPL key resolves `keyword` plus `keyword_placement`, whose `x`/`y` are offsets from the located `^FO`.
+A seed measured for PDF keyword anchoring expresses the strip in the keyword's reading frame (see [PDF keyword anchoring](#pdf-keyword-anchoring)), so it holds for every layout that prints the keyword at the same distance from the strip, upright or turned.
 A key with a concrete paper variant never matches another variant; a `*` paper segment matches any page.
 
 Measuring a seed:
