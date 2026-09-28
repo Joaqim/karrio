@@ -75,7 +75,14 @@ Connection config options (under the connection's config):
 | `postnord_notify_by_phone` | bool | — | Opt in to voice-call notification (`A9`, consignee `phoneNo`). |
 | `postnord_driver_notification` | bool | — | Opt in to driver notification (`B8`, consignee `phoneNo`). |
 
-PostNord has no notification-suppress flag: the consignee is notified only when a notification additional service is booked, and channels combine freely — setting only `sms_notification` books SMS and nothing else. `false` or omitted books nothing. Per-service rules apply (documented, not enforced here): PostNord documents Parcel (18) as requiring one of A2/A3/A4 and MyPack Home (17) as requiring consignee SMS-or-email contact data; PostNord validates these at booking.
+PostNord has no notification-suppress flag: the consignee is notified only when a notification additional service is booked, and channels combine freely — setting only `sms_notification` books SMS and nothing else. `false` or omitted books nothing. Per-service rules apply (documented, not enforced here); PostNord validates them at booking, not the connector:
+
+| Service | PostNord rule |
+|---------|---------------|
+| Parcel (18) | One of A2/A3/A4 must be booked. |
+| MyPack Home (17) | Consignee SMS or e-mail contact data is mandatory, and additional service C7 (`postnord_flexchange`) is mandatory unless A6 or F1 is booked; the connector has no option for A6 or F1. |
+| Return Pickup (20) | SMS is mandatory on both the consignor and the consignee party. |
+| Return (24) | E-mail and SMS are mandatory on the return part. |
 
 ## Labels
 
