@@ -8,7 +8,7 @@
 | Status | In Progress |
 | Owner | Joaqim Planstedt |
 | Type | Enhancement |
-| Reference | [AGENTS.md](../AGENTS.md); fork readers: the openspec `documents/stamping` spec on the `docs-openspec` branch |
+| Reference | [AGENTS.md](../AGENTS.md) |
 
 ---
 
@@ -27,7 +27,8 @@
 11. [Migration & Rollback](#migration--rollback)
 12. [Customs composition classification](#customs-composition-classification)
 13. [PDF keyword anchoring](#pdf-keyword-anchoring)
-14. [Appendix A: Contributing a carrier seed](#appendix-a-contributing-a-carrier-seed)
+14. [ZPL reading-frame and format anchoring](#zpl-reading-frame-and-format-anchoring)
+15. [Appendix A: Contributing a carrier seed](#appendix-a-contributing-a-carrier-seed)
 
 ---
 
@@ -69,6 +70,9 @@ The utility composites pixels only: it stores nothing and asserts nothing about 
 |---|----------|---------|---------|--------|
 | Q1 | Should an injected `registry` lookup also return `StampSeed`? | Injection can express a PDF placement but not an implicit ZPL keyword seed | A) widen the return type, B) keep `StampPlacement` | Deferred |
 | Q2 | Should the endpoint accept `keyword` and a geometry-only placement? | The keyword path is reachable from the SDK only | A) add both fields, B) keep the current request | Deferred |
+| Q3 | Does the request body limit accommodate a base64 document plus a base64 image? | No `DATA_UPLOAD_MAX_MEMORY_SIZE` override exists, so Django's 2.5 MB default likely caps the combined payload; this is untested | A) confirm the default suffices, B) set an explicit ceiling with a 413 response | Open |
+| Q4 | Should a registry miss return 409 instead of 400? | The endpoint maps every SDK `ValueError`, a registry miss included, to 400 (D11) | A) keep 400 for all `ValueError`s, B) 409 for a registry miss, 400 otherwise | Open |
+| Q5 | Should the date and signature split become per-carrier? | D6 splits every placement evenly (`DATE_STRIP_FRACTION = 0.5`, `modules/sdk/karrio/core/utils/stamping.py:76`); the split is derived from PostNord, currently the only supported stamping carrier | A) keep one even split, B) a per-carrier partition | Open until reference documents from further carriers are available |
 
 ### Resolved Decisions
 
@@ -86,6 +90,10 @@ The utility composites pixels only: it stores nothing and asserts nothing about 
 | D10 | Seed ownership | `PluginMetadata.stamp_seeds`, resolved on demand through `karrio.references` | No import-order dependence and no carrier data in the core |
 | D11 | Client input errors | `ValueError` from the SDK, 400 from the endpoint | Missing or undecodable images, unparseable PDFs, bad pages and unsafe graphic names are caller faults |
 | D12 | Allocation bounds | ZPL operand range checked before the raster is built; PDF date raster capped at 20 000 px per side | A single request must not be able to allocate an unbounded canvas |
+| D13 | Endpoint protocol | REST `POST /v1/documents/stamp` only; a GraphQL mutation was rejected | Document generation (`DocumentGenerator`), the co-located precedent, is a REST view whose base64 request and response idiom maps directly onto stamping |
+| D14 | Execution | Synchronous, no Huey task | Stamping is an in-process pypdf/Pillow transformation of one document with no network call, like the synchronous `DocumentGenerator` |
+| D15 | Document input | Base64 in the request body only; stamping a stored shipment document is out of scope | A request-carried document has no stored resource to scope by org, so authentication is the whole tenancy story; a stored-document variant would need org-scoped access checks |
+| D16 | Registry exposure | The endpoint accepts `carrier` and `doc_type` scalars and resolves the built-in registry server-side | The SDK `registry` argument is a `RegistryLookup` callable, which is not serializable, so the HTTP surface forwards only the seed key segments |
 
 ---
 
@@ -171,7 +179,8 @@ stamped = lib.stamp_document(
  |   neither --> seed lookup carrier/doc_type/FORMAT/paper       |
  |               |  PDF: seed.keyword + pdf_keyword_placement    |
  |               |       -> page text run, else seed.placement   |
- |               |  ZPL: seed.keyword -> ^FO origin              |
+ |               |  ZPL: seed.keyword -> ^FO origin (label axes) |
+ |               |       or text start (zpl_keyword_frame_...)   |
  |               '--> miss: ValueError naming the key            |
  |                        ^                                      |
  |                        | PluginMetadata.stamp_seeds           |
@@ -184,7 +193,7 @@ stamped = lib.stamp_document(
  |              translate -> merge over|under page (pypdf)       |
  |   stamp_zpl: range check -> flatten + date -> dot raster ->   |
  |              threshold 1-bpp -> rotate -> ^GFA | ~DY + ^XG    |
- |              -> splice before ^XZ                             |
+ |              -> splice before the keyword format's ^XZ      |
  +---------------------------------------------------------------+
               |
               v
@@ -204,6 +213,7 @@ stamped = lib.stamp_document(
 | | `keyword` | The form's own text beside the signature area, shared by both formats |
 | | `keyword_placement` | ZPL keyword geometry: the strip offset in millimetres from the located `^FO`, in label axes |
 | | `pdf_keyword_placement` | PDF keyword geometry: the strip in millimetres in the keyword's reading frame (see [PDF keyword anchoring](#pdf-keyword-anchoring)); when absent a PDF key resolves `placement` |
+| | `zpl_keyword_frame_placement` | ZPL keyword geometry in the matched field's reading frame (see [ZPL reading-frame and format anchoring](#zpl-reading-frame-and-format-anchoring)); outranks `keyword_placement` when both are set |
 | | `revision` | Supersession counter |
 
 `lib` exports `stamp_document`, `StampPlacement` and `StampSeed`.
@@ -259,7 +269,7 @@ The date strip takes the leading half `d` of the primary axis; both halves are p
 | Missing or undecodable image, unparseable PDF | `ValueError` |
 | `graphic_name` other than `[device:]NAME[.GRF]` | `ValueError` (SDK) or 400 (serializer) |
 
-Known ZPL limitations, documented rather than handled: the graphic splices before the last `^XZ`, so a multi-label stream is stamped on its last label only; the keyword locator reads `^FO` only and ignores `^LH`, `^FT` and `^CC`; the sniffer recognizes ZPL only when the stream starts with `^XA`.
+Known ZPL limitations, documented rather than handled: a placement without a keyword splices before the last `^XZ`, so a multi-label stream is stamped on its last label only (a keyword-resolved stamp splices into the format containing the keyword); the keyword locator reads `^FO` only and ignores `^LH`, `^FT` and `^CC`; the sniffer recognizes ZPL only when the stream starts with `^XA`.
 
 ### Security Considerations
 
@@ -519,6 +529,66 @@ Measured on the captures, the keyword run starts at page (157.717, 677.733) pt t
 | Seed with only a coordinate PDF placement and a ZPL keyword | resolves at the coordinates wherever the keyword sits |
 | Consumer keyword with seed or injected-registry geometry | seed or registry geometry at the consumer's keyword |
 
+## ZPL reading-frame and format anchoring
+
+### Problem
+
+A live International Parcel (`91`) ZPL booking returned two formats: the parcel label, then an upright (`^FWN`) CN22 with the keyword at `^FO25,785` in a format of `^LL840`.
+The ZPL keyword geometry was a label-axis offset from `^FO`, measured on the rotated (`^FWR`) letter CN22, and the stamp was spliced before the stream's last `^XZ`; on the upright CN22 the seed resolved to `^FO12,1053`, beyond the format's printable length.
+
+### Design
+
+Formats are delimited by `^XZ` alone: a format spans from just after the previous `^XZ` (or the stream start) to its own `^XZ`, so a redundant header `^XA` opening a format (as PostNord emits) does not start another.
+The keyword locator counts formats while it scans and resets its running `^FO`, `^FW` orientation and `^CF` height at each `^XZ`.
+Every keyword-resolved ZPL stamp, whichever geometry it uses, is spliced before the `^XZ` closing the format that contains the matched field; a placement without a keyword keeps splicing before the last `^XZ`.
+
+The matched field's effective orientation is its field font's (`^A<font><orientation>`, ending at the field's `^FS`) when it names one, else the format's latest `^FW`, else normal; `N`/`R`/`I`/`B` map to 0/90/180/270 degrees clockwise.
+Its character height is the field font's height, else the format's latest `^CF` height, else the 9-dot power-on default.
+
+`^FO` addresses the top-left of the field's box in label axes whatever the orientation, so it is where the text starts only for a normal field.
+The reading frame's origin is where the text starts, on the glyph-top edge of its character cell:
+
+```
+   N (0)                         R (90 cw)
+   ^FO = O                       ^FO    O = ^FO + (height, 0)
+    O------------> x (along)       +----O
+    | Date and Sender's...         |  D |      text runs down,
+    v y (toward the underside)     |  a |      glyph tops face right
+                                   |  t |
+                                   v    v x (along)
+                               y (underside) points left
+```
+
+An inverted or bottom-up field starts one rendered text length from `^FO`, which depends on the printer's font metrics and is not in the stream, so a reading-frame geometry against such a field raises naming the keyword and the orientation.
+
+`StampSeed.zpl_keyword_frame_placement` carries geometry in that frame with the meaning of `pdf_keyword_placement`: `x` along the text, `y` toward its underside, `width`/`height` the pre-rotation extent, `rotation` relative to the text, plus `dpi`.
+It is mapped onto the label by the same corner mapping as the PDF geometry, and the text's orientation adds to its rotation.
+`keyword_placement` keeps its label-axis semantics, so the existing seeds resolve byte-identically; a consumer-supplied geometry and an injected registry's geometry remain label-axis offsets.
+Redefining `keyword_placement` as reading-frame geometry was rejected because the PostNord CN22 seed (`x` -1.673, `y` 33.529 mm, rotation 90) would resolve elsewhere on the rotated layout.
+
+The reading-frame geometry equivalent to that seed on the rotated layout (keyword `^FO20,35`, `^FWR`, `^CF0,20,20`, so text start at dots (40, 35)) is `x` 33.529, `y` -3.4245, 49.1 x 7.6 mm, rotation 0; it resolves to `^FO7,303` with a 61 x 392-dot raster there, and to `^FO293,758` with an unrotated 392 x 61-dot raster in the second format of the International Parcel capture (keyword `^FO25,785`, `^FWN`), inside its `^LL840`.
+
+### Implementation plan
+
+| Task | Commit | Files |
+|------|--------|-------|
+| 7.1 | `feat(sdk): anchor zpl keywords in the field's reading frame and format` | `modules/sdk/karrio/core/utils/stamping.py` (`StampSeed.zpl_keyword_frame_placement`, `StampRequest.zpl_format`, `_splice_zpl_field`, `_match_zpl_field`, `_zpl_text_origin`, `_frame_placement`, `_resolve_keyword_placement`, `stamp_document`), `modules/sdk/tests/core/test_stamping_zpl_frame.py` |
+
+### Testing strategy
+
+`test_stamping_zpl_frame.py` builds its ZPL in the test and asserts `^GFA` origins and byte counts against hand-computed literals.
+
+| Case | Expected |
+|------|----------|
+| Rotated single format, label-axis seed | `^FO7,303`, 61 x 392 dots, spliced before the only `^XZ`, output otherwise unchanged |
+| Rotated single format, equivalent reading-frame seed | byte-identical to the label-axis output |
+| Label format then upright CN22 format with a header `^XA` | `^FO293,758`, 392 x 61 dots, before the second `^XZ`; first format byte-identical |
+| Upright CN22 format then label format | spliced before the first `^XZ`; label format unchanged |
+| `^A0R,30,30` field under `^FWN` | frame turned 90 degrees from text start `^FO` + 30 dots |
+| `^FW` and `^CF` in an earlier format | do not leak into the next format |
+| `^A` without an orientation | keeps the format's `^FW` |
+| Frame geometry against an `^FWI` field | `ValueError` naming the keyword and 180 degrees |
+
 ## Appendix A: Contributing a carrier seed
 
 A connector declares seeds on its plugin metadata, keyed `doc_type/FORMAT/paper`; the carrier segment comes from the plugin id.
@@ -539,7 +609,7 @@ METADATA = PluginMetadata(
 )
 ```
 
-A PDF key resolves `placement`, or `keyword` plus `pdf_keyword_placement` when the seed carries it; a ZPL key resolves `keyword` plus `keyword_placement`, whose `x`/`y` are offsets from the located `^FO`.
+A PDF key resolves `placement`, or `keyword` plus `pdf_keyword_placement` when the seed carries it; a ZPL key resolves `keyword` plus `zpl_keyword_frame_placement` in the field's reading frame when the seed carries it, else `keyword` plus `keyword_placement`, whose `x`/`y` are offsets from the located `^FO` in label axes.
 A seed measured for PDF keyword anchoring expresses the strip in the keyword's reading frame (see [PDF keyword anchoring](#pdf-keyword-anchoring)), so it holds for every layout that prints the keyword at the same distance from the strip, upright or turned.
 A key with a concrete paper variant never matches another variant; a `*` paper segment matches any page.
 
