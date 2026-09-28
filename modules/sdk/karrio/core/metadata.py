@@ -57,6 +57,12 @@ class PluginMetadata:
     # karrio.core.utils.stamping); resolved when a stamp omits its placement.
     stamp_seeds: Optional[Dict[str, Any]] = None
 
+    # Section markers recognizing this carrier's composed printouts, keyed by
+    # format ("ZPL" field-comment substrings, "PDF" page-text substrings) then
+    # by composed kind such as "cn22" or "label"; a kind's markers are a string
+    # or a sequence that must all match (see karrio.core.utils.stamping).
+    document_sections: Optional[Dict[str, Dict[str, Any]]] = None
+
     # Extra metadata
     website: Optional[str] = None
     documentation: Optional[str] = None

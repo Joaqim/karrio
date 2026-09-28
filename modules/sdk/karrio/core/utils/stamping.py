@@ -829,6 +829,24 @@ def _carrier_seeds(carrier: str) -> typing.Dict[str, StampSeed]:
     return (getattr(metadata, "stamp_seeds", None) or {}) if metadata else {}
 
 
+def _carrier_sections(carrier: str) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
+    """Return the ``document_sections`` a carrier plugin declares in its metadata.
+
+    Sections are keyed by format, then by composed kind. Like
+    :func:`_carrier_seeds`, plugins load on demand and a missing carrier
+    (``None`` or ``*``) resolves no sections without loading any plugin.
+    """
+    if carrier in (None, "*"):
+        return {}
+
+    # Deferred: karrio.references imports karrio.lib, which imports this module.
+    import karrio.references as references
+
+    metadata = references.collect_providers_data().get(carrier)
+
+    return (getattr(metadata, "document_sections", None) or {}) if metadata else {}
+
+
 def _resolve_seed(key: str) -> typing.Optional[StampSeed]:
     """Return the carrier seed for a composed key, paper segment relaxed.
 
