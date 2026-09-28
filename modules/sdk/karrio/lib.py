@@ -44,6 +44,7 @@ StampPlacement = stamping.StampPlacement
 StampSeed = stamping.StampSeed
 CustomsClassification = stamping.CustomsClassification
 CustomsComposition = stamping.CustomsComposition
+AnyOf = stamping.AnyOf
 
 
 # -----------------------------------------------------------
