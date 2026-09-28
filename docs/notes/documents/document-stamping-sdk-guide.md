@@ -9,10 +9,11 @@ format.
 
 Utility: `modules/sdk/karrio/core/utils/stamping.py`, re-exported as
 `lib.stamp_document`, `lib.StampPlacement`, and `lib.StampRequest`.
-This guide covers the launch scope: the PDF backend with a consumer-supplied
-placement.
-The ZPL backend and karrio-supplied registry seeds are follow-ups
-(`openspec/changes/add-document-stamping/tasks.md`, groups 3 and 4).
+This guide covers the PDF backend with a consumer-supplied placement.
+The ZPL backend, carrier-supplied registry seeds, rotation, the date strip, keyword
+anchoring, and customs composition classification have since landed; the published
+guide `apps/www/docs/reference/guides/document-stamping.mdx` and
+`openspec/specs/documents/stamping/spec.md` describe them.
 
 ## The entry point
 
@@ -27,6 +28,10 @@ def stamp_document(
     carrier=None,        # registry seed key segment (omitted-placement path only)
     doc_type=None,       # registry seed key segment (omitted-placement path only)
     registry=None,       # optional RegistryLookup override
+    date=None,           # optional pre-formatted date string composited before the image
+    graphic_name=None,   # ZPL only: opt into the ~DY / ^XG printer cache
+    keyword=None,        # anchor on carrier text instead of coordinates
+    page=None,           # PDF page for a registry- or keyword-resolved placement
 ) -> models.ShippingDocument
 ```
 
@@ -49,6 +54,7 @@ class StampPlacement:
     y: float = None
     width: float = None
     height: float = None
+    rotation: float = 0  # degrees clockwise; the rotated extent's top-left sits at (x, y)
     dpi: int = 203       # ZPL target density; ignored by the PDF backend
 ```
 
@@ -115,7 +121,7 @@ capability, since ZPL has no z-order.
 The PDF backend white-flattens the PNG before compositing.
 Pillow's PDF writer emits no soft mask for an RGBA image, so PNG alpha is
 dropped when the image is saved as a PDF (design question Q6 in
-`openspec/changes/add-document-stamping/design.md`).
+`openspec/changes/archive/2026-09-22-add-document-stamping/design.md`).
 To keep a semi-transparent stroke reading as its intended tone rather than
 rendering fully opaque, the backend composites the image onto an opaque white
 background: the mark keeps its tone and the transparent surround renders white.
@@ -140,33 +146,31 @@ across a stamp.
 
 A document whose format has no active backend is rejected with an explicit
 error rather than passed through unchanged.
-Only the PDF backend is active at launch, so a PNG document — or any other
-non-PDF format, including ZPL until its backend lands — raises a `ValueError`
-naming the unsupported format, and no document is returned.
+The PDF and ZPL backends are active, so a PNG document, or any other format
+without a backend, raises a `ValueError` naming the unsupported format, and no
+document is returned.
 A raster image is never stamped onto a raster image silently.
 
-## Registry omission and the launch reality
+## Registry omission
 
-`placement` is the complete primary path today.
-When a consumer omits `placement`, the utility consults a registry keyed by the
-`carrier`, `doc_type`, and detected format, intended to supply a karrio-measured
-anchor for a known document.
-No seeds ship at launch: the registry hook resolves nothing for every key
-(`_empty_registry` in the utility), so omitting `placement` currently raises an
-explicit `ValueError` naming the missing key rather than guessing an anchor.
-
-Until measured seeds land (tasks.md group 4), a consumer-supplied `placement`
-is required for every stamp.
-A consumer that wants to preview the future seeded path can pass its own
-`registry` callable — a `RegistryLookup` mapping a key string to a
-`StampPlacement` — but the shipped default supplies none.
+When a consumer omits `placement` (and `keyword`), the utility consults a registry
+keyed by the `carrier`, `doc_type`, detected format, and detected paper variant,
+which supplies a karrio-measured anchor for a known document.
+The default registry resolves seeds that carrier plugins declare in
+`PluginMetadata.stamp_seeds` (`_default_registry` in the utility); PostNord declares
+seeds for `cn22` and `label_cn22` in PDF and ZPL
+(`modules/connectors/postnord/karrio/providers/postnord/stamping.py`).
+A key with no seed raises an explicit `ValueError` naming the missing key rather
+than guessing an anchor.
+A consumer can pass its own `registry` callable, a `RegistryLookup` mapping a key
+string to a `StampPlacement`, which replaces the carrier seeds.
 
 ## Responsibility boundary
 
 The utility composites pixels only.
 It stores nothing, and it makes no assertion about the legal validity,
-authority, or signature semantics of the stamped content (decision D8 in
-`PRDs/DOCUMENT_STAMPING_UTILITY.md`).
+authority, or signature semantics of the stamped content (decision D1 in
+`PRDs/DOCUMENT_STAMPING.md`).
 Karrio places the image where the consumer asked; the consumer owns whether
 that image constitutes a valid signature, whether the signer had authority,
 and what the stamped paper means in a customs or carrier workflow.
@@ -177,8 +181,9 @@ The FedEx electronic trade documents (ETD) flow already resolves, for
 electronic documents, the forces this utility faces for paper documents.
 The utility mimics the ETD outcome — a signed, letterheaded document —
 carrier-agnostically, without modifying the FedEx flow.
-The comparison below (adapted from `PRDs/DOCUMENT_STAMPING_UTILITY.md`) is the
-expectation set the workflow builds on.
+The comparison below (adapted from `PRDs/DOCUMENT_STAMPING_UTILITY.md`, which is
+retained on `backup-develop-2026-09-24`; the current `PRDs/DOCUMENT_STAMPING.md`
+carries no ETD comparison) is the expectation set the workflow builds on.
 
 | Dimension | FedEx ETD precedent | Generalized stamping analog |
 |---|---|---|
@@ -209,7 +214,8 @@ consumer did not generate.
 ## Related material
 
 - Utility source: `modules/sdk/karrio/core/utils/stamping.py`
-- Behaviour contract: `openspec/changes/add-document-stamping/specs/documents/stamping/spec.md`
-- Decision record: `PRDs/DOCUMENT_STAMPING_UTILITY.md`
+- Behaviour contract: `openspec/specs/documents/stamping/spec.md`
+- Decision record: `PRDs/DOCUMENT_STAMPING.md`
+- Published guide: `apps/www/docs/reference/guides/document-stamping.mdx`
 - PostNord CN22 supply guide: `docs/notes/postnord/customs-declaration-sdk-guide.md`
 - PostNord customs declaration proxy: `docs/notes/guides/postnord-customs-declaration-proxy.md`
