@@ -9,6 +9,7 @@ the stamped content — that responsibility belongs to the consumer.
 
 import io
 import re
+import enum
 import math
 import base64
 import typing
@@ -24,6 +25,8 @@ import karrio.core.units as units
 import karrio.core.utils.helpers as helpers
 
 RegistryLookup = typing.Callable[[str], typing.Optional["StampPlacement"]]
+SectionMarkers = typing.Union[str, typing.Sequence[str]]
+DocumentSections = typing.Mapping[str, typing.Mapping[str, SectionMarkers]]
 
 MM_PER_INCH: float = 25.4
 POINTS_PER_INCH: float = 72.0
@@ -998,3 +1001,138 @@ def stamp_document(
     stamped = _BACKENDS[document_format](document.base64, request)
 
     return attr.evolve(document, base64=stamped)
+
+
+# The composed kinds the classifier composes into a composition. A carrier
+# declares markers for them in ``PluginMetadata.document_sections``.
+DECLARATION_KIND: str = "cn22"
+LABEL_KIND: str = "label"
+COMBINED_DOC_TYPE: str = f"{LABEL_KIND}_{DECLARATION_KIND}"
+
+
+class CustomsComposition(str, enum.Enum):
+    """The customs composition of a carrier document."""
+
+    none = "none"
+    declaration = "declaration"
+    label_with_declaration = "label_with_declaration"
+
+
+@attr.s(auto_attribs=True, frozen=True)
+class CustomsClassification:
+    """The customs composition of a document and the stamp type it resolves.
+
+    ``kinds`` are the declared composed kinds present, sorted. ``doc_type`` is
+    the registry document type to stamp under: ``cn22`` for a lone
+    declaration, ``label_cn22`` for a label composed with one, ``None`` when
+    the document carries no declaration. ``page`` is the one-based PDF page
+    carrying the declaration, ``None`` for ZPL and for no declaration.
+    """
+
+    composition: CustomsComposition = CustomsComposition.none
+    kinds: typing.Tuple[str, ...] = ()
+    doc_type: typing.Optional[str] = None
+    page: typing.Optional[int] = None
+
+
+def _normalize_whitespace(text: str) -> str:
+    return " ".join(text.split())
+
+
+def _kinds_present(
+    text: str, sections: typing.Mapping[str, SectionMarkers]
+) -> typing.FrozenSet[str]:
+    """Return the kinds whose markers all occur in ``text``.
+
+    Whitespace runs collapse on both sides, so a PDF marker still matches when
+    text extraction breaks it across lines. A lone string is one marker rather
+    than a sequence of characters, and a kind declaring no markers never
+    matches.
+    """
+    haystack = _normalize_whitespace(text)
+    markers = {
+        kind: (value,) if isinstance(value, str) else tuple(value)
+        for kind, value in sections.items()
+    }
+
+    return frozenset(
+        kind
+        for kind, values in markers.items()
+        if values and all(_normalize_whitespace(value) in haystack for value in values)
+    )
+
+
+def _zpl_section_texts(document_b64: str) -> typing.List[str]:
+    """Return the ZPL stream as one text unit; ZPL has no page to report."""
+    return [helpers.decode_bytes(base64.b64decode(document_b64))]
+
+
+# Per-format text units the section markers are matched against, and whether
+# a unit's position is a reportable one-based page.
+_SECTION_TEXTS: typing.Dict[
+    str, typing.Tuple[typing.Callable[[str], typing.List[str]], bool]
+] = {
+    "ZPL": (_zpl_section_texts, False),
+}
+
+
+def classify_customs_composition(
+    document: models.ShippingDocument,
+    carrier: str = None,
+    sections: DocumentSections = None,
+) -> CustomsClassification:
+    """Classify a carrier document's customs composition from section markers.
+
+    Markers come from the injected ``sections`` mapping when supplied, else
+    from the carrier plugin's ``document_sections``, keyed by format then by
+    composed kind. A ZPL kind is present when its markers occur in the stream;
+    a PDF kind when its markers occur in one page's extracted text. The
+    declaration marker alone never implies a lone declaration: a document
+    carrying the declaration and label kinds is ``label_with_declaration``,
+    one carrying the declaration without the label is ``declaration``, and
+    anything else, including a carrier declaring no sections for the format,
+    is ``none``. A format other than ZPL or PDF raises naming the detected
+    format. The document is never modified.
+    """
+    document_format = helpers.sniff_document_format(
+        document.base64,
+        content_type=document.format,
+        default=document.format,
+    )
+
+    if document_format not in _SECTION_TEXTS:
+        raise ValueError(
+            "Customs composition classification supports ZPL and PDF "
+            f"documents only; the document was detected as '{document_format}'"
+        )
+
+    declared = (sections if sections is not None else _carrier_sections(carrier)).get(
+        document_format
+    ) or {}
+    extract, paged = _SECTION_TEXTS[document_format]
+    unit_kinds = [_kinds_present(text, declared) for text in extract(document.base64)]
+    kinds = frozenset().union(*unit_kinds)
+
+    if DECLARATION_KIND not in kinds:
+        return CustomsClassification(kinds=tuple(sorted(kinds)))
+
+    combined = LABEL_KIND in kinds
+    page = next(
+        (
+            index
+            for index, found in enumerate(unit_kinds, 1)
+            if DECLARATION_KIND in found
+        ),
+        None,
+    )
+
+    return CustomsClassification(
+        composition=(
+            CustomsComposition.label_with_declaration
+            if combined
+            else CustomsComposition.declaration
+        ),
+        kinds=tuple(sorted(kinds)),
+        doc_type=COMBINED_DOC_TYPE if combined else DECLARATION_KIND,
+        page=page if paged else None,
+    )
