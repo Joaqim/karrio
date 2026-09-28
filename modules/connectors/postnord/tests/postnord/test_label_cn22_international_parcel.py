@@ -293,6 +293,28 @@ class TestInternationalParcelZplStamp(unittest.TestCase):
         self.assertLess(ROTATED_KEYWORD_INK_END_Y, STRIP_LABEL_DOTS[1][0])
         self.assertLessEqual(V2_BOX_BOTTOM_RULE_ROW, V2_LABEL_LENGTH)
 
+    def test_stamp_is_inserted_into_the_cn22_format_in_its_signature_area(self):
+        document, result, stamped = _stamp(ZPL_FIXTURE, "ZPL")
+        original = _zpl_stream(ZPL_FIXTURE)
+        zpl = _decode_zpl(stamped.base64)
+        label, cn22 = _formats(original)
+        (field,) = _grf_fields(zpl)
+        (field_text,) = re.findall(r"\^FO\d+,\d+\^GFA,[0-9,A-F]*\^FS", zpl)
+        width, height = _grf_extent(field)
+
+        self.assertEqual((result.doc_type, result.page), ("label_cn22", None))
+        self.assertEqual(stamped.format, document.format)
+        self.assertEqual(zpl.count("^XZ"), 2)
+        self.assertEqual(zpl[: len(label)], label)
+        self.assertEqual(
+            zpl[len(label) :], cn22[: -len("^XZ")] + field_text + "^XZ\n"
+        )
+        # Upright: the raster runs along the keyword line, wider than tall.
+        self.assertGreater(width, height)
+        _assert_dots_within(self, _grf_ink_bounds(field), V2_SIGNATURE_AREA)
+        self.assertLessEqual(field[1] + height, V2_LABEL_LENGTH)
+        self.assertLessEqual(field[1] + height - 1, V2_BOX_BOTTOM_RULE_ROW - 1)
+
     def test_rotated_letter_cn22_still_stamps_in_its_measured_strip(self):
         for name in COMBINED_ZPL_FIXTURES:
             with self.subTest(fixture=name):
