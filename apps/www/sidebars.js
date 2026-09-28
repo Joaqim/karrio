@@ -120,6 +120,7 @@ const sidebars = {
         'reference/guides/trackers',
         'reference/guides/orders',
         'reference/guides/batches',
+        'reference/guides/document-stamping',
       ],
     },
   ],
