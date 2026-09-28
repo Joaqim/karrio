@@ -15,7 +15,7 @@ Tests run in the nix dev shell per `docs/notes/workflow/nix-dev-shell-worktrees.
 - [x] 1.3 Add PDF classification by per-page text extraction with pypdf; verify unit tests for combined, lone, and no-marker-text PDFs built in-test, including a multi-page PDF naming the correct page index
 - [x] 1.4 Reject unsupported formats with an explicit error naming the detected format; verify a test with a PNG input
 - [x] 1.5 Export the classifier and result type through `karrio.lib` and document classify-then-stamp usage in the stamping module docstring; verify `python -m unittest discover -v -f modules/sdk/tests` passes
-- [ ] 1.6 Add an optional page override to the stamp entry point so a seeded placement is applied on the page named by classification (combined PDF CN22 page); verify a test stamping a multi-page PDF on page 2 under a page-1 seed, and that omitting the override keeps the seed's page
+- [x] 1.6 Add an optional page override to the stamp entry point so a seeded placement is applied on the page named by classification (combined PDF CN22 page); verify a test stamping a multi-page PDF on page 2 under a page-1 seed, and that omitting the override keeps the seed's page
 
 ## 2. PostNord sections, fixtures, and combined seeds (`feat-postnord-cn22-stamping`)
 
