@@ -71,6 +71,7 @@ PostNord publishes no money-rate API and no end-of-day manifest, so rating and m
 | Q2 | Handling when a declared value exceeds the CN22 ceiling (300 SDR) | Field error versus escalation to CN23; the only local signal is the swagger note that CN23 `commercialItems` apply above 200 EUR | Deferred until sandbox evidence exists |
 | Q3 | Should Åland (`AX`, Swedish-speaking) map to `sv` in `CountryLocale`? | The mapping covers SE, DK, NO, FI only | Deferred |
 | Q4 | NVIT declaration branch, net-weight modeling, per-parcel linkage | See [Future Work](#future-work) | Pending PostNord confirmation |
+| Q5 | How should MyPack Collect (19) receive its delivery service point? | PostNord requires a service-point party (`partyIdType 156`, service point id) supplied by the merchant; the connector sends only the consignor customer number (`partyIdType "160"`) and has no input for a service point id | Pending |
 
 ### Resolved Decisions
 
