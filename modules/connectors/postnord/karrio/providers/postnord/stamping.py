@@ -24,24 +24,35 @@ CN22_SEED = lib.StampSeed(
 
 # The combined label + CN22 printout carries the CN22 section unchanged, with
 # the keyword occurring once, so its ZPL anchor is the lone CN22's keyword and
-# offset. The PDF placement was measured on the combined A4 page with pypdf:
-# the page draws the 839 x 1518-dot label frame as one /Form1 XObject
-# translated to (148.84964, 151.74292) pt, whose keyword text and CN22 box
-# bottom rule sit at label (25, 35) and y 695 dots, the lone form's landmarks.
-# The signature strip (label x 6.63-67.53, y 302.97-695.44 dots) therefore
-# spans page x 53.34-60.96 mm and y 91.44-140.55 mm, the same page region as
-# the lone CN22 seed, kept as its own revision so the forms can diverge.
+# offset. PostNord's PDF printout comes in two layouts: one A4 page with the
+# CN22 turned beside the label (the by-id capture) and, in the sandbox booking
+# capture, the label on page 1 and an upright CN22 on page 2. The PDF therefore
+# anchors on the keyword, in its reading frame: the strip starts 33.53 mm along
+# the text from the keyword run's origin and 5.32 mm above its baseline, and
+# extends 49.11 x 7.62 mm along the text. That is the signature strip measured
+# on the single-page layout (label x 6.63-67.53, y 302.97-695.44 dots), edge
+# aligned with the CN22 box's right and bottom rules. The upright form's box is
+# wider and deeper, so there the same strip sits inside the free signature area
+# (1.1 mm below the certification text, 2.2 mm above the bottom rule, 18.1 mm
+# short of the right rule) rather than on its rules. ``placement`` keeps the
+# single-page layout's coordinates. Revision 2 supersedes the coordinate-only
+# revision 1, which stamped the two-page layout's CN22 across its
+# explanation, contents and tariff rows.
 LABEL_CN22_SEED = lib.StampSeed(
     placement=lib.StampPlacement(
         x=53.34, y=91.44, width=49.11, height=7.62, rotation=90
     ),
-    revision=1,
+    revision=2,
     keyword=CN22_SEED.keyword,
     keyword_placement=CN22_SEED.keyword_placement,
+    pdf_keyword_placement=lib.StampPlacement(
+        x=33.53, y=-5.32, width=49.11, height=7.62, rotation=0
+    ),
 )
 
-# One seed serves both formats: a PDF key resolves the coordinate placement and
-# a ZPL key the keyword anchor.
+# A ZPL key resolves the keyword anchor; a PDF key resolves the keyword anchor
+# when the seed carries PDF keyword geometry and the coordinate placement
+# otherwise, so the lone CN22 PDF stays coordinate-anchored.
 STAMP_SEEDS = {
     "cn22/PDF/A4": CN22_SEED,
     "cn22/ZPL/*": CN22_SEED,
