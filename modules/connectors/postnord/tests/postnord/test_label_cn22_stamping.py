@@ -291,12 +291,15 @@ def _stamp_field(zpl: str) -> str:
 
 
 class TestLabelCn22ZplStamp(unittest.TestCase):
-    def test_zpl_seed_reuses_the_cn22_keyword_anchor(self):
+    def test_zpl_seed_anchors_the_cn22_keyword_in_its_reading_frame(self):
         seeds = references.collect_providers_data()["postnord"].stamp_seeds
         combined, lone = seeds["label_cn22/ZPL/*"], seeds["cn22/ZPL/*"]
 
         self.assertEqual(combined.keyword, KEYWORD)
-        self.assertEqual(combined.keyword_placement, lone.keyword_placement)
+        self.assertEqual(lone.keyword, KEYWORD)
+        self.assertIsNotNone(combined.zpl_keyword_frame_placement)
+        self.assertIsNone(combined.keyword_placement)
+        self.assertIsNone(lone.zpl_keyword_frame_placement)
 
     def test_combined_zpl_stamps_at_the_lone_cn22_placement(self):
         lone_field = _stamp_field(_stamped_zpl(LONE_ZPL_FIXTURE, "cn22"))
@@ -616,8 +619,8 @@ class TestLabelCn22PdfStamp(unittest.TestCase):
         self.assertAlmostEqual(placement.x + placement.height, x_hi, places=2)
         self.assertAlmostEqual(placement.y + placement.width, y_hi, places=2)
 
-    def test_pdf_seed_is_the_keyword_anchored_revision(self):
-        self.assertEqual(postnord_stamping.LABEL_CN22_SEED.revision, 2)
+    def test_seed_is_the_reading_frame_revision(self):
+        self.assertEqual(postnord_stamping.LABEL_CN22_SEED.revision, 3)
 
     def test_pdf_seed_does_not_leak_to_letter(self):
         self.assertIsNone(stamping._default_registry("postnord/label_cn22/PDF/LETTER"))
