@@ -686,5 +686,53 @@ class TestLabelCn22PdfStamp(unittest.TestCase):
         self.assertEqual(_text_runs(_form_page(stamped.base64)[0]), _text_runs(page))
 
 
+
+class TestLabelCn22ClassifyThenStamp(unittest.TestCase):
+    """Every combined capture, classified then stamped with its page."""
+
+    def _classify_and_stamp(self, name: str, document_format: str):
+        document = _document(name, document_format)
+        result = lib.classify_customs_composition(document, carrier="postnord")
+        stamped = lib.stamp_document(
+            document,
+            image=_signature_png_b64(),
+            date="2026-09-28",
+            carrier="postnord",
+            doc_type=result.doc_type,
+            page=result.page,
+        )
+        return document, result, stamped
+
+    def test_combined_zpl_captures_stamp_at_the_signature_field(self):
+        for name in COMBINED_ZPL_FIXTURES:
+            with self.subTest(fixture=name):
+                document, result, stamped = self._classify_and_stamp(name, "ZPL")
+                ((x, y, *_),) = _grf_fields(_decode_zpl(stamped.base64))
+
+                self.assertEqual((result.doc_type, result.page), ("label_cn22", None))
+                self.assertEqual(stamped.format, document.format)
+                self.assertEqual((x, y), (7, 303))
+
+    def test_combined_pdf_captures_stamp_only_the_declaration_page(self):
+        captures = (
+            (COMBINED_PDF_FIXTURE, 1, _rotated_strip_region(), _reads_down_the_page),
+            (TWO_PAGE_PDF_FIXTURE, 2, _two_page_free_area(), _reads_left_to_right),
+        )
+        for name, page, region, oriented in captures:
+            with self.subTest(fixture=name):
+                document, result, stamped = self._classify_and_stamp(name, "PDF")
+                page_count = len(_pdf_pages(document.base64))
+
+                self.assertEqual((result.doc_type, result.page), ("label_cn22", page))
+                self.assertEqual(stamped.format, document.format)
+                self.assertEqual(len(_pdf_pages(stamped.base64)), page_count)
+                for number in range(1, page_count + 1):
+                    overlays = _overlays(stamped.base64, number)
+                    self.assertEqual(len(overlays), 2 if number == page else 0)
+                    for matrix, bounds in overlays:
+                        self.assertTrue(oriented(matrix))
+                        _within(self, bounds, region)
+
+
 if __name__ == "__main__":
     unittest.main()
