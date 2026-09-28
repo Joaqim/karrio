@@ -87,6 +87,10 @@ The utility composites pixels only: it stores nothing and asserts nothing about 
 | D10 | Seed ownership | `PluginMetadata.stamp_seeds`, resolved on demand through `karrio.references` | No import-order dependence and no carrier data in the core |
 | D11 | Client input errors | `ValueError` from the SDK, 400 from the endpoint | Missing or undecodable images, unparseable PDFs, bad pages and unsafe graphic names are caller faults |
 | D12 | Allocation bounds | ZPL operand range checked before the raster is built; PDF date raster capped at 20 000 px per side | A single request must not be able to allocate an unbounded canvas |
+| D13 | Endpoint protocol | REST `POST /v1/documents/stamp` only; a GraphQL mutation was rejected | Document generation (`DocumentGenerator`), the co-located precedent, is a REST view whose base64 request and response idiom maps directly onto stamping |
+| D14 | Execution | Synchronous, no Huey task | Stamping is an in-process pypdf/Pillow transformation of one document with no network call, like the synchronous `DocumentGenerator` |
+| D15 | Document input | Base64 in the request body only; stamping a stored shipment document is out of scope | A request-carried document has no stored resource to scope by org, so authentication is the whole tenancy story; a stored-document variant would need org-scoped access checks |
+| D16 | Registry exposure | The endpoint accepts `carrier` and `doc_type` scalars and resolves the built-in registry server-side | The SDK `registry` argument is a `RegistryLookup` callable, which is not serializable, so the HTTP surface forwards only the seed key segments |
 
 ---
 
