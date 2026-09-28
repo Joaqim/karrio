@@ -383,8 +383,18 @@ Rollback removes the package and the two registration lines.
 ### NVIT customs data set
 
 From 1 April 2026, Norwegian goods moving Norway-to-Norway via Sweden or Finland need per-goods-line trade description, six-digit HS code, net and gross weight, and packaging details at booking.
-The CN22 mapping carries gross weight only; PostNord's `customsInvoice` branch models line net and gross weight, per-parcel `refItemIds`, and `totalNetWeight`.
-Open questions: which branch PostNord expects for NVIT flows, whether to add a unified `Commodity.net_weight` or use a connector convention, whether lines come from `Parcel.items` or `customs.commodities`, where packaging details land, and whether to gate on the affected postcode bands.
+Parcel products already book the `customsInvoice` branch (letters and 91 keep `customsDeclarationCN22`), which models line net and gross weight, per-parcel `refItemIds`, `totalNetWeight`, `splitShipmentReference`, and `returnHsTariffNumber`.
+The remaining gaps against that data set are:
+
+| Gap | Current behavior |
+|-----|------------------|
+| Line net weight | `netWeight` is sent equal to `grossWeight`, both from the unified per-unit `Commodity.weight` times quantity; there is no unified net weight |
+| Returns | `reasonForExportation` is always `1000` (`ExportReason` has only `permanent_export`); returns need `1040` and `returnHsTariffNumber`, which is not mapped |
+| Per-parcel linkage | Every goods item is booked with `itemId="0"` and invoice rows carry no `refItemIds` |
+| HS code format | `hsTariffNumber` is required but not checked for six or more digits without spaces |
+| Split shipments and parcel descriptions | `splitShipmentReference` and goodsItem `goodsDescription` are not mapped |
+
+Open questions: whether to add a unified `Commodity.net_weight` or use a connector convention, whether lines come from `Parcel.items` or `customs.commodities`, where packaging details land, and whether to gate on the affected postcode bands.
 Per-parcel linkage requires replacing the constant `itemId="0"` with unique item ids.
 Until then, callers can submit caller-built `customsInvoice` declarations per item id through `create_customs_declaration`.
 
