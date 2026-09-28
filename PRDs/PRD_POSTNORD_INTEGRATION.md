@@ -207,14 +207,17 @@ karrio.Pickup.schedule(pickup_request).from_(gateway)   # courier collection
 ```
 Caller          create.py              Proxy                         PostNord
   │ ShipmentRequest │                    │                               │
-  ├────────────────>│ resolve label_type, locale, entry_code, CN22      │
+  ├────────────────>│ resolve label_type, locale, entry_code, customs   │
   │                 │ ctx = {shipment_id, label_type, locale,           │
   │                 │        entry_code_error, basic_service_code,      │
-  │                 │        customs_declared}                           │
+  │                 │        customs_declared,                          │
+  │                 │        standalone_customs_documents}              │
   │                 ├───────────────────>│ entry_code_error? → fault body (no call)
   │                 │                    ├── POST /v3/edi/labels/{fmt} ─>│
   │                 │                    │<──── ediLabelResponse ────────┤
-  │                 │                    │ UX + customs_declared?        │
+  │                 │                    │ customs_declared and          │
+  │                 │                    │ (customsInvoice structure, or │
+  │                 │                    │  CN22 with standalone opt-in)?│
   │                 │                    ├── POST /v3/labels/ids/{fmt} ─>│
   │                 │                    │   definePrintout=onlyCustoms  │
   │                 │                    │<──── labelPrintout[] ─────────┤
@@ -246,7 +249,7 @@ config.label_size ─────> ?labelType=standard|small|ste (omitted when u
 | — | (no carrier call) | `get_rates` from the rate sheet |
 | GET | `/rest/transport/v2/transittime/addresstoaddress` | `get_rates` enrichment (opt-in) |
 | POST | `/rest/shipment/v3/edi/labels/{pdf,zpl}` | `create_shipment`, returns |
-| POST | `/rest/shipment/v3/labels/ids/{pdf,zpl}` | standalone customs document (export letters) |
+| POST | `/rest/shipment/v3/labels/ids/{pdf,zpl}` | standalone customs document: always for customs-invoice bookings, for CN22 bookings only with `postnord_standalone_customs_documents` |
 | POST | `/rest/shipment/v3/edi` | `cancel_shipment` placeholder body `{ids:[{id}]}`, rejected by PostNord |
 | POST | `/rest/shipment/v3/pickups` | `schedule_pickup` |
 | GET | `/rest/shipment/v7/trackandtrace/id/{id}/public` | `get_tracking` |
