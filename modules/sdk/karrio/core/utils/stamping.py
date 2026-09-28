@@ -12,7 +12,11 @@ document arrived with. ``classify_customs_composition`` reads the section
 markers the carrier plugin declares in ``document_sections`` and names the
 registry document type (``cn22`` or ``label_cn22``) and, for PDF, the page
 carrying the declaration; the consumer passes both to ``stamp_document``, which
-applies the seed's placement on that page (ZPL classifies with no page)::
+applies the seed on that page (ZPL classifies with no page). A seed anchors a
+PDF either at measured coordinates or, when it carries PDF keyword geometry,
+by locating its keyword in the page text and laying the strip out along that
+text's direction, so one seed serves carrier layouts that print the same form
+upright on its own page or turned beside the label::
 
     result = lib.classify_customs_composition(document, carrier="acme")
     if result.doc_type:
@@ -142,12 +146,20 @@ class StampRequest:
 class StampSeed:
     """Measured anchor data for one carrier document form.
 
-    ``placement`` is the PDF coordinate anchor. ``keyword`` and
-    ``keyword_placement`` are the ZPL anchor: the carrier form's keyword field,
-    and the strip geometry (extent, rotation, ``dpi``) whose ``x``/``y`` are
-    millimetre offsets from the located ``^FO`` origin. ``revision`` is a
-    monotonic integer bumped when a re-measurement supersedes an earlier seed,
-    so a carrier re-rendering a form is handled by shipping a higher revision
+    ``placement`` is the PDF coordinate anchor. ``keyword`` is the text the
+    carrier form prints beside its signature field, shared by both formats.
+    ``keyword_placement`` is the ZPL keyword geometry: the strip's extent,
+    rotation and ``dpi``, with ``x``/``y`` as millimetre offsets from the
+    located ``^FO`` origin in label axes. ``pdf_keyword_placement`` is the PDF
+    keyword geometry, in millimetres in the keyword's reading frame: ``x``
+    runs along the text from the start of the run containing the keyword,
+    ``y`` runs perpendicular to it toward the glyph baseline's underside,
+    ``width``/``height`` are the strip's extent and ``rotation`` is clockwise
+    relative to the text direction (``page`` and ``dpi`` are ignored). A PDF
+    key resolves by keyword only when ``pdf_keyword_placement`` is set;
+    otherwise it resolves at ``placement``. ``revision`` is a monotonic
+    integer bumped when a re-measurement supersedes an earlier seed, so a
+    carrier re-rendering a form is handled by shipping a higher revision
     rather than silently moving an anchor consumers may rely on.
     """
 
@@ -155,6 +167,7 @@ class StampSeed:
     revision: int = 0
     keyword: str = None
     keyword_placement: StampPlacement = None
+    pdf_keyword_placement: StampPlacement = None
 
 
 def mm_to_points(value: float) -> float:
@@ -832,6 +845,241 @@ def _resolve_keyword_placement(
     )
 
 
+Matrix = typing.Tuple[float, float, float, float, float, float]
+IDENTITY_MATRIX: Matrix = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+
+# Degrees a PDF text direction may deviate from a right angle and still snap
+# to it; beyond this the keyword's reading frame is rejected as non-orthogonal.
+TEXT_DIRECTION_TOLERANCE_DEG: float = 0.5
+
+# Unit vectors, in top-left page axes (y down), of the text direction and of
+# the direction toward the underside of its baseline, per clockwise text angle.
+_TEXT_FRAMES: typing.Dict[
+    int, typing.Tuple[typing.Tuple[int, int], typing.Tuple[int, int]]
+] = {
+    0: ((1, 0), (0, 1)),
+    90: ((0, 1), (-1, 0)),
+    180: ((-1, 0), (0, -1)),
+    270: ((0, -1), (1, 0)),
+}
+
+
+def _concat(m: typing.Sequence[float], n: typing.Sequence[float]) -> Matrix:
+    """Return the PDF matrix product ``m x n`` (``m`` applied first)."""
+    a1, b1, c1, d1, e1, f1 = (float(value) for value in m)
+    a2, b2, c2, d2, e2, f2 = (float(value) for value in n)
+
+    return (
+        a1 * a2 + b1 * c2,
+        a1 * b2 + b1 * d2,
+        c1 * a2 + d1 * c2,
+        c1 * b2 + d1 * d2,
+        e1 * a2 + f1 * c2 + e2,
+        e1 * b2 + f1 * d2 + f2,
+    )
+
+
+@attr.s(auto_attribs=True)
+class _DrawnXObject:
+    """One ``Do`` in progress while walking a page's text.
+
+    ``matrix`` is the page-space matrix of a form XObject's content and is
+    ``None`` for anything else (an image, an unresolvable name).
+    ``runs_at_last_operator`` counts the runs collected when the form's own
+    content last reported an operator.
+    """
+
+    matrix: typing.Optional[Matrix] = None
+    resources: typing.Any = None
+    entered: bool = False
+    runs_at_last_operator: int = 0
+
+
+@attr.s(auto_attribs=True)
+class _TextRunCollector:
+    """Collect a page's text runs with their page-space text matrices.
+
+    pypdf's text visitor reports each run's text and graphics matrices
+    relative to the content stream it sits in, and extracts a form XObject
+    starting from an identity matrix, applying neither the invoking ``cm``
+    nor the form's ``/Matrix``. The collector composes those itself: a form
+    is entered on its first operator and left on the invoking ``Do``'s
+    after-callback. Once a form's content ends pypdf reports the form's whole
+    text again as one run under the invoking stream's matrices; that
+    aggregate is the last run reported after the form's final operator, and
+    it is discarded so a keyword spanning several runs is never located at
+    the invoking stream's origin.
+    """
+
+    page_resources: typing.Any = None
+    runs: typing.List[typing.Tuple[str, Matrix]] = attr.Factory(list)
+    streams: typing.List[typing.Tuple[Matrix, typing.Any]] = attr.Factory(list)
+    draws: typing.List[_DrawnXObject] = attr.Factory(list)
+
+    def __attrs_post_init__(self):
+        self.streams.append((IDENTITY_MATRIX, self.page_resources))
+
+    def before(self, operator, operands, cm, tm) -> None:
+        draw = self.draws[-1] if self.draws else None
+        if draw is not None and draw.matrix is not None and not draw.entered:
+            draw.entered = True
+            self.streams.append((draw.matrix, draw.resources))
+
+        if operator != b"Do":
+            return
+
+        outer, resources = self.streams[-1]
+        try:
+            xobject = resources["/XObject"][operands[0]].get_object()
+        except (KeyError, TypeError, IndexError):
+            xobject = None
+
+        if xobject is None or xobject.get("/Subtype") != "/Form":
+            self.draws.append(_DrawnXObject())
+            return
+
+        self.draws.append(
+            _DrawnXObject(
+                matrix=_concat(
+                    xobject.get("/Matrix") or IDENTITY_MATRIX, _concat(cm, outer)
+                ),
+                resources=xobject.get("/Resources") or resources,
+            )
+        )
+
+    def after(self, operator, operands, cm, tm) -> None:
+        if operator == b"Do" and self.draws:
+            draw = self.draws.pop()
+            if draw.entered:
+                self.streams.pop()
+                if len(self.runs) > draw.runs_at_last_operator:
+                    self.runs.pop()
+
+        if self.draws and self.draws[-1].entered:
+            self.draws[-1].runs_at_last_operator = len(self.runs)
+
+    def text(self, text, cm, tm, font, size) -> None:
+        if text and text.strip():
+            self.runs.append((text, _concat(tm, _concat(cm, self.streams[-1][0]))))
+
+
+def _page_text_runs(page: "pypdf.PageObject") -> typing.List[typing.Tuple[str, Matrix]]:
+    """Return a page's non-blank text runs with page-space text matrices."""
+    collector = _TextRunCollector(page_resources=page.get("/Resources"))
+    page.extract_text(
+        visitor_operand_before=collector.before,
+        visitor_operand_after=collector.after,
+        visitor_text=collector.text,
+    )
+
+    return collector.runs
+
+
+def _text_rotation(matrix: Matrix, keyword: str) -> int:
+    """Return the clockwise page angle, in right-angle steps, of a text run.
+
+    The run's text x-axis must lie within ``TEXT_DIRECTION_TOLERANCE_DEG`` of
+    a right angle and its y-axis must lie a quarter turn counter-clockwise of
+    it in PDF space, so skewed, mirrored or diagonal text raises naming the
+    keyword rather than anchoring a stamp in a frame it cannot express.
+    """
+    a, b, c, d = matrix[:4]
+    along = math.degrees(math.atan2(b, a))
+    up = math.degrees(math.atan2(d, c))
+    clockwise = -along % 360
+    step = int(round(clockwise / 90)) % 4 * 90
+    deviation = abs((clockwise - step + 180) % 360 - 180)
+    skew = abs((up - along - 90 + 180) % 360 - 180)
+
+    if deviation > TEXT_DIRECTION_TOLERANCE_DEG or skew > TEXT_DIRECTION_TOLERANCE_DEG:
+        raise ValueError(
+            f"The PDF text matching the stamp keyword '{keyword}' is not set "
+            "upright or turned by a multiple of 90 degrees; its direction "
+            "cannot anchor a stamp"
+        )
+
+    return step
+
+
+def _resolve_pdf_keyword_placement(
+    document_b64: str,
+    keyword: str,
+    geometry: StampPlacement,
+    page: int = None,
+) -> StampPlacement:
+    """Return ``geometry`` placed in page space from a located PDF text run.
+
+    The keyword is searched in the text runs of ``page`` when given, else of
+    the first page whose text contains it. The origin is the start of the
+    first run containing the keyword (whitespace runs collapsed), in page
+    space including every enclosing ``cm`` and form ``/Matrix``, and the
+    run's direction defines the reading frame the geometry is measured in
+    (see :class:`StampSeed`). The geometry's rectangle is mapped from that
+    frame onto the page, its rotation adds the text's clockwise angle, and
+    its page becomes the matched page. A target without extractable text, a
+    keyword found nowhere and a non-orthogonal text direction each raise.
+    """
+    try:
+        pages = pypdf.PdfReader(helpers.to_buffer(document_b64)).pages
+        candidates = (
+            [_validate_page(page, len(pages))]
+            if page is not None
+            else list(range(len(pages)))
+        )
+        page_runs = {index: _page_text_runs(pages[index]) for index in candidates}
+    except pypdf.errors.PyPdfError as error:
+        raise ValueError(f"The PDF document could not be parsed: {error}") from error
+
+    if not any(page_runs.values()):
+        raise ValueError(
+            f"The stamp keyword '{keyword}' cannot be located without page "
+            "text: the target PDF page carries no extractable text"
+        )
+
+    needle = _normalize_whitespace(keyword)
+    match = next(
+        (
+            (index, matrix)
+            for index in candidates
+            for text, matrix in page_runs[index]
+            if needle in _normalize_whitespace(text)
+        ),
+        None,
+    )
+    if match is None:
+        raise ValueError(
+            f"No PDF text matching the stamp keyword '{keyword}' was found "
+            "on the target page"
+        )
+
+    index, matrix = match
+    height_pt = float(pages[index].mediabox.height)
+    rotation = _text_rotation(matrix, keyword)
+    (dx, dy), (nx, ny) = _TEXT_FRAMES[rotation]
+    origin = (
+        matrix[4] * MM_PER_INCH / POINTS_PER_INCH,
+        (height_pt - matrix[5]) * MM_PER_INCH / POINTS_PER_INCH,
+    )
+
+    min_x, max_x, min_y, max_y = _rotated_bounds(
+        geometry.width, geometry.height, geometry.rotation or 0
+    )
+    left, top = geometry.x or 0.0, geometry.y or 0.0
+    corners = [
+        (origin[0] + along * dx + across * nx, origin[1] + along * dy + across * ny)
+        for along in (left, left + max_x - min_x)
+        for across in (top, top + max_y - min_y)
+    ]
+
+    return attr.evolve(
+        geometry,
+        page=index + 1,
+        x=min(x for x, _ in corners),
+        y=min(y for _, y in corners),
+        rotation=(rotation + (geometry.rotation or 0)) % 360,
+    )
+
+
 def _carrier_seeds(carrier: str) -> typing.Dict[str, StampSeed]:
     """Return the ``stamp_seeds`` a carrier plugin declares in its metadata.
 
@@ -893,6 +1141,34 @@ def _default_registry(key: str) -> typing.Optional[StampPlacement]:
     return seed.placement if seed is not None else None
 
 
+def _seed_keyword_geometry(
+    seed: typing.Optional[StampSeed], document_format: str
+) -> typing.Optional[StampPlacement]:
+    """Return a seed's keyword geometry for a format, if it carries one."""
+    if seed is None:
+        return None
+
+    return (
+        seed.keyword_placement
+        if document_format == "ZPL"
+        else seed.pdf_keyword_placement
+    )
+
+
+def _resolve_keyword(
+    document_format: str,
+    document_b64: str,
+    keyword: str,
+    geometry: StampPlacement,
+    page: int = None,
+) -> StampPlacement:
+    """Resolve a keyword-anchored placement with the format's locator."""
+    if document_format == "ZPL":
+        return _resolve_keyword_placement(document_b64, keyword, geometry)
+
+    return _resolve_pdf_keyword_placement(document_b64, keyword, geometry, page)
+
+
 def stamp_document(
     document: models.ShippingDocument,
     image: str = None,
@@ -911,33 +1187,40 @@ def stamp_document(
     The document format is detected from its bytes and dispatched to the
     matching backend; the returned document preserves the input's format and
     shape, replacing only its ``base64`` content. The anchor resolves through
-    an explicit chain: a fully anchored ``placement`` (both ``x`` and ``y``
-    set) is used directly with no keyword or registry consultation, and a
-    ``keyword`` supplied alongside one raises rather than silently ignoring
-    either of the two contradictory anchors. A keyword with a geometry-only
-    placement (``x``/``y`` left ``None``) takes its position from the ZPL
-    field whose text contains the keyword and its extent and rotation from the
-    placement; a keyword with no placement takes its geometry from the
-    registry for the document's key — the injected ``registry`` lookup when
-    one is supplied, else the carrier plugin's seed — and a miss raises naming
-    what is missing. With neither placement nor keyword the registry is
-    consulted: a PDF key resolves the seed's coordinate placement, a ZPL key
-    whose seed carries a keyword resolves implicitly from the carrier form's
-    own field, and a miss raises an explicit error naming the missing key
-    rather than guessing an anchor. Keyword anchoring locates ZPL field
-    origins only: a keyword supplied against another format is rejected
-    explicitly. A document whose format has no active backend (including PNG)
-    is rejected explicitly. An optional pre-formatted ``date`` string is
+    an explicit chain, placement before consumer keyword before seed. A fully
+    anchored ``placement`` (both ``x`` and ``y`` set) is used directly with no
+    keyword or registry consultation, and a ``keyword`` supplied alongside one
+    raises rather than silently ignoring either of the two contradictory
+    anchors. A consumer ``keyword`` locates the carrier form's own text and
+    takes its geometry from a geometry-only placement (``x``/``y`` left
+    ``None``), else from the registry for the document's key — the injected
+    ``registry`` lookup when one is supplied, else the carrier seed's keyword
+    geometry for the format — and a miss raises naming what is missing. With
+    neither placement nor keyword the registry is consulted: a seed carrying a
+    keyword and keyword geometry for the format resolves implicitly from the
+    carrier form's own text, a PDF seed without PDF keyword geometry resolves
+    at its coordinate placement without consulting its keyword, and a miss
+    raises an explicit error naming the missing key rather than guessing an
+    anchor. A document whose format has no active backend (including PNG) is
+    rejected explicitly. An optional pre-formatted ``date`` string is
     composited preceding the signature within the placement, at the
     placement's rotation.
 
-    An optional one-based ``page`` applies a registry-resolved PDF placement on
-    that page instead of the seed's own, so a seed measured on one page stamps
-    the page a classification names; an out-of-range page raises. It applies
-    only to registry resolution: combined with a fully anchored placement,
-    which already names its page, it raises as a second, contradictory
-    anchor, and against ZPL, which has no pages, it raises rather than being
-    silently ignored.
+    ZPL keywords are located in the field stream and anchor at the matched
+    field's ``^FO`` origin. PDF keywords are located in the page text of the
+    target page and anchor at the start of the matched text run, in page
+    space, with the geometry laid out along the run's direction (see
+    :class:`StampSeed`); a target page without extractable text, a keyword
+    found nowhere, and text not turned by a multiple of 90 degrees each
+    raise.
+
+    An optional one-based ``page`` names the PDF page a registry-resolved or
+    keyword-resolved placement applies to: a coordinate seed measured on one
+    page stamps the page a classification names, and a keyword is searched on
+    that page only instead of the first page containing it; an out-of-range
+    page raises. Combined with a fully anchored placement, which already
+    names its page, it raises as a second, contradictory anchor, and against
+    ZPL, which has no pages, it raises rather than being silently ignored.
 
     The utility composites pixels only: it stores nothing and makes no
     assertion about the legal validity or signature semantics of the result.
@@ -952,12 +1235,6 @@ def stamp_document(
         raise ValueError(
             f"Document stamping has no active backend for the "
             f"'{document_format}' format; the document cannot be stamped"
-        )
-
-    if keyword and document_format != "ZPL":
-        raise ValueError(
-            f"Keyword anchoring is unsupported for the '{document_format}' "
-            "format; a stamp keyword can only locate a field in a ZPL document"
         )
 
     if page is not None and document_format != "PDF":
@@ -994,8 +1271,7 @@ def stamp_document(
                 _detect_paper_variant(document.base64, document_format),
             )
             if registry is None:
-                seed = _resolve_seed(key)
-                geometry = seed.keyword_placement if seed is not None else None
+                geometry = _seed_keyword_geometry(_resolve_seed(key), document_format)
             else:
                 # A supplied registry replaces the carrier seeds wherever they
                 # would be consulted, so a custom lookup never silently falls
@@ -1007,21 +1283,22 @@ def stamp_document(
                     f"registry seed with keyword geometry resolves for key "
                     f"'{key}'"
                 )
-        resolved = _resolve_keyword_placement(document.base64, keyword, geometry)
+        resolved = _resolve_keyword(
+            document_format, document.base64, keyword, geometry, page
+        )
     else:
         paper = _detect_paper_variant(document.base64, document_format)
         key = _registry_key(carrier, doc_type, document_format, paper)
         resolved = None
         if registry is None:
             seed = _resolve_seed(key)
-            if seed is not None:
-                if document_format == "ZPL":
-                    if seed.keyword and seed.keyword_placement is not None:
-                        resolved = _resolve_keyword_placement(
-                            document.base64, seed.keyword, seed.keyword_placement
-                        )
-                else:
-                    resolved = seed.placement
+            geometry = _seed_keyword_geometry(seed, document_format)
+            if seed is not None and seed.keyword and geometry is not None:
+                resolved = _resolve_keyword(
+                    document_format, document.base64, seed.keyword, geometry, page
+                )
+            elif seed is not None and document_format != "ZPL":
+                resolved = seed.placement
         else:
             resolved = registry(key)
         if resolved is None:
