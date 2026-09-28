@@ -278,6 +278,16 @@ Invoice rendering from a stored `DocumentTemplate` already exists behind `option
 - `paperless` capability is inferred from proxy method names, so dhl_express reports it although its `upload_document` raises `MethodNotSupported` (S `.../dhl_express/proxy.py:53-54`).
 - mydhl defines WY and PM value-added services that no provider code emits (S `.../mydhl/units.py:147, 198`).
 
+## Addendum: booking printouts and service 91 (2026-09-28)
+
+This addendum records changes after the snapshot at 2c83eed7b; the sections above are left as collated.
+The openspec change `stamp-embedded-customs-forms` supersedes "Current connector behaviour" lines on customs printouts and stamping: for CN22-structured services (letters and 91) `docs.label` is the composed printout carrying both the label and the CN22 in PDF and ZPL, the by-id `onlyCustomsDeclarations` fetch into a standalone document is opt-in (`postnord_standalone_customs_documents`) for every such service, and a mismatch between declared customs and the classified printout is a booking warning (`postnord_unexpected_label_composition`), never a failure (S `feat-postnord-customs-invoice`, `modules/connectors/postnord/karrio/providers/postnord/shipment/create.py`, `units.py`, `mappers/postnord/proxy.py`).
+Stamping now also covers the combined printouts through `label_cn22` seeds (S `feat-postnord-cn22-stamping`, `modules/connectors/postnord/karrio/providers/postnord/stamping.py`).
+
+Live 91 bookings returned a parcel label followed by a form titled CN22 (ZPL `^FX CUSTOMS_CN22_V2^FS`, PDF page 2), because the connector sent `customsDeclarationCN22` (S; `docs/notes/postnord/booking-printout-composition-verification.md`).
+This conflicts with the requirement rows above that Postpaket Utrikes and International Parcel need a CN23 at any value, and with the UPU rule that parcel-post items take a CN23 (W, cited above); PostNord accepted the booking and printed the submitted form (I: acceptance is not conformance).
+The 91 printout carries no invoice.
+
 ## Territory alignment sources (2026-09-26)
 
 Northern Ireland is inside the EU VAT area for goods and outside it for services: "Nordirland räknas som ett EU-land vid varuhandel med andra EU-länder. Vid handel med tjänster med andra EU-länder räknas Nordirland som ett land utanför EU." (W [Skatteverket, Sälja varor till länder utanför EU](https://www.skatteverket.se/foretag/moms/saljavarorochtjanster/forsaljningtilllanderutanforeu/saljavarortilllanderutanforeu.4.361dc8c15312eff6fd3723b.html), read 2026-09-26).

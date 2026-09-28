@@ -26,7 +26,8 @@ The earlier convention that PDF labels and declarations are separate documents w
 
 Consequences implemented in the change (design D7): PDF label markers accept alternative templates (`lib.AnyOf`), and the combined PDF stamp anchors on the CN22 signature keyword rather than page coordinates, so both layouts resolve with one seed.
 
-Service 91 receives a CN22, not a CN23, and uses different templates from the letter services: a parcel label marked `NORDIC_SHIPPING_LABEL` and an upright CN22 marked `CUSTOMS_CN22_V2`, in a second ZPL format rather than the same one.
+The 91 bookings were sent `customsDeclarationCN22`, as the connector does for every product, and PostNord printed that form back; this is not evidence that PostNord accepts a CN22 for 91, whose published requirement is a CN23 at any value (`docs/notes/customs/nordic-trade-documents-facts.md`, requirements by product).
+The 91 printout uses different templates from the letter services: a parcel label marked `NORDIC_SHIPPING_LABEL` and an upright CN22 marked `CUSTOMS_CN22_V2`, in a second ZPL format rather than the same one.
 Before group 7 the 91 ZPL classified as `none` and the 91 PDF as lone `cn22`, so the live booking on develop `8f6d9af93` emitted a false `postnord_unexpected_label_composition` warning.
 
 Consequences implemented in the change (design D8): the ZPL and PDF markers accept the 91 templates as `lib.AnyOf` alternatives, and the combined ZPL seed anchors on the CN22 signature keyword in the field's reading frame and inserts the stamp into the format containing it.
@@ -40,4 +41,4 @@ Live PDF stamping is deferred to the consumer side (user decision 2026-09-28); Z
 The sandbox two-page PDF has not been compared with a live PDF booking.
 Opted-in standalone documents (`postnord_standalone_customs_documents`) are not captured (task 5.1.3 deferred 2026-09-28: the UX duplicate-shipment method used for iterative testing cannot change shipment metadata); issues will be raised as encountered.
 A standalone 91 CN22 V2 from the opt-in fetch would still resolve the lone `cn22/ZPL/*` seed's label-axis offset (`PRDs/POSTNORD_CN22_STAMPING.md` D9), which is unverified against that layout.
-Whether 91 should declare a CN23 rather than a CN22 is a separate connector question outside this change.
+Whether 91 should declare a CN23 rather than a CN22 is a separate connector question outside this change; if the connector switches, PostNord will presumably print a different form, which the D8 markers and seed would not recognise, so the booking check would warn again until a new capture adds its markers and geometry.
