@@ -367,7 +367,7 @@ python -m unittest discover -v -f modules/sdk/tests
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
-| Captures are by-id (and one booking) UX printouts, not every service | Medium | Medium | Live captures per change task 5.1 |
+| Captures are by-id (and one booking) UX printouts, not every service | Medium | Medium | Live booking printouts cover the export letter (UX) in ZPL and the International Parcel (91) in ZPL and PDF; the UX PDF comes from a sandbox booking, and bookings that also fetch the standalone customs document are not captured; each further capture is added as a fixture and classified and stamped by the tests |
 | PostNord changes layout | Low | Medium | Fixture-integrity tests fail first; re-measure with a revision bump |
 | Combined and lone PDF regions diverge | Low | Low | Separate `label_cn22` seed |
 | A further PostNord template places the keyword differently relative to its signature area | Medium | Medium | Add it as a fixture and an alternative marker set; the keyword geometry is re-verified against every captured layout |
@@ -388,7 +388,7 @@ A further template would classify as a lone `cn22` until its markers are added a
 The 91 ZPL and PDF come from separate live bookings of the same day; the 91 PDF stamp is verified here, and live PDF stamping remains consumer-side.
 The V2 signature area was measured from a Labelary render, which emulates Zebra font 0; a printer's own font metrics may differ slightly, and the stamp clears the keyword ink by 63 dots.
 
-The two-page PDF and the tracked letter label template come from a sandbox booking; whether the live booking returns the same template is unconfirmed (change task 5.1.2).
+The two-page PDF and the tracked letter label template come from a sandbox booking; whether a live booking returns the same template stays unconfirmed until a live UX PDF booking is captured.
 On that layout the stamp sits inside the signature area rather than on the box rules, and on the single-page layout it overlaps the certification text's descenders by 0.34 mm.
 
 ---
