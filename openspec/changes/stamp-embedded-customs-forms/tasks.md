@@ -45,7 +45,7 @@ Tests run in the nix dev shell per `docs/notes/workflow/nix-dev-shell-worktrees.
 
 - [ ] 5.1 Capture live booking-call printouts (not by-id) for export letter UX and service 91 in PDF and ZPL, with and without opt-in, saving to `$XDG_STATE_HOME/agent-logs/karrio/`; verify each classifies as combined and no composition warning is emitted (bookings are not cancellable; unshipped test bookings are not billed)
   - [x] 5.1.1 2026-09-28: `postnord_export_letter` (UX), ZPL, no opt-in, on develop `4e08591d6`: live booking returned a single ZPL document containing CN22 and label, and `printoutComposition` reported `cn22` + `label` (user-confirmed)
-  - [ ] 5.1.2 UX, PDF, no opt-in
+  - [ ] 5.1.2 UX, PDF, no opt-in. 2026-09-28 sandbox (not live): booking returned one PDF with two pages (CN22 and label on separate pages) and `printoutComposition` `cn22` + `label`; contradicts the single-page assumption from the by-id `probe1b`; pending fixture capture, classification/stamp verification, and spec/design amendment
   - [ ] 5.1.3 UX, PDF and ZPL, opted in (`postnord_standalone_customs_documents`)
   - [ ] 5.1.4 Service 91, PDF and ZPL
 - [ ] 5.2 Record the capture results and any marker or layout differences in `docs/notes/postnord/` on `docs-openspec`; if 91 differs from UX, return to the specs before archiving
