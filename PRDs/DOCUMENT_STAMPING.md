@@ -348,6 +348,7 @@ The SDK stays carrier-agnostic: markers are declarative plugin data beside `stam
  |  ZPL: kind present when all its markers occur in the stream   |
  |  PDF: per-page text (pypdf), whitespace-collapsed; kind       |
  |       present when all its markers occur on one page          |
+ |  AnyOf(set, set, ...): present when any one set matches       |
  |                                                               |
  |  cn22 absent            --> none                   doc_type - |
  |  cn22, label absent     --> declaration            cn22       |
@@ -376,14 +377,16 @@ Classification performs no I/O beyond the plugin metadata lookup and never modif
 
 | Type | Field | Meaning |
 |------|-------|---------|
-| `PluginMetadata` | `document_sections` | `{FORMAT: {kind: markers}}`; ZPL markers are field-comment substrings of the stream, PDF markers are page-text substrings; a kind is present when all its markers match; a single string is one marker |
+| `PluginMetadata` | `document_sections` | `{FORMAT: {kind: markers}}`; ZPL markers are field-comment substrings of the stream, PDF markers are page-text substrings; a kind is present when all its markers match; a single string is one marker; `lib.AnyOf(set, set, ...)` declares alternative sets, present when any one set fully matches |
+| `AnyOf` | `sets` | Frozen tuple of marker sets, each a string or a sequence with the all-of meaning; a bare string, tuple or list stays a single set |
 | `CustomsComposition` | `none`, `declaration`, `label_with_declaration` | String enum of the composition outcome |
 | `CustomsClassification` | `composition` | A `CustomsComposition` member |
 | | `kinds` | Sorted tuple of composed kinds present, such as `("cn22", "label")` |
 | | `doc_type` | `cn22`, `label_cn22`, or `None` for `none` |
 | | `page` | One-based PDF page carrying the declaration; `None` for ZPL and for `none` |
 
-`lib` exports `classify_customs_composition`, `CustomsClassification` and `CustomsComposition`.
+`lib` exports `classify_customs_composition`, `CustomsClassification`, `CustomsComposition` and `AnyOf`.
+Alternative sets exist because carrier label templates differ: PostNord's sandbox booking PDF prints a tracked letter label without the letter label's text.
 
 ```python
 METADATA = PluginMetadata(
@@ -413,6 +416,7 @@ if result.doc_type:
 | 1.5 | `feat(sdk): export customs classification through karrio.lib` | `modules/sdk/karrio/lib.py`, `stamping.py` (module docstring), `test_stamping_classification.py` |
 | 1.6 | `feat(sdk): apply a registry-resolved stamp placement on a named page` | `stamping.py` (`stamp_document` `page`), `lib.py`, `modules/sdk/tests/core/test_stamping_page_override.py` |
 | 1.6 | `feat(documents): accept a seed page on the stamping endpoint` | `modules/documents/karrio/server/documents/serializers/base.py`, `views/stamping.py`, `tests/test_stamping.py` |
+| 6.1 | `feat(sdk): accept alternative marker sets per document section` | `modules/sdk/karrio/core/utils/stamping.py` (`AnyOf`, `_kinds_present`), `modules/sdk/karrio/lib.py`, `modules/sdk/tests/core/test_stamping_classification.py` |
 
 Carrier markers, combined seeds (`label_cn22/ZPL/*`, `label_cn22/PDF/A4`) and booking-time verification belong to the carrier connector and are out of scope for this SDK section.
 
@@ -430,6 +434,9 @@ Carrier markers, combined seeds (`label_cn22/ZPL/*`, `label_cn22/PDF/A4`) and bo
 | Multi-page PDF with the declaration on page 2 | page 2 |
 | PDF whose text matches no marker, and a PDF with a partial multi-marker kind | `none` |
 | Carrier declaring no sections for the format | `none` |
+| `AnyOf` label kind whose second set alone matches (ZPL and PDF) | label present; PDF names the declaration page |
+| `AnyOf` with no set, or only part of a set, matching | kind absent |
+| `AnyOf` wrapping one set, and a list declaration | same result as the bare set |
 | PNG input | `ValueError` naming `PNG` |
 | Any input | the document's `base64` is unchanged |
 
