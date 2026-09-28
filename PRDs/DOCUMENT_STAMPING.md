@@ -72,6 +72,7 @@ The utility composites pixels only: it stores nothing and asserts nothing about 
 | Q2 | Should the endpoint accept `keyword` and a geometry-only placement? | The keyword path is reachable from the SDK only | A) add both fields, B) keep the current request | Deferred |
 | Q3 | Does the request body limit accommodate a base64 document plus a base64 image? | No `DATA_UPLOAD_MAX_MEMORY_SIZE` override exists, so Django's 2.5 MB default likely caps the combined payload; this is untested | A) confirm the default suffices, B) set an explicit ceiling with a 413 response | Open |
 | Q4 | Should a registry miss return 409 instead of 400? | The endpoint maps every SDK `ValueError`, a registry miss included, to 400 (D11) | A) keep 400 for all `ValueError`s, B) 409 for a registry miss, 400 otherwise | Open |
+| Q5 | Should the date and signature split become per-carrier? | D6 splits every placement evenly (`DATE_STRIP_FRACTION = 0.5`, `modules/sdk/karrio/core/utils/stamping.py:76`); the split is derived from PostNord, currently the only supported stamping carrier | A) keep one even split, B) a per-carrier partition | Open until reference documents from further carriers are available |
 
 ### Resolved Decisions
 
