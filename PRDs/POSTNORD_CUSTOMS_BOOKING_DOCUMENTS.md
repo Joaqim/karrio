@@ -157,6 +157,43 @@ Caller        create.py (request)          Proxy                      PostNord
   |<----------------+                        |                            |
 ```
 
+### Booking document flow
+
+```
+ POST /v3/edi/labels/{pdf,zpl}  (default definePrintout)
+        |
+        v
+ composed printout: label + CN22 in one PDF page or one ZPL format
+        |
+        v
+ create.py parser (_extract_details) --> docs.label (unchanged), ids, tracking
+        |
+        +-- customs_declared and customs_structure == cn22 ? --no--> no check
+        |                        |
+        |                       yes
+        |                        v
+        |       docs.label present? --no--> warning "no label data was returned"
+        |                        |
+        |                       yes
+        |                        v
+        |       lib.classify_customs_composition(docs.label, DOCUMENT_SECTIONS)
+        |          label_with_declaration ----------> no message
+        |          none | declaration      ----------> warning "was classified as ..."
+        |          ValueError (format, base64) ------> warning "could not be classified"
+        |
+        +-- opted in (options -> connection config) and cn22,
+        |   or customs-invoice parcel product ? --no--> no extra documents
+        |                        |
+        |                       yes (proxy, after the booking)
+        |                        v
+        |       POST /v3/labels/ids/{pdf,zpl} by printId (else item id)
+        |         definePrintout=onlyCustomsDeclarations
+        |          ok      --> docs.extra_documents (category cn22 | customsInvoice)
+        |          failure --> error messages, booking kept
+        v
+ ShipmentDetails + messages (warnings never fail the booking)
+```
+
 ---
 
 ## Edge Cases & Failure Modes
@@ -165,6 +202,8 @@ Caller        create.py (request)          Proxy                      PostNord
 |----------|----------|
 | Label classifies as `none` or `declaration` | Warning naming expected and classified composition; label unchanged |
 | Classifier raises for an unsupported format | Warning naming the error; booking unaffected |
+| CN22 booking returns no printout data (`docs.label` is None) | Warning stating no label data was returned; booking unaffected |
+| Label is not valid base64 | Classifier `ValueError` (`binascii.Error`); warning naming the error |
 | Booking allocated no ids | No shipment, no verification, no fetch |
 | Opt-in on, by-id fetch fails (error body, per-id failure, transport) | Booking successful; failure reported as messages |
 | Opt-in given as the string `"false"` | Treated as false |
