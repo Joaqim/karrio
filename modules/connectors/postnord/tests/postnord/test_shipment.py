@@ -1627,6 +1627,14 @@ class TestPostNordLabelComposition(unittest.TestCase):
         self.assertEqual(details.docs.label, CombinedLabelPDF)
         self.assertEqual(details.meta["printout_composition"], ["cn22", "label"])
 
+    def test_two_page_pdf_label_passes_verification(self):
+        details, messages = self._book(
+            TwoPageBookingResponse, payload=ExportLetterCustomsPayload
+        )
+        self.assertEqual(messages, [])
+        self.assertEqual(details.docs.label, TwoPageLabelPDF)
+        self.assertEqual(details.meta["printout_composition"], ["cn22", "label"])
+
     def test_unexpected_label_compositions_warn(self):
         cases = [
             ("zpl_plain_label", CustomsBookingZPLResponse, "ZPL", _b64(RawZPL), "none"),
@@ -1957,11 +1965,12 @@ class TestPostNordCustomsFormatInterchangeability(unittest.TestCase):
     def setUp(self):
         self.maxDiff = None
 
-    def _book_letter(self, label_type: str, opt_in: bool):
-        booking, printouts = {
+    def _book_letter(self, label_type: str, opt_in: bool, booking: str = None):
+        default_booking, printouts = {
             "PDF": (CombinedBookingResponse, CustomsPrintoutsResponse),
             "ZPL": (CombinedBookingZPLResponse, CustomsPrintoutsZPLResponse),
         }[label_type]
+        booking = booking or default_booking
         payload = {
             **ExportLetterCustomsPayload,
             "label_type": label_type,
@@ -1996,9 +2005,17 @@ class TestPostNordCustomsFormatInterchangeability(unittest.TestCase):
         return outcome, formats
 
     def test_pdf_and_zpl_bookings_are_interchangeable(self):
-        for opt_in, kinds in [(False, []), (True, ["cn22"])]:
-            with self.subTest(opt_in=opt_in):
-                pdf, pdf_formats = self._book_letter("PDF", opt_in)
+        cases = [
+            (layout, pdf_booking, opt_in, kinds)
+            for layout, pdf_booking in [
+                ("one_page", CombinedBookingResponse),
+                ("two_pages", TwoPageBookingResponse),
+            ]
+            for opt_in, kinds in [(False, []), (True, ["cn22"])]
+        ]
+        for layout, pdf_booking, opt_in, kinds in cases:
+            with self.subTest(layout=layout, opt_in=opt_in):
+                pdf, pdf_formats = self._book_letter("PDF", opt_in, pdf_booking)
                 zpl, zpl_formats = self._book_letter("ZPL", opt_in)
                 self.assertEqual(pdf, zpl)
                 self.assertEqual(
@@ -3489,8 +3506,13 @@ CombinedLabelZPL = base64.b64decode(
 LoneCN22ZPL = base64.b64decode(_read_b64("postnord_cn22.zpl")).decode("utf-8")
 BlankPDF = _blank_pdf()
 
+# Sandbox export letter (UX) PDF booking (2026-09-28): page 1 the tracked
+# letter label, page 2 the upright CN22.
+TwoPageLabelPDF = _read_b64("postnord_label_cn22_booking_two_pages.pdf")
+
 CombinedBookingResponse = _customs_booking_pdf(CombinedLabelPDF)
 CombinedBookingZPLResponse = _customs_booking_zpl(CombinedLabelZPL)
+TwoPageBookingResponse = _customs_booking_pdf(TwoPageLabelPDF)
 CombinedBookingNoPrintIdResponse = CustomsBookingNoPrintIdResponse.replace(
     '"data": "JVBERi0xLjQK"', f'"data": "{CombinedLabelPDF}"'
 )
