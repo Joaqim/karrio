@@ -167,10 +167,19 @@ class TestPostnordDocumentSections(unittest.TestCase):
         self.assertEqual(
             sections,
             {
-                "ZPL": {"cn22": ZPL_CN22_MARKER, "label": ZPL_LABEL_MARKER},
+                "ZPL": {
+                    "cn22": lib.AnyOf(ZPL_CN22_MARKER, "^FX CUSTOMS_CN22_V2^FS"),
+                    "label": lib.AnyOf(
+                        ZPL_LABEL_MARKER, "^FX NORDIC_SHIPPING_LABEL^FS"
+                    ),
+                },
                 "PDF": {
                     "cn22": PDF_CN22_TEXT,
-                    "label": lib.AnyOf(PDF_LABEL_TEXT, PDF_TRACKED_LETTER_TEXT),
+                    "label": lib.AnyOf(
+                        PDF_LABEL_TEXT,
+                        PDF_TRACKED_LETTER_TEXT,
+                        ("International Parcel", "Item-ID"),
+                    ),
                 },
             },
         )
