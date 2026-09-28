@@ -28,3 +28,18 @@ STAMP_SEEDS = {
     "cn22/PDF/A4": CN22_SEED,
     "cn22/ZPL/*": CN22_SEED,
 }
+
+# PostNord composes the CN22 and the letter label into one printout: a single
+# ZPL format (one ^XZ) and a single A4 PDF page. The sections are told apart by
+# PostNord's own ^FX field comments in ZPL and by page text in PDF, where the
+# label markers occur only in the label section of the live captures.
+DOCUMENT_SECTIONS = {
+    "ZPL": {
+        "cn22": "^FX CUSTOMS_CN22_ROTATED^FS",
+        "label": "^FX SE_INTERNATIONAL_LETTER_LABEL^FS",
+    },
+    "PDF": {
+        "cn22": ("CUSTOMS DECLARATION", "CN22"),
+        "label": ("Brev utrikes", "Parcel ID"),
+    },
+}
