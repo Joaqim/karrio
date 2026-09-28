@@ -113,3 +113,16 @@ Rollback is per branch: removing the booking changes restores today's documents,
 ## Open Questions
 
 - Exact warning message wording and whether the code constant joins the shared warning codes on `refactor-shared-warning-codes`; this does not change behavior or tasks.
+
+## Follow-ups outside this change
+
+A compliance check on 2026-09-28 compared what the PostNord connector transmits for service 91 and letters with PostNord's published requirements (`docs/notes/customs/nordic-trade-documents-facts.md`) and with the `nordic_conventions` advisory plugin.
+Post-booking duties such as printing, attaching, and signing documents are the consumer's and are relayed by that plugin; the items below are neither transmitted by the connector nor advised by the plugin, and are recorded here rather than addressed.
+
+- Service 91 with non-commercial content (gift, sample, documents, returned goods) requires a CN23 at any value; the connector sends CN22 data and the plugin warns only for commercial goods. CN23 selection stays deferred per the customs-declaration spec; switching 91 to CN23 will need a new printout capture, markers, and seed, because the D8 markers recognise only `CUSTOMS_CN22_V2`.
+- Non-commercial 91 above SEK 2 000 requires a commercial or proforma invoice; no value threshold or SEK conversion exists in the connector or the plugin.
+- Letters above SEK 2 000 outside Norway require a commercial invoice (and a CN23 per the English PostNord page, which conflicts with the Swedish page); not transmitted and not advised.
+- Letters above the 300 SDR CN22 ceiling are not checked (`PRD_POSTNORD_INTEGRATION.md` Q2).
+- The connector drops `customs.commercial_invoice`, `invoice`, and `invoice_date` for 91 and letters without a warning, unlike the drop-with-warning convention for unneeded customs input.
+
+The plugin-side gaps (non-commercial 91 CN23, proforma-only-for-gift-or-sample on 91, 91 and letters for Finnish and Danish shippers) are recorded in the plugin's own openspec.
