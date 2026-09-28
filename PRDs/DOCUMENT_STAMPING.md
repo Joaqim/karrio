@@ -349,10 +349,16 @@ The SDK stays carrier-agnostic: markers are declarative plugin data beside `stam
  +---------------------------------------------------------------+
         |  CustomsClassification (frozen)
         v
- lib.stamp_document(document, carrier=..., doc_type=result.doc_type, ...)
+ lib.stamp_document(document, carrier=..., doc_type=result.doc_type,
+                    page=result.page, ...)
 ```
 
-A seed's own placement names the page it stamps; `page` lets a consumer that supplies its own placement target the declaration page of a PDF.
+A seed's own placement names the page it stamps, which for a combined printout measured on one page need not be the page classification names.
+`stamp_document` therefore takes an optional one-based `page` that applies a registry-resolved PDF placement (plugin seed or injected `registry`) on that page instead of the seed's; omitting it, or passing `None` as ZPL classification returns, keeps the seed's page.
+An out-of-range `page` raises through the same bounds check as `StampPlacement.page`.
+A `page` combined with a fully anchored placement raises, because that placement already names its page and two page anchors would contradict, mirroring the keyword-with-placement rule.
+A `page` against ZPL raises, because a ZPL label has no pages to select, mirroring the rejection of a keyword against PDF.
+The documents endpoint passes an optional `page` field through to `stamp_document`.
 
 The declaration marker alone never implies a lone declaration: a combined printout carries it too, so `declaration` means the declaration kind is present and the label kind is absent.
 A document with no matching markers, and a carrier declaring no sections for the format, classify as `none` rather than raising.
@@ -384,7 +390,9 @@ METADATA = PluginMetadata(
 
 result = lib.classify_customs_composition(document, carrier="acme")
 if result.doc_type:
-    stamped = lib.stamp_document(document, image=signature, carrier="acme", doc_type=result.doc_type)
+    stamped = lib.stamp_document(
+        document, image=signature, carrier="acme", doc_type=result.doc_type, page=result.page
+    )
 ```
 
 ### Implementation plan
@@ -396,6 +404,8 @@ if result.doc_type:
 | 1.3 | `feat(sdk): classify customs composition of pdf documents` | `stamping.py`, `modules/sdk/tests/core/stamping_helpers.py` (text-page PDF generator), `test_stamping_classification.py` |
 | 1.4 | `test(sdk): reject unsupported formats in customs classification` | `test_stamping_classification.py` |
 | 1.5 | `feat(sdk): export customs classification through karrio.lib` | `modules/sdk/karrio/lib.py`, `stamping.py` (module docstring), `test_stamping_classification.py` |
+| 1.6 | `feat(sdk): apply a registry-resolved stamp placement on a named page` | `stamping.py` (`stamp_document` `page`), `lib.py`, `modules/sdk/tests/core/test_stamping_page_override.py` |
+| 1.6 | `feat(documents): accept a seed page on the stamping endpoint` | `modules/documents/karrio/server/documents/serializers/base.py`, `views/stamping.py`, `tests/test_stamping.py` |
 
 Carrier markers, combined seeds (`label_cn22/ZPL/*`, `label_cn22/PDF/A4`) and booking-time verification belong to the carrier connector and are out of scope for this SDK section.
 
@@ -415,6 +425,17 @@ Carrier markers, combined seeds (`label_cn22/ZPL/*`, `label_cn22/PDF/A4`) and bo
 | Carrier declaring no sections for the format | `none` |
 | PNG input | `ValueError` naming `PNG` |
 | Any input | the document's `base64` is unchanged |
+
+`test_stamping_page_override.py` stamps a two-page PDF under a page-1 `label_cn22/PDF/A4` seed.
+
+| Case | Expected |
+|------|----------|
+| `page=2` | stamp on page 2 only, at the seed's coordinates; page count unchanged |
+| `page` omitted or `None` | stamp on page 1 only |
+| `page` of 3, 0, or -1 | `ValueError` naming the bounds and the page |
+| `page=2` with an injected `registry` | stamp on page 2 only |
+| `page` with a fully anchored placement | `ValueError` |
+| `page` against ZPL (seeded, keyword, or placement) | `ValueError` naming `ZPL` |
 
 ```bash
 python -m unittest discover -v -f modules/sdk/tests
