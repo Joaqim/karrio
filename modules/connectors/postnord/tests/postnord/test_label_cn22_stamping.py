@@ -2,8 +2,10 @@
 
 The combined fixtures are live export-letter (UX) captures: the ZPL from a
 booking and from a by-printId fetch without ``definePrintout``, the PDF from the
-same by-printId fetch. The lone CN22 PDF is the ``definePrintout=
-onlyCustomsDeclarations`` capture already vendored as ``postnord_cn22.pdf``.
+same by-printId fetch. The two-page PDF is a sandbox export-letter booking
+printout: a "PostNord Tracked Letter" label on page 1 and an upright CN22 on
+page 2. The lone CN22 PDF is the ``definePrintout=onlyCustomsDeclarations``
+capture already vendored as ``postnord_cn22.pdf``.
 """
 
 import io
@@ -33,6 +35,7 @@ COMBINED_ZPL_FIXTURES = (
     "postnord_label_cn22_printid.zpl",
 )
 COMBINED_PDF_FIXTURE = "postnord_label_cn22_printid.pdf"
+TWO_PAGE_PDF_FIXTURE = "postnord_label_cn22_booking_two_pages.pdf"
 LONE_ZPL_FIXTURE = "postnord_cn22.zpl"
 LONE_PDF_FIXTURE = "postnord_cn22.pdf"
 
@@ -40,6 +43,8 @@ ZPL_CN22_MARKER = "^FX CUSTOMS_CN22_ROTATED^FS"
 ZPL_LABEL_MARKER = "^FX SE_INTERNATIONAL_LETTER_LABEL^FS"
 PDF_CN22_TEXT = ("CUSTOMS DECLARATION", "CN22")
 PDF_LABEL_TEXT = ("Brev utrikes", "Parcel ID")
+PDF_TRACKED_LETTER_TEXT = ("PostNord Tracked Letter", "Item-ID")
+PDF_FIXTURES = (COMBINED_PDF_FIXTURE, TWO_PAGE_PDF_FIXTURE, LONE_PDF_FIXTURE)
 
 
 def _document(name: str, document_format: str) -> models.ShippingDocument:
@@ -56,9 +61,16 @@ def _pdf_pages(document_b64: str):
     return pypdf.PdfReader(io.BytesIO(base64.b64decode(document_b64))).pages
 
 
-def _page_text(document_b64: str) -> str:
+def _page_text(document_b64: str, page: int = 1) -> str:
     # PostNord's text runs break mid-phrase ("CUSTOMS \nDECLARATIONCN22").
-    return " ".join(_pdf_pages(document_b64)[0].extract_text().split())
+    return " ".join(_pdf_pages(document_b64)[page - 1].extract_text().split())
+
+
+def _page_mm(page) -> tuple:
+    return tuple(
+        round(float(value) * 25.4 / 72.0, 1)
+        for value in (page.mediabox.width, page.mediabox.height)
+    )
 
 
 class TestPostnordCombinedFixtures(unittest.TestCase):
@@ -103,6 +115,34 @@ class TestPostnordCombinedFixtures(unittest.TestCase):
             self.assertIn(marker, text)
         self.assertLess(text.index("CUSTOMS DECLARATION"), text.index("Brev utrikes"))
 
+    def test_two_page_pdf_fixture_is_a_tracked_letter_label_then_a_cn22(self):
+        document = _document(TWO_PAGE_PDF_FIXTURE, "PDF")
+        pages = _pdf_pages(document.base64)
+        label, cn22 = _page_text(document.base64, 1), _page_text(document.base64, 2)
+
+        self.assertEqual(len(pages), 2)
+        self.assertEqual([_page_mm(page) for page in pages], [(210.0, 297.0)] * 2)
+        self.assertEqual(stamping._detect_paper_variant(document.base64, "PDF"), "A4")
+        for marker in PDF_TRACKED_LETTER_TEXT + ("Cust. No", "DELIVERY CONFIRMATION"):
+            self.assertIn(marker, label)
+        for marker in PDF_CN22_TEXT + PDF_LABEL_TEXT + (KEYWORD,):
+            self.assertNotIn(marker, label)
+        for marker in PDF_CN22_TEXT + (KEYWORD,):
+            self.assertIn(marker, cn22)
+        for marker in PDF_LABEL_TEXT + PDF_TRACKED_LETTER_TEXT:
+            self.assertNotIn(marker, cn22)
+
+    def test_tracked_letter_markers_occur_on_no_cn22_page(self):
+        for name in PDF_FIXTURES:
+            document = _document(name, "PDF")
+            for page in range(1, len(_pdf_pages(document.base64)) + 1):
+                text = _page_text(document.base64, page)
+                if "CUSTOMS DECLARATION" not in text:
+                    continue
+                with self.subTest(fixture=name, page=page):
+                    for marker in PDF_TRACKED_LETTER_TEXT:
+                        self.assertNotIn(marker, text)
+
     def test_lone_pdf_fixture_is_one_a4_page_without_label_text(self):
         document = _document(LONE_PDF_FIXTURE, "PDF")
         text = _page_text(document.base64)
@@ -111,7 +151,7 @@ class TestPostnordCombinedFixtures(unittest.TestCase):
         self.assertEqual(stamping._detect_paper_variant(document.base64, "PDF"), "A4")
         for marker in PDF_CN22_TEXT:
             self.assertIn(marker, text)
-        for marker in PDF_LABEL_TEXT:
+        for marker in PDF_LABEL_TEXT + PDF_TRACKED_LETTER_TEXT:
             self.assertNotIn(marker, text)
 
 
