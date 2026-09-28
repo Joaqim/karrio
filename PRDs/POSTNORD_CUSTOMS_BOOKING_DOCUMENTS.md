@@ -31,6 +31,7 @@
 ## Executive Summary
 
 PostNord's booking endpoint composes the international letter label and the CN22 into one printout in both PDF and ZPL, and the connector returns that printout unchanged as `docs.label`.
+For International Parcel (91) the composed printout is the parcel label followed by an upright CN22 V2: a second `^XA`...`^XZ` format in ZPL, a second page in PDF.
 This PRD covers the booking side of the customs documents: verifying the returned label's composition with the SDK classifier, and making the standalone customs document an opt-in for every CN22-bearing service in both formats.
 The connector-side section markers and stamp seeds are covered by [POSTNORD_CN22_STAMPING.md](./POSTNORD_CN22_STAMPING.md), the classifier by [DOCUMENT_STAMPING.md](./DOCUMENT_STAMPING.md).
 
@@ -64,6 +65,7 @@ The connector-side section markers and stamp seeds are covered by [POSTNORD_CN22
 | D4 | Opt-in gate | Every service whose `customs_structure` is `cn22` | UX, the other CN22 letters, and 91 follow one flow | 2026-09-28 |
 | D5 | Unclassifiable label format | Warning naming the classifier's error | A classifier `ValueError` must not fail a booking that PostNord accepted | 2026-09-28 |
 | D6 | PDF page layout | Verification accepts the CN22 and label sections on one page or on separate pages of the same PDF | A sandbox UX PDF booking returned two A4 pages (tracked letter label, then an upright CN22); the classifier matches the label by alternative marker sets (letter template, tracked letter template) | 2026-09-28 |
+| D7 | International Parcel (91) layout | Verification accepts the parcel label and the CN22 V2 as two ZPL formats or two PDF pages of one `docs.label` | Live 91 bookings returned the parcel label (`NORDIC_SHIPPING_LABEL`, "International Parcel") then the CN22 V2 with `printoutComposition` `cn22` + `label`; the classifier's alternative markers (PRD `POSTNORD_CN22_STAMPING.md` D7) classify both as `label_cn22` | 2026-09-28 |
 
 ---
 
@@ -97,7 +99,7 @@ The earlier convention that PDF labels and declarations are separate while ZPL c
 
 | Metric | Target |
 |--------|--------|
-| Combined label (PDF on one page or two pages, or ZPL) | No composition warning |
+| Combined label (PDF on one page or two pages, ZPL in one format, or the 91 label and CN22 in two ZPL formats) | No composition warning |
 | Plain label, lone CN22 as label, PDF without CN22 text | One `postnord_unexpected_label_composition` warning, label unchanged, booking successful |
 | No customs or EU VAT area | Messages identical to the pre-change output |
 | Opt-in off | One HTTP call, no standalone document |
@@ -208,7 +210,7 @@ Caller        create.py (request)          Proxy                      PostNord
 | Booking allocated no ids | No shipment, no verification, no fetch |
 | Opt-in on, by-id fetch fails (error body, per-id failure, transport) | Booking successful; failure reported as messages |
 | Opt-in given as the string `"false"` | Treated as false |
-| Service 91 label wording differs from the letter label | Classifies as lone `cn22` and warns; revisited after live captures |
+| Service 91 parcel label and CN22 V2 in separate formats or pages | Classifies as `label_cn22`, no warning; the parcel label format alone classifies as `none` and warns |
 
 ---
 
@@ -231,10 +233,11 @@ Paths are relative to `modules/connectors/postnord/`.
 
 `modules/connectors/postnord/tests/postnord/test_shipment.py`, unittest, mocked `lib.request`.
 Combined labels are the live fixtures `postnord_label_cn22_printid.pdf` (one page) and `postnord_label_cn22_booking.zpl`, and the sandbox-captured PDF booking `postnord_label_cn22_booking_two_pages.pdf` (tracked letter label on page 1, CN22 on page 2); the lone CN22 is `postnord_cn22.zpl`.
+International Parcel (91) labels are the live bookings `postnord_label_cn22_international_parcel.zpl` (parcel label format, then CN22 V2 format) and `postnord_label_cn22_international_parcel.pdf` (parcel label on page 1, CN22 on page 2).
 
 | Area | Covers |
 |------|--------|
-| Verification | ZPL combined, ZPL plain, ZPL lone CN22, PDF combined on one page and on two pages, PDF without CN22 text; label unchanged in every case |
+| Verification | ZPL combined, ZPL plain, ZPL lone CN22, PDF combined on one page and on two pages, PDF without CN22 text, 91 ZPL and PDF label plus CN22 without warning, 91 parcel label format alone warning; label unchanged in every case |
 | No verification | No customs and EU VAT area, both formats, messages equal to the pre-change output |
 | Opt-in resolution | Options key, connection fallback, options overriding the connection, never an `additionalServiceCode` |
 | Opt-in fetch | PDF and ZPL for UX and 91 opted in; no fetch when not opted in |
