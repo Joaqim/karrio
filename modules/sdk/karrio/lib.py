@@ -1062,6 +1062,7 @@ def stamp_document(
     date: str = None,
     graphic_name: str = None,
     keyword: str = None,
+    page: int = None,
 ) -> models.ShippingDocument:
     """Composite a base64 PNG onto a returned carrier document.
 
@@ -1079,6 +1080,7 @@ def stamp_document(
         date=date,
         graphic_name=graphic_name,
         keyword=keyword,
+        page=page,
     )
 
 
