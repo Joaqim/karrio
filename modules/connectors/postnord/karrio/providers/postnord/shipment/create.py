@@ -17,6 +17,12 @@ to the item id when no printId was allocated (``POST
 /v3/labels/ids/{pdf,zpl}`` with ``definePrintout=onlyCustomsDeclarations``,
 issued by the proxy after the booking) and attach it under
 ``docs.extra_documents``.
+
+For CN22-structured services with customs data, PostNord composes the CN22
+into the booking printout in both formats, which is returned unchanged as
+``docs.label``. The parser verifies that composition with the SDK customs
+classifier and PostNord's ``DOCUMENT_SECTIONS``; a mismatch is a
+``POSTNORD_UNEXPECTED_LABEL_COMPOSITION`` warning, never a booking failure.
 """
 
 import base64
@@ -32,6 +38,7 @@ import karrio.core.models as models
 import karrio.providers.postnord.error as error
 import karrio.providers.postnord.utils as provider_utils
 import karrio.providers.postnord.units as provider_units
+import karrio.providers.postnord.stamping as provider_stamping
 
 
 def parse_shipment_response(
@@ -67,7 +74,63 @@ def parse_shipment_response(
             _customs_omitted_message(_response.ctx["customs_omitted"], settings)
         )
 
+    composition_message = lib.identity(
+        _label_composition_message(shipment, settings)
+        if shipment is not None and _expects_combined_label(_response.ctx)
+        else None
+    )
+    if composition_message is not None:
+        messages.append(composition_message)
+
     return shipment, messages
+
+
+def _expects_combined_label(ctx: dict) -> bool:
+    """Whether PostNord composes a CN22 into this booking's label."""
+    return bool(ctx.get("customs_declared")) and (
+        provider_units.customs_structure(ctx.get("basic_service_code"))
+        == provider_units.CustomsStructure.cn22
+    )
+
+
+def _label_composition_message(
+    shipment: models.ShipmentDetails,
+    settings: provider_utils.Settings,
+) -> typing.Optional[models.Message]:
+    """Verify the booking label is the shipping label composed with a CN22.
+
+    The label is classified with PostNord's declared document sections; any
+    other composition yields a warning and leaves the label unchanged, since
+    the booking is already made and the label remains valid.
+    """
+    expected = lib.CustomsComposition.label_with_declaration
+    try:
+        classification = lib.classify_customs_composition(
+            models.ShippingDocument(
+                category="label",
+                format=shipment.label_type,
+                base64=shipment.docs.label,
+            ),
+            sections=provider_stamping.DOCUMENT_SECTIONS,
+        )
+        finding = f"was classified as {classification.composition.value}"
+    except ValueError as classification_error:
+        classification = None
+        finding = f"could not be classified: {classification_error}"
+
+    if classification is not None and classification.composition == expected:
+        return None
+
+    return models.Message(
+        carrier_name=settings.carrier_name,
+        carrier_id=settings.carrier_id,
+        code=provider_units.POSTNORD_UNEXPECTED_LABEL_COMPOSITION,
+        level="warning",
+        message=(
+            "The label was expected to be the shipping label composed with a "
+            f"CN22 ({expected.value}) but {finding}"
+        ),
+    )
 
 
 def _customs_omitted_message(

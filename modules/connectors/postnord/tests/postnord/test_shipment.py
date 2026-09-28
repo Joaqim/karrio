@@ -1,10 +1,13 @@
 """PostNord carrier shipment tests."""
 
+import io
 import base64
 import http.client
 import json
 import unittest
 from unittest.mock import patch, ANY
+
+import pypdf
 
 import karrio.sdk as karrio
 import karrio.lib as lib
@@ -20,6 +23,7 @@ from .fixture import (
     gateway_with_country_locale,
     gateway_with_language,
 )
+from .test_cn22_stamping import _read_b64
 
 
 class TestPostNordShipment(unittest.TestCase):
@@ -1012,7 +1016,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
         # composed document kinds. A tracked letter keeps the by-id fetch
         # gated off, so exactly one HTTP call is made.
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
-            mock.return_value = CustomsBookingResponse
+            mock.return_value = CombinedBookingResponse
             parsed_response = (
                 karrio.Shipment.create(models.ShipmentRequest(**CustomsShipmentPayload))
                 .from_(gateway)
@@ -1031,7 +1035,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
         # and the printouts attach as extra_documents categorized by what
         # PostNord composed.
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
-            mock.side_effect = [CustomsBookingResponse, CustomsPrintoutsResponse]
+            mock.side_effect = [CombinedBookingResponse, CustomsPrintoutsResponse]
             parsed_response = (
                 karrio.Shipment.create(
                     models.ShipmentRequest(**ExportLetterCustomsPayload)
@@ -1061,7 +1065,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
         self.assertEqual(
             lib.to_dict(details.docs),
             {
-                "label": "JVBERi0xLjQK",
+                "label": CombinedLabelPDF,
                 "extra_documents": [
                     {
                         "category": "cn22",
@@ -1089,7 +1093,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
         # key available.
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
             mock.side_effect = [
-                CustomsBookingNoPrintIdResponse,
+                CombinedBookingNoPrintIdResponse,
                 CustomsPrintoutsResponse,
             ]
             parsed_response = (
@@ -1120,7 +1124,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
         # of silence.
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
             mock.side_effect = [
-                CustomsBookingResponse,
+                CombinedBookingResponse,
                 CustomsPrintoutsEmptyResponse,
             ]
             parsed_response = (
@@ -1134,7 +1138,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
         details, messages = parsed_response
         self.assertIsNotNone(details)
         self.assertEqual(details.tracking_number, "00373500454541020957")
-        self.assertEqual(details.docs.label, "JVBERi0xLjQK")
+        self.assertEqual(details.docs.label, CombinedLabelPDF)
         self.assertEqual(details.docs.extra_documents, [])
         self.assertEqual(len(messages), 1)
         self.assertIsNone(messages[0].code)
@@ -1150,7 +1154,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
         # document format falls back to the requested label type and the
         # data re-encodes to base64 like the booking label.
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
-            mock.side_effect = [CustomsBookingZPLResponse, CustomsPrintoutsZPLResponse]
+            mock.side_effect = [CombinedBookingZPLResponse, CustomsPrintoutsZPLResponse]
             parsed_response = (
                 karrio.Shipment.create(
                     models.ShipmentRequest(
@@ -1186,7 +1190,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
         # key order PostNord serializes: sorted, like meta.printout_composition.
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
             mock.side_effect = [
-                CustomsBookingResponse,
+                CombinedBookingResponse,
                 CustomsPrintoutsMultiKindResponse,
             ]
             parsed_response = (
@@ -1209,7 +1213,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
         # same output family as the composed kind keys).
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
             mock.side_effect = [
-                CustomsBookingResponse,
+                CombinedBookingResponse,
                 CustomsPrintoutsNoCompositionResponse,
             ]
             parsed_response = (
@@ -1230,7 +1234,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
         # An error body from the by-id fetch leaves the booking successful;
         # the fault surfaces as a message alongside the shipment details.
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
-            mock.side_effect = [CustomsBookingResponse, CustomsRetrievalErrorResponse]
+            mock.side_effect = [CombinedBookingResponse, CustomsRetrievalErrorResponse]
             parsed_response = (
                 karrio.Shipment.create(
                     models.ShipmentRequest(**ExportLetterCustomsPayload)
@@ -1241,7 +1245,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
             self.assertEqual(mock.call_count, 2)
         details, messages = parsed_response
         self.assertIsNotNone(details)
-        self.assertEqual(details.docs.label, "JVBERi0xLjQK")
+        self.assertEqual(details.docs.label, CombinedLabelPDF)
         self.assertEqual(details.docs.extra_documents, [])
         self.assertEqual(len(messages), 1)
         self.assertEqual(messages[0].code, "EDI_NOT_FOUND")
@@ -1256,7 +1260,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
         # synthesized path — while the booking stands.
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
             mock.side_effect = [
-                CustomsBookingResponse,
+                CombinedBookingResponse,
                 CustomsPrintoutsIdNotFoundResponse,
             ]
             parsed_response = (
@@ -1270,7 +1274,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
         details, messages = parsed_response
         self.assertIsNotNone(details)
         self.assertEqual(details.tracking_number, "00373500454541020957")
-        self.assertEqual(details.docs.label, "JVBERi0xLjQK")
+        self.assertEqual(details.docs.label, CombinedLabelPDF)
         self.assertEqual(details.docs.extra_documents, [])
         self.assertEqual(len(messages), 1)
         self.assertIsNone(messages[0].code)
@@ -1286,7 +1290,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
         # message at once: only data-bearing printouts become documents.
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
             mock.side_effect = [
-                CustomsBookingResponse,
+                CombinedBookingResponse,
                 CustomsPrintoutsPartialFailureResponse,
             ]
             parsed_response = (
@@ -1324,7 +1328,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
         # reports the retrieval failure.
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
             mock.side_effect = [
-                CustomsBookingResponse,
+                CombinedBookingResponse,
                 ConnectionError("connection refused"),
             ]
             parsed_response = (
@@ -1351,7 +1355,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
         # surfaces as a message.
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
             mock.side_effect = [
-                CustomsBookingResponse,
+                CombinedBookingResponse,
                 http.client.IncompleteRead(partial=b"<trunc"),
             ]
             parsed_response = (
@@ -1364,7 +1368,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
             self.assertEqual(mock.call_count, 2)
         details, messages = parsed_response
         self.assertIsNotNone(details)
-        self.assertEqual(details.docs.label, "JVBERi0xLjQK")
+        self.assertEqual(details.docs.label, CombinedLabelPDF)
         self.assertEqual(details.docs.extra_documents, [])
         self.assertEqual(len(messages), 1)
         self.assertIsNone(messages[0].code)
@@ -1376,7 +1380,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
         # error page) is also fail-open: the booking stands and a synthesized
         # message reports the unreadable body.
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
-            mock.side_effect = [CustomsBookingResponse, UnreadableBodyResponse]
+            mock.side_effect = [CombinedBookingResponse, UnreadableBodyResponse]
             parsed_response = (
                 karrio.Shipment.create(
                     models.ShipmentRequest(**ExportLetterCustomsPayload)
@@ -1387,7 +1391,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
             self.assertEqual(mock.call_count, 2)
         details, messages = parsed_response
         self.assertIsNotNone(details)
-        self.assertEqual(details.docs.label, "JVBERi0xLjQK")
+        self.assertEqual(details.docs.label, CombinedLabelPDF)
         self.assertEqual(details.docs.extra_documents, [])
         self.assertEqual(len(messages), 1)
         self.assertIsNone(messages[0].code)
@@ -1587,6 +1591,133 @@ class TestPostNordLabelComposition(unittest.TestCase):
         self.assertNotIn(
             provider_units.POSTNORD_UNEXPECTED_LABEL_COMPOSITION, other_codes
         )
+
+    def _book(self, response: str, payload: dict = None, label_type: str = "PDF"):
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = response
+            details, messages = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(
+                        **{**(payload or CustomsShipmentPayload), "label_type": label_type}
+                    )
+                )
+                .from_(gateway)
+                .parse()
+            )
+            mock.assert_called_once()
+        return details, messages
+
+    def test_combined_zpl_label_passes_verification(self):
+        details, messages = self._book(CombinedBookingZPLResponse, label_type="ZPL")
+        self.assertEqual(messages, [])
+        self.assertEqual(details.docs.label, _b64(CombinedLabelZPL))
+        self.assertEqual(details.meta["printout_composition"], ["cn22", "label"])
+
+    def test_combined_pdf_label_passes_verification(self):
+        details, messages = self._book(CombinedBookingResponse)
+        self.assertEqual(messages, [])
+        self.assertEqual(details.docs.label, CombinedLabelPDF)
+        self.assertEqual(details.meta["printout_composition"], ["cn22", "label"])
+
+    def test_unexpected_label_compositions_warn(self):
+        cases = [
+            ("zpl_plain_label", CustomsBookingZPLResponse, "ZPL", _b64(RawZPL), "none"),
+            (
+                "zpl_lone_cn22",
+                _customs_booking_zpl(LoneCN22ZPL),
+                "ZPL",
+                _b64(LoneCN22ZPL),
+                "declaration",
+            ),
+            (
+                "pdf_without_cn22_text",
+                _customs_booking_pdf(BlankPDF),
+                "PDF",
+                BlankPDF,
+                "none",
+            ),
+        ]
+        for name, response, label_type, label, composition in cases:
+            with self.subTest(case=name):
+                details, messages = self._book(response, label_type=label_type)
+                self.assertIsNotNone(details)
+                self.assertEqual(details.tracking_number, "00373500454541020957")
+                self.assertEqual(details.docs.label, label)
+                self.assertListEqual(
+                    lib.to_dict(messages),
+                    [
+                        {
+                            "carrier_id": "postnord",
+                            "carrier_name": "postnord",
+                            "code": "postnord_unexpected_label_composition",
+                            "level": "warning",
+                            "message": (
+                                "The label was expected to be the shipping label "
+                                "composed with a CN22 (label_with_declaration) but "
+                                f"was classified as {composition}"
+                            ),
+                        }
+                    ],
+                )
+
+    def test_unclassifiable_label_warns(self):
+        png = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"\x00" * 8).decode("utf-8")
+        details, messages = self._book(_customs_booking_pdf(png))
+        self.assertEqual(details.docs.label, png)
+        self.assertEqual(
+            [(message.code, message.level, message.message) for message in messages],
+            [
+                (
+                    "postnord_unexpected_label_composition",
+                    "warning",
+                    "The label was expected to be the shipping label composed "
+                    "with a CN22 (label_with_declaration) but could not be "
+                    "classified: Customs composition classification supports ZPL "
+                    "and PDF documents only; the document was detected as 'PNG'",
+                )
+            ],
+        )
+
+    def test_bookings_without_expected_cn22_are_not_verified(self):
+        # Non-combined labels throughout: a verification run would warn.
+        intra_eu_payload = {**CustomsShipmentPayload, "recipient": GermanyRecipient}
+        intra_eu_warning = {
+            "carrier_id": "postnord",
+            "carrier_name": "postnord",
+            "code": "customs_omitted_intra_eu",
+            "level": "warning",
+            "message": (
+                "Customs data was not sent: the shipment from SE to DE "
+                "stays within the EU VAT area"
+            ),
+        }
+        cases = [
+            ("no_customs_pdf", ShipmentPayload, CustomsBookingResponse, "PDF", []),
+            ("no_customs_zpl", ShipmentPayload, CustomsBookingZPLResponse, "ZPL", []),
+            (
+                "eu_vat_area_pdf",
+                intra_eu_payload,
+                CustomsBookingResponse,
+                "PDF",
+                [intra_eu_warning],
+            ),
+            (
+                "eu_vat_area_zpl",
+                intra_eu_payload,
+                CustomsBookingZPLResponse,
+                "ZPL",
+                [intra_eu_warning],
+            ),
+        ]
+        for name, payload, response, label_type, expected in cases:
+            with self.subTest(case=name):
+                details, messages = self._book(
+                    response,
+                    payload={**payload, "service": "postnord_tracked_letter"},
+                    label_type=label_type,
+                )
+                self.assertIsNotNone(details)
+                self.assertListEqual(lib.to_dict(messages), expected)
 
 
 class TestPostNordCustomsInvoice(unittest.TestCase):
@@ -3026,4 +3157,40 @@ CustomsInvoicePrintoutsResponse = CustomsPrintoutsResponse.replace(
 )
 CustomsInvoicePrintoutsZPLResponse = CustomsPrintoutsZPLResponse.replace(
     '"cn22": 1', '"customsInvoice": 1'
+)
+
+
+def _b64(text: str) -> str:
+    return base64.b64encode(text.encode("utf-8")).decode("utf-8")
+
+
+def _blank_pdf() -> str:
+    writer = pypdf.PdfWriter()
+    writer.add_blank_page(width=595, height=842)
+    buffer = io.BytesIO()
+    writer.write(buffer)
+    return base64.b64encode(buffer.getvalue()).decode("utf-8")
+
+
+def _customs_booking_pdf(data: str) -> str:
+    return CustomsBookingResponse.replace('"data": "JVBERi0xLjQK"', f'"data": "{data}"')
+
+
+def _customs_booking_zpl(zpl: str) -> str:
+    return CustomsBookingZPLResponse.replace(_zpl_json(RawZPL), _zpl_json(zpl))
+
+
+# Live export letter (UX) printouts: the label composed with the CN22 as one
+# PDF page and one ZPL format, and the lone CN22 ZPL.
+CombinedLabelPDF = _read_b64("postnord_label_cn22_printid.pdf")
+CombinedLabelZPL = base64.b64decode(_read_b64("postnord_label_cn22_booking.zpl")).decode(
+    "utf-8"
+)
+LoneCN22ZPL = base64.b64decode(_read_b64("postnord_cn22.zpl")).decode("utf-8")
+BlankPDF = _blank_pdf()
+
+CombinedBookingResponse = _customs_booking_pdf(CombinedLabelPDF)
+CombinedBookingZPLResponse = _customs_booking_zpl(CombinedLabelZPL)
+CombinedBookingNoPrintIdResponse = CustomsBookingNoPrintIdResponse.replace(
+    '"data": "JVBERi0xLjQK"', f'"data": "{CombinedLabelPDF}"'
 )
