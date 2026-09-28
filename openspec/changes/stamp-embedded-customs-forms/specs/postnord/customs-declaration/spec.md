@@ -4,7 +4,7 @@
 
 ### Requirement: Booking label carries the composed customs declaration
 
-When a booking carries customs data for a letter service for which PostNord composes a CN22, the unified response's label SHALL be PostNord's complete printout for the item, containing both the CN22 and the shipping label, in the requested label format.
+When a booking carries customs data for a service for which PostNord composes a CN22 (CN22-structured letter services and the International Parcel `91`), the unified response's label SHALL be PostNord's complete printout for the item, containing both the CN22 and the shipping label, in the requested label format.
 PDF and ZPL bookings SHALL follow the same flow and yield the same document set, differing only in format.
 The connector SHALL NOT split, reorder, or strip the customs declaration from the label.
 The response SHALL report the label's composition so a consumer can tell the label carries a CN22 without parsing it.
@@ -21,6 +21,12 @@ The response SHALL report the label's composition so a consumer can tell the lab
 - **THEN** the response's label is one PDF carrying both the CN22 section and the shipping label section, on one page or on separate pages
 - **AND** the response reports the label composition as label plus `cn22`
 - **AND** no composition warning is emitted when the label and CN22 sections are on separate pages
+
+#### Scenario: International Parcel ZPL booking returns the label and CN22 as two formats
+
+- **WHEN** an International Parcel (`91`) is booked with a ZPL label and customs data, and PostNord composes a CN22
+- **THEN** the response's label is the single ZPL document containing the parcel label format followed by the upright CN22 format
+- **AND** the response reports the label composition as label plus `cn22` and carries no composition warning
 
 #### Scenario: Formats are interchangeable
 
@@ -75,7 +81,7 @@ Verification SHALL NOT fetch, generate, or repair customs documents; customs ver
 
 ### Requirement: Standalone customs document is opt-in for CN22 letter bookings
 
-Booking a letter service for which PostNord composes a CN22 (including `postnord_export_letter`, PostNord `UX`, and service 91) with customs data SHALL attach a standalone customs document to the unified response's shipping documents only when the consumer opts in through a booking option; by default the CN22 is carried only within the label.
+Booking a service for which PostNord composes a CN22 (the CN22-structured letter services, including `postnord_export_letter`, PostNord `UX`, and the International Parcel `postnord_postpaket_utrikes`, PostNord `91`) with customs data SHALL attach a standalone customs document to the unified response's shipping documents only when the consumer opts in through a booking option; by default the CN22 is carried only within the label.
 When opted in, the standalone customs document SHALL be retrieved separately from the label printout, in the same format as the label, and categorized by its composed kind.
 The opt-in SHALL behave identically for PDF and ZPL labels.
 

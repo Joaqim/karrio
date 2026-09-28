@@ -87,6 +87,15 @@ Alternative considered: a layout discriminator in the registry key with one meas
 Second, label templates vary, so a section kind may declare alternative marker sets, present when any set fully matches; PostNord declares the letter template and the tracked letter template.
 Alternative considered: treating any non-declaration page as the label. Rejected because an unrelated extra page would then count as a label.
 
+### D8. International Parcel (91) and orientation-aware ZPL anchoring (added after live verification)
+
+A live International Parcel (`91`) ZPL booking (`~/Documents/postnord_postpaket_utrikes_label_and_cn22.zpl`, 2026-09-28) returned two `^XA`...`^XZ` formats: a parcel label marked `^FX NORDIC_SHIPPING_LABEL^FS`, then an upright (`^FWN`) CN22 marked `^FX CUSTOMS_CN22_V2^FS` with the keyword at `^FO25,785`; `printoutComposition` was `cn22` + `label`, so PostNord composes a CN22 (not a CN23) for 91 with the current connector.
+91 is a parcel product, not a letter; it is in scope because `customs_structure()` maps it to the CN22 branch.
+The ZPL section markers gain `AnyOf` alternatives for both kinds.
+ZPL keyword anchoring previously applied the seed offset along page axes and ignored field orientation, and inserted the stamp before the stream's last `^XZ`; on the upright V2 CN22 the stamp landed at `^FO12,1053`, beyond the format's `^LL840`.
+ZPL keyword geometry therefore becomes relative to the matched field's reading frame (effective `^FW`/`^A` orientation), mirroring D7 for PDF, and the stamp is inserted into the format containing the keyword.
+The International Parcel PDF template is uncaptured; PDF verification for 91 may warn until a capture adds its label markers (PDF stamping is consumer-side per user decision).
+
 ## Risks / Trade-offs
 
 - [The captures are export letter (UX) by-id printouts, not booking-call printouts, and service 91 is uncaptured] → a live booking capture for UX and 91 in both formats is a task; the UX by-id captures serve as fixtures until then. Bookings are not cancellable but unshipped test bookings are not billed.

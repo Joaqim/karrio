@@ -34,6 +34,11 @@ Classification SHALL NOT treat the declaration marker alone as proof that the do
 - **WHEN** a consumer classifies the live-captured single-page PostNord PDF whose page text carries both the CN22 section and the international letter label section
 - **THEN** the result is a shipping label composed with a CN22, names the combined document type, and names page 1 as the CN22 page
 
+#### Scenario: A two-format PostNord International Parcel ZPL is classified as combined
+
+- **WHEN** a consumer classifies the captured International Parcel ZPL whose first format carries the parcel label section marker and whose second format carries the upright CN22 section marker
+- **THEN** the result is a shipping label composed with a CN22 and names the combined document type
+
 #### Scenario: A two-page PostNord booking PDF is classified as combined
 
 - **WHEN** a consumer classifies the captured PostNord booking PDF whose first page carries the tracked letter label section and whose second page carries the CN22 section
@@ -84,6 +89,12 @@ The existing lone `cn22` seeds for ZPL and PDF SHALL remain registered and SHALL
 - **THEN** the stamp composites on that page within the CN22 signature region measured on the combined printout
 - **AND** the label section of the page carries no stamp content and the page count is unchanged
 
+#### Scenario: The two-format International Parcel ZPL stamps in its CN22 format
+
+- **WHEN** a consumer stamps the captured International Parcel ZPL under the combined document type, supplying neither placement nor keyword
+- **THEN** the stamp field is inserted into the format that contains the CN22 keyword, within that format's signature region and printable length, oriented along the upright signature line
+- **AND** the parcel label format is byte-identical to the input
+
 #### Scenario: The two-page PostNord booking PDF stamps on its upright CN22 page
 
 - **WHEN** a consumer stamps the captured two-page PostNord booking PDF under the combined document type with the CN22 page index from classification
@@ -105,7 +116,7 @@ The existing lone `cn22` seeds for ZPL and PDF SHALL remain registered and SHALL
 ### Requirement: Keyword-anchored placement resolution
 
 When the caller supplies a keyword, the utility SHALL locate the keyword in the document and SHALL derive the stamp placement's position from the located text, combined with the keyword anchor's geometry.
-For ZPL the keyword SHALL be located in the rendered text of the carrier ZPL field stream, and the position SHALL derive from the matched field's origin.
+For ZPL the keyword SHALL be located in the rendered text of the carrier ZPL field stream, the position SHALL derive from the matched field's origin and the orientation from the field's effective orientation (`^FW` default or the field's font orientation), and the stamp field SHALL be inserted into the `^XA`...`^XZ` format that contains the matched field.
 For PDF the keyword SHALL be located in the extracted page text of the target page (the requested page, or otherwise the first page containing the keyword), and the position and orientation SHALL derive from the matched text's origin and direction on that page.
 The geometry SHALL come from the caller-supplied geometry or from the registry seed for the document's key, and when neither resolves the utility SHALL raise an explicit error naming what is missing.
 A keyword-resolved placement SHALL flow through the same compositing path as a consumer-supplied placement, including rotation and bounds validation.
@@ -116,6 +127,11 @@ A keyword-resolved placement SHALL flow through the same compositing path as a c
 - **THEN** the utility composites the stamp at a placement derived from the matched field's origin
 - **AND** the matched field's own text remains present in the output
 - **AND** the placement obeys the same bounds validation as a consumer-supplied placement
+
+#### Scenario: A ZPL keyword anchors along the field's orientation in its own format
+
+- **WHEN** a consumer stamps a ZPL document of two formats whose keyword field sits upright in the second format, and another whose keyword field is rotated in a single format, supplying the anchor geometry
+- **THEN** each stamp field is inserted into the format containing the keyword, at a placement derived from the field's origin and oriented along the field's orientation
 
 #### Scenario: A keyword that matches no field fails explicitly
 

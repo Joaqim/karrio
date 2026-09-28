@@ -49,13 +49,20 @@ Tests run in the nix dev shell per `docs/notes/workflow/nix-dev-shell-worktrees.
 - [x] 6.4 PostNord (`feat-postnord-customs-invoice`): verify a PDF booking returning the two-page fixture passes verification without a warning; update the PRDs touched by D7
 - [x] 6.5 Restack, rebuild and push `develop` for redeploy (develop `8f6d9af93`, 2026-09-28); the UX PDF re-run is tracked under 5.1.2
 
+## 7. Live-verification follow-up: International Parcel (91) ZPL (design D8)
+
+- [ ] 7.1 SDK (`feat-document-stamping`): orientation-aware ZPL keyword anchoring (geometry in the field's reading frame from effective `^FW`/`^A` orientation) and stamp insertion into the `^XA`...`^XZ` format containing the keyword; verify tests for rotated single-format and upright second-format keywords, CN22-first and CN22-second orders, and unchanged behavior for existing single-format fixtures
+- [ ] 7.2 PostNord (`feat-postnord-cn22-stamping`): add the 91 ZPL fixture, `AnyOf` ZPL markers (`CUSTOMS_CN22_ROTATED`/`CUSTOMS_CN22_V2`, `SE_INTERNATIONAL_LETTER_LABEL`/`NORDIC_SHIPPING_LABEL`), and ZPL keyword geometry in the reading frame fitting both the rotated letter CN22 and the upright V2 signature regions (stop and report if one geometry cannot fit); verify classification and in-region, in-format stamps for all combined ZPL captures with oracles from measurement
+- [ ] 7.3 PostNord (`feat-postnord-customs-invoice`): verify a 91 ZPL booking returning the fixture passes verification without a warning; update PRDs and README for D8
+- [ ] 7.4 Restack, rebuild and push `develop` for redeploy
+
 ## 5. Live verification and integration
 
 - [ ] 5.1 Capture live booking-call printouts (not by-id) for export letter UX and service 91 in PDF and ZPL, with and without opt-in, saving to `$XDG_STATE_HOME/agent-logs/karrio/`; verify each classifies as combined and no composition warning is emitted (bookings are not cancellable; unshipped test bookings are not billed)
   - [x] 5.1.1 2026-09-28: `postnord_export_letter` (UX), ZPL, no opt-in, on develop `4e08591d6`: live booking returned a single ZPL document containing CN22 and label, and `printoutComposition` reported `cn22` + `label` (user-confirmed)
   - [x] 5.1.2 UX, PDF, no opt-in. 2026-09-28 sandbox (not live): booking returned one PDF with two pages (CN22 and label on separate pages) and `printoutComposition` `cn22` + `label`; contradicts the single-page assumption from the by-id `probe1b`; pending fixture capture, classification/stamp verification, and spec/design amendment; resolved by group 6 (fixture, alternative label markers, keyword-anchored PDF seed). Live PDF stamping verification deferred to the consumer side per user decision 2026-09-28; ZPL stamping is the supported live path
   - [ ] 5.1.3 UX, PDF and ZPL, opted in (`postnord_standalone_customs_documents`)
-  - [ ] 5.1.4 Service 91, PDF and ZPL
+  - [x] 5.1.4 Service 91 (International Parcel), ZPL, live 2026-09-28: two formats (parcel label `NORDIC_SHIPPING_LABEL`, upright `CUSTOMS_CN22_V2`), `printoutComposition` `cn22` + `label`, and a false `postnord_unexpected_label_composition` warning on develop `8f6d9af93`; resolved by group 7. The 91 PDF is uncaptured (PDF stamping consumer-side)
 - [ ] 5.2 Record the capture results and any marker or layout differences in `docs/notes/postnord/` on `docs-openspec`; if 91 differs from UX, return to the specs before archiving
 - [x] 5.3 Regenerate `develop` with `assemble-develop.sh` and run the SDK, PostNord, and documents stamping test suites on it; verify all pass and `develop-status.sh --fetch` is clean
 - [x] 5.4 Run a fresh-context review against the specs and `.claude/rules/prd-and-review.md`; verify findings are resolved or recorded
