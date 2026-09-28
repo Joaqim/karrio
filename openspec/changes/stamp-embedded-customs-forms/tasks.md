@@ -6,7 +6,7 @@ Tests run in the nix dev shell per `docs/notes/workflow/nix-dev-shell-worktrees.
 ## 0. Branch readiness
 
 - [x] 0.1 Base `feat-postnord-customs-invoice` on `feat-postnord-cn22-stamping` (which contains `feat-document-stamping`) so the booking check can import the SDK classifier and PostNord section markers; `BRANCHES` already orders cn22-stamping before customs-invoice. Done 2026-09-28: rebased 10 commits onto `f33ddaec5` with identical patches per `git range-diff`; pre-rebase tip kept as `backup/feat-postnord-customs-invoice-pre-cn22-rebase` (`22a0b936d`)
-- [ ] 0.2 Add or amend the upstream PRD as the first commit on each affected feature branch, covering classification, the combined seeds, and the opt-in standalone documents; verify each PRD has the ASCII flow diagram and file-path plan required by `PRDs/TEMPLATE.md`
+- [ ] 0.2 (SDK part done in `feat-document-stamping`'s `PRDs/DOCUMENT_STAMPING.md`; PostNord stamping part goes in a new `PRDs/POSTNORD_CN22_STAMPING.md` on `feat-postnord-cn22-stamping`; booking part on `feat-postnord-customs-invoice`) Add or amend the upstream PRD as the first commit on each affected feature branch, covering classification, the combined seeds, and the opt-in standalone documents; verify each PRD has the ASCII flow diagram and file-path plan required by `PRDs/TEMPLATE.md`
 
 ## 1. SDK customs composition classification (`feat-document-stamping`)
 
@@ -15,14 +15,15 @@ Tests run in the nix dev shell per `docs/notes/workflow/nix-dev-shell-worktrees.
 - [x] 1.3 Add PDF classification by per-page text extraction with pypdf; verify unit tests for combined, lone, and no-marker-text PDFs built in-test, including a multi-page PDF naming the correct page index
 - [x] 1.4 Reject unsupported formats with an explicit error naming the detected format; verify a test with a PNG input
 - [x] 1.5 Export the classifier and result type through `karrio.lib` and document classify-then-stamp usage in the stamping module docstring; verify `python -m unittest discover -v -f modules/sdk/tests` passes
+- [ ] 1.6 Add an optional page override to the stamp entry point so a seeded placement is applied on the page named by classification (combined PDF CN22 page); verify a test stamping a multi-page PDF on page 2 under a page-1 seed, and that omitting the override keeps the seed's page
 
 ## 2. PostNord sections, fixtures, and combined seeds (`feat-postnord-cn22-stamping`)
 
-- [ ] 2.1 Add the live captures as fixtures: `~/Documents/postnord_cn22_and_shipment_label.zpl` and `probe2c_printid_zpl.zpl` (combined ZPL), `probe1b_printid_unrestricted.pdf` (combined PDF), `probe2b_printid_onlyCustomsDeclarations.pdf` (lone PDF); verify each fixture's structure (single `^XZ` and markers for ZPL, single A4 page and extractable text for PDF) in a fixture-integrity test mirroring `test_cn22_zpl_fixture_is_the_pristine_rotated_form`
-- [ ] 2.2 Declare PostNord's `document_sections` in `providers/postnord/stamping.py` (`^FX CUSTOMS_CN22_ROTATED^FS`, `^FX SE_INTERNATIONAL_LETTER_LABEL^FS`, PDF `CUSTOMS DECLARATION`/`CN22` and letter-label text) and wire them in `plugins/postnord/__init__.py`; verify the classifier returns the spec's expected results for every fixture in 2.1 and the existing lone ZPL CN22 fixture
-- [ ] 2.3 Register `label_cn22/ZPL/*` reusing the CN22 keyword and offset; verify stamping the combined ZPL fixtures yields the same placement as the lone CN22 and the label section (from `^FX SE_INTERNATIONAL_LETTER_LABEL^FS` to `^XZ`) is byte-identical
-- [ ] 2.4 Measure the CN22 signature strip on the combined `probe1b` page and register `label_cn22/PDF/A4` with that placement; verify with an oracle derived from the measurement (not the seed) that the stamp lands within the measured region on page 1 and the page count is unchanged
-- [ ] 2.5 Verify the existing `cn22/ZPL/*` and `cn22/PDF/A4` seeds are unchanged in revision and resolution; `python -m unittest discover -v -f modules/connectors/postnord/tests` passes with the pre-existing CN22 stamping tests untouched
+- [x] 2.1 Add the live captures as fixtures: `~/Documents/postnord_cn22_and_shipment_label.zpl` and `probe2c_printid_zpl.zpl` (combined ZPL), `probe1b_printid_unrestricted.pdf` (combined PDF), `probe2b_printid_onlyCustomsDeclarations.pdf` (lone PDF); verify each fixture's structure (single `^XZ` and markers for ZPL, single A4 page and extractable text for PDF) in a fixture-integrity test mirroring `test_cn22_zpl_fixture_is_the_pristine_rotated_form`
+- [x] 2.2 Declare PostNord's `document_sections` in `providers/postnord/stamping.py` (`^FX CUSTOMS_CN22_ROTATED^FS`, `^FX SE_INTERNATIONAL_LETTER_LABEL^FS`, PDF `CUSTOMS DECLARATION`/`CN22` and letter-label text) and wire them in `plugins/postnord/__init__.py`; verify the classifier returns the spec's expected results for every fixture in 2.1 and the existing lone ZPL CN22 fixture
+- [x] 2.3 Register `label_cn22/ZPL/*` reusing the CN22 keyword and offset; verify stamping the combined ZPL fixtures yields the same placement as the lone CN22 and the label section (from `^FX SE_INTERNATIONAL_LETTER_LABEL^FS` to `^XZ`) is byte-identical
+- [x] 2.4 Measure the CN22 signature strip on the combined `probe1b` page and register `label_cn22/PDF/A4` with that placement; verify with an oracle derived from the measurement (not the seed) that the stamp lands within the measured region on page 1 and the page count is unchanged
+- [x] 2.5 Verify the existing `cn22/ZPL/*` and `cn22/PDF/A4` seeds are unchanged in revision and resolution; `python -m unittest discover -v -f modules/connectors/postnord/tests` passes with the pre-existing CN22 stamping tests untouched
 
 ## 3. Booking-time verification (`feat-postnord-customs-invoice`)
 
