@@ -33,14 +33,15 @@
 
 The PostNord connector declares stamp seeds for its CN22 customs declaration and the section markers that let the SDK classifier tell a lone CN22 from PostNord's composed label + CN22 printout.
 PostNord's booking endpoint composes the international letter label and the CN22 into one printout in both formats: a single ZPL format (one `^XZ`), and in PDF either a single A4 page with the CN22 turned beside the label or, in the sandbox booking capture, two A4 pages with the label on page 1 and an upright CN22 on page 2.
+For International Parcel (service 91) it composes the parcel label and an upright CN22 as two ZPL formats (label first), and in PDF as two A4 pages (label first).
 This PRD covers the connector-side data only: `document_sections`, the lone `cn22` seeds, the combined `label_cn22` seeds, and the live fixtures that pin them.
 
 ### Key Architecture Decisions
 
 1. **Sections are declarative plugin data**: PostNord's markers live in `providers/postnord/stamping.py` beside the seeds and reach the SDK through `PluginMetadata.document_sections`, so the SDK classifier stays carrier-agnostic.
-2. **ZPL markers are PostNord's own field comments**: `^FX CUSTOMS_CN22_ROTATED^FS` and `^FX SE_INTERNATIONAL_LETTER_LABEL^FS` name the sections; `^XZ` count and barcode presence cannot separate the forms.
-3. **PDF markers are page text unique to each section**: `CUSTOMS DECLARATION` + `CN22` for the declaration; for the label either the letter template (`Brev utrikes` + `Parcel ID`) or the tracked letter template (`PostNord Tracked Letter` + `Item-ID`), declared with `lib.AnyOf`.
-4. **The combined form gets its own `label_cn22` seeds**: ZPL reuses the CN22 keyword anchor; PDF anchors on the same keyword with PDF keyword geometry (revision 2), so one seed serves both PDF layouts without disturbing `cn22`.
+2. **ZPL markers are PostNord's own field comments**: `lib.AnyOf` of `^FX CUSTOMS_CN22_ROTATED^FS` and `^FX CUSTOMS_CN22_V2^FS` for the declaration, and of `^FX SE_INTERNATIONAL_LETTER_LABEL^FS` and `^FX NORDIC_SHIPPING_LABEL^FS` for the label; `^XZ` count and barcode presence cannot separate the forms.
+3. **PDF markers are page text unique to each section**: `CUSTOMS DECLARATION` + `CN22` for the declaration; for the label the letter template (`Brev utrikes` + `Parcel ID`), the tracked letter template (`PostNord Tracked Letter` + `Item-ID`) or the International Parcel template (`International Parcel` + `Item-ID`), declared with `lib.AnyOf`.
+4. **The combined form gets its own `label_cn22` seeds**: both formats anchor on the CN22 keyword in its reading frame (revision 3), so one seed serves the rotated and upright layouts in ZPL and in PDF without disturbing `cn22`.
 5. **Lone `cn22` seeds are unchanged**: revision 3 and its resolution stay as shipped.
 
 ### Scope
@@ -66,6 +67,9 @@ This PRD covers the connector-side data only: `document_sections`, the lone `cn2
 | D4 | PDF stamp page | The classified page, passed to `stamp_document(page=...)` | Page 1 for the single-page captures, page 2 for the two-page booking capture | 2026-09-28 |
 | D5 | Tracked letter label markers | `lib.AnyOf(("Brev utrikes", "Parcel ID"), ("PostNord Tracked Letter", "Item-ID"))` | The two-page capture's label carries neither `Brev utrikes` nor `Parcel ID`; `PostNord Tracked Letter` and `Item-ID` occur on its label page and on no CN22 page of any PDF fixture; `DELIVERY CONFIRMATION` names an add-on service and is not used | 2026-09-28 |
 | D6 | One keyword geometry for both PDF layouts | `pdf_keyword_placement` x 33.53, y -5.32, 49.11 x 7.62 mm, rotation 0, revision 2 | Edge-aligned on the single-page layout's measured strip; inside the upright layout's free signature area though not on its rules (owner, option 1); a per-layout seed would need a layout discriminator per template | 2026-09-28 |
+| D7 | International Parcel (91) markers | ZPL `AnyOf` alternatives `^FX CUSTOMS_CN22_V2^FS` and `^FX NORDIC_SHIPPING_LABEL^FS`; PDF label alternative `("International Parcel", "Item-ID")` | Each occurs once in its own section of the 91 captures and in no CN22 section of any fixture | 2026-09-28 |
+| D8 | One ZPL keyword geometry for both ZPL layouts | `zpl_keyword_frame_placement` x 33.529, y -3.4245, 49.1 x 7.6 mm, rotation 0, 203 dpi, revision 3 | The rotated letter CN22 keeps `^FO7,303`; the upright V2 CN22 resolves to `^FO293,758` inside its signature area; the label-axis offset of revision 2 placed the V2 stamp beyond `^LL840` | 2026-09-28 |
+| D9 | Lone `cn22/ZPL/*` geometry | Unchanged label-axis offset | A reading-frame geometry is byte-identical for the seed keyword on the lone fixture but not for a consumer keyword resolved with the seed's geometry (`Total Weight (in kg)`), so the lone seed stays as shipped | 2026-09-28 |
 
 ---
 
@@ -113,9 +117,9 @@ if result.doc_type:  # "cn22" or "label_cn22"
 
 | Metric | Target |
 |--------|--------|
-| Combined ZPL and PDF captures | `label_with_declaration`, `label_cn22`, PDF page 1 (single page) or 2 (two-page booking) |
+| Combined ZPL and PDF captures | `label_with_declaration`, `label_cn22`, PDF page 1 (single page) or 2 (two-page booking, International Parcel) |
 | Lone ZPL and PDF | `declaration`, `cn22`, PDF page 1 |
-| Combined ZPL stamp | Same `^GFA` field as the lone CN22; carrier bytes before `^XZ` unchanged |
+| Combined ZPL stamp | Letter: same `^GFA` field as the lone CN22, carrier bytes before `^XZ` unchanged; International Parcel: inserted into the CN22 format within its measured signature area, label format byte-identical |
 | Combined PDF stamp | On the classified page only, oriented along the keyword, within the measured strip (single page) or free signature area (two-page); page count and text unchanged |
 | `cn22/*` seeds | Revision 3, unchanged resolution |
 
@@ -142,9 +146,11 @@ if result.doc_type:  # "cn22" or "label_cn22"
 | Seed and section lookup | `modules/sdk/karrio/core/utils/stamping.py` (`_carrier_seeds`, `_carrier_sections`) | Reads `stamp_seeds` and `document_sections` from plugin metadata |
 | Classifier | `stamping.classify_customs_composition`, exported through `karrio.lib` | Consumes `DOCUMENT_SECTIONS`; a kind is present when all markers of one of its sets match (`lib.AnyOf` for alternatives), whitespace collapsed |
 | PDF keyword anchoring | `StampSeed.pdf_keyword_placement` in the SDK stamping module | Locates the keyword's text run on the classified page and lays the geometry out in its reading frame |
+| ZPL reading-frame anchoring | `StampSeed.zpl_keyword_frame_placement` in the SDK stamping module | Lays the geometry out from where the keyword field's text starts, along its orientation, and splices the stamp into the format containing the field |
 | Plugin metadata field | `modules/sdk/karrio/core/metadata.py` (`document_sections`) | Shape `{FORMAT: {kind: markers}}` |
 | Lone fixtures | `tests/postnord/fixtures/postnord_cn22.zpl`, `postnord_cn22.pdf` | Lone classification and seed tests |
 | Combined fixtures | `postnord_label_cn22_booking.zpl`, `postnord_label_cn22_printid.zpl`, `postnord_label_cn22_printid.pdf`, `postnord_label_cn22_booking_two_pages.pdf` | Export-letter (UX) captures: live booking ZPL, live by-id ZPL and PDF without `definePrintout`, sandbox booking PDF (two pages, test sender data only) |
+| International Parcel fixtures | `postnord_label_cn22_international_parcel.zpl`, `postnord_label_cn22_international_parcel.pdf` | Live service 91 bookings of 2026-09-28 (test recipient data): two ZPL formats, two A4 PDF pages |
 | CN22 measurement | Appendix B of `KEYWORD_ANCHORED_STAMPING.md` (keyword-anchored stamping change) | Label-dot strip and landmarks reused for the combined page |
 
 ### Architecture Overview
@@ -154,11 +160,15 @@ if result.doc_type:  # "cn22" or "label_cn22"
  | providers/postnord/stamping.py                                           |
  |                                                                          |
  |  DOCUMENT_SECTIONS                       STAMP_SEEDS                     |
- |   ZPL cn22  ^FX CUSTOMS_CN22_ROTATED^FS   cn22/PDF/A4       CN22_SEED    |
- |       label ^FX SE_INTERNATIONAL_...^FS   cn22/ZPL/*        CN22_SEED    |
- |   PDF cn22  CUSTOMS DECLARATION + CN22    label_cn22/PDF/A4 LABEL_CN22_  |
- |       label AnyOf(Brev utrikes + Parcel   label_cn22/ZPL/*  SEED (rev 2) |
+ |   ZPL cn22  AnyOf(CUSTOMS_CN22_ROTATED,   cn22/PDF/A4       CN22_SEED    |
+ |               CUSTOMS_CN22_V2)            cn22/ZPL/*        CN22_SEED    |
+ |       label AnyOf(SE_INTERNATIONAL_       label_cn22/PDF/A4 LABEL_CN22_  |
+ |               LETTER_LABEL, NORDIC_       label_cn22/ZPL/*  SEED (rev 3) |
+ |               SHIPPING_LABEL)                                            |
+ |   PDF cn22  CUSTOMS DECLARATION + CN22                                   |
+ |       label AnyOf(Brev utrikes + Parcel                                  |
  |         ID, PostNord Tracked Letter +                                    |
+ |         Item-ID, International Parcel +                                  |
  |         Item-ID)                                                         |
  +------------------+----------------------------------+--------------------+
                     | plugins/postnord/__init__.py      |
@@ -168,7 +178,9 @@ if result.doc_type:  # "cn22" or "label_cn22"
  | classify_customs_composition(doc, carrier="postnord")                    |
  |   -> composition, kinds, doc_type (cn22 | label_cn22), PDF page          |
  | stamp_document(doc, carrier="postnord", doc_type=..., page=...)          |
- |   ZPL: seed keyword "Date and Sender's signature" -> ^FO7,303            |
+ |   ZPL cn22: keyword "Date and Sender's signature" -> ^FO7,303            |
+ |   ZPL label_cn22: keyword in its reading frame, in its own format        |
+ |     rotated letter CN22 -> ^FO7,303; upright V2 CN22 -> ^FO293,758       |
  |   PDF cn22: seed placement; label_cn22: keyword run on the page          |
  +--------------------------------------------------------------------------+
 ```
@@ -189,17 +201,33 @@ if result.doc_type:  # "cn22" or "label_cn22"
  |  ^BCR barcode                |          |  "Parcel ID" + barcode    |
  +-- stamp ^GFA spliced here ---+          +---------------------------+
  ^XZ
+
+ International Parcel ZPL (two formats)
+ +------------------------------+          +------------------------------+
+ | ^FX NORDIC_SHIPPING_LABEL^FS |          | ^LL840 ^FWN                  |
+ |  parcel label, ^BCN barcodes |          | ^FX CUSTOMS_CN22_V2^FS       |
+ |  "International Parcel"      |          |  box ^FO10,15 ^GB820,820     |
+ |                              |          |  certification ink to y 745  |
+ |                              |          |  ^FO25,785 keyword (ink      |
+ |                              |          |   x 26-229)  [stamp 293-684, |
+ |                              |          |   y 758-818]                 |
+ |                              |          |  bottom rule y 834           |
+ +------------------------------+          +-- stamp ^GFA spliced here ---+
+ ^XZ (byte-identical)                      ^XZ
 ```
 
 ### Section markers and uniqueness evidence
 
-| Format | Kind | Markers | Evidence |
-|--------|------|---------|----------|
-| ZPL | `cn22` | `^FX CUSTOMS_CN22_ROTATED^FS` | Once in the lone fixture and in both combined captures, before the label marker |
-| ZPL | `label` | `^FX SE_INTERNATIONAL_LETTER_LABEL^FS` | Once in both combined captures; absent from the lone fixture and from the CN22 section |
-| PDF | `cn22` | `CUSTOMS DECLARATION`, `CN22` | Extracted as `CUSTOMS \nDECLARATIONCN22`, matched after whitespace collapse on both pages |
+| Format | Kind | Markers (`lib.AnyOf` alternatives) | Evidence |
+|--------|------|------------------------------------|----------|
+| ZPL | `cn22` | `^FX CUSTOMS_CN22_ROTATED^FS` | Once in the lone fixture and in both combined letter captures, before the label marker |
+| ZPL | `cn22` | `^FX CUSTOMS_CN22_V2^FS` | Once in the International Parcel capture, in its second format; in no label section of any ZPL fixture |
+| ZPL | `label` | `^FX SE_INTERNATIONAL_LETTER_LABEL^FS` | Once in both combined letter captures; absent from the lone fixture and from the CN22 section |
+| ZPL | `label` | `^FX NORDIC_SHIPPING_LABEL^FS` | Once in the International Parcel capture, in its first format; in no CN22 section of any ZPL fixture |
+| PDF | `cn22` | `CUSTOMS DECLARATION`, `CN22` | Extracted as `CUSTOMS \nDECLARATIONCN22`, matched after whitespace collapse on every CN22 page |
 | PDF | `label` | `Brev utrikes`, `Parcel ID` | Present on the combined page, absent from the customs-only page; every run lies below the CN22 box's bottom rule |
-| PDF | `label` (alternative) | `PostNord Tracked Letter`, `Item-ID` | Present on page 1 of the two-page capture (3 and 1 times); absent from every CN22 page of all three PDF fixtures |
+| PDF | `label` | `PostNord Tracked Letter`, `Item-ID` | Present on page 1 of the two-page capture (3 and 1 times); absent from every CN22 page of all four PDF fixtures |
+| PDF | `label` | `International Parcel`, `Item-ID` | Present on page 1 of the International Parcel PDF (`Shipment Item-ID`); absent from all four CN22 pages of the four PDF fixtures |
 
 ### Seeds
 
@@ -207,11 +235,12 @@ if result.doc_type:  # "cn22" or "label_cn22"
 |-----|------|--------|----------|
 | `cn22/PDF/A4` | `CN22_SEED` | x 53.34, y 91.44 mm, 49.11 x 7.62 mm, rotation 90 | 3 (unchanged) |
 | `cn22/ZPL/*` | `CN22_SEED` | keyword, offset (-1.673, 33.529) mm at 203 dpi | 3 (unchanged) |
-| `label_cn22/ZPL/*` | `LABEL_CN22_SEED` | same keyword and offset as `cn22` | 2 |
-| `label_cn22/PDF/A4` | `LABEL_CN22_SEED` | keyword, reading-frame offset (33.53, -5.32) mm, 49.11 x 7.62 mm, rotation 0 relative to the text, on the classified page | 2 |
+| `label_cn22/ZPL/*` | `LABEL_CN22_SEED` | keyword, reading-frame offset (33.529, -3.4245) mm from the text start on its glyph-top edge, 49.1 x 7.6 mm, rotation 0 relative to the text, 203 dpi, in the keyword's format | 3 |
+| `label_cn22/PDF/A4` | `LABEL_CN22_SEED` | keyword, reading-frame offset (33.53, -5.32) mm, 49.11 x 7.62 mm, rotation 0 relative to the text, on the classified page | 3 |
 
 The seed keeps the single-page coordinates (x 53.34, y 91.44 mm, rotation 90) as its `placement`, but a PDF stamp without an explicit placement resolves by the keyword.
 Revision 1 was coordinate-only and would have stamped the two-page capture's CN22 across its explanation, contents and tariff rows.
+Revision 2 carried the lone CN22's label-axis ZPL offset, which on the upright V2 CN22 resolved beyond the format's `^LL840`; revision 3 replaces it with the reading-frame geometry, which resolves to the same `^FO7,303` field on the rotated letter CN22.
 
 ### PDF measurement on the combined page
 
@@ -242,6 +271,32 @@ The edge-aligned strips differ by about 18.1 mm along and 2.3 mm across, so no s
 The seed takes the single-page strip, which on page 2 resolves to page x 89.17-138.28 mm and y 160.57-168.19 mm: inside the free signature area, 1.1 mm below the certification text, 2.2 mm above the bottom rule and 18.1 mm short of the right rule.
 The single-page strip, unchanged from revision 1, reaches 0.34 mm into the certification text's descenders (ink at -4.98 against the strip's -5.32) and 0.42 mm past the box's outer bottom edge.
 
+### ZPL measurement on the International Parcel capture
+
+The V2 CN22 format of `postnord_label_cn22_international_parcel.zpl` was measured from a Labelary render (api.labelary.com, 8 dpmm, 203 dpi) of its static fields only: the box, the certification lines and the keyword, all in font 0 at 18 dots.
+Font 0's advance is not carried by the stream, so the render measures the keyword's extent rather than an estimate from the character count.
+Ink extents in label dots, inclusive:
+
+| Landmark | Measurement |
+|----------|-------------|
+| Box rules | columns 10 and 829; bottom rule row 834 |
+| Certification text | last ink row 745 |
+| Keyword `^FO25,785` | ink x 26-229, y 784-800 |
+| Format length | `^LL840` |
+| Signature area | x 230-828, y 746-833 |
+| Stamp (`^FO293,758`, 392 x 61 dots) | x 293-684, y 758-818: 63 dots past the keyword ink, 12 below the certification ink, 15 above the bottom rule |
+
+The same kind of render of the rotated letter keyword (`^FWR`, `^FO20,35`, 20 dots) ends its ink at label y 263, so the letter strip (y 302.97-695.44) clears it by 40 dots.
+The stamp is spliced before the second format's `^XZ`; the first format stays byte-identical.
+
+### PDF measurement on the International Parcel capture
+
+Page 2 of `postnord_label_cn22_international_parcel.pdf` was measured with pypdf and a 300 dpi pdftoppm render, as for the two-page capture.
+The page draws the CN22 as `/Form2`, placed by a pure translation to (148.84964, 151.74292) pt, with `BBox` 297.57635 x 538.40393 pt, the 839 x 1518-dot label frame.
+The keyword text matrix sits at form (8.867, 255.3695) pt, label (25, 798) dots; the box's inner rules are at form x 3.9015 and 294.0296 pt and y 242.601 pt, and the certification text's last baseline at form y 274.8769 pt.
+The render puts the certification ink's bottom at page y 146.98 mm, the keyword ink's right edge at page x 85.51 mm and the box's inner bottom rule at 157.88 mm.
+The `label_cn22/PDF/A4` seed resolves to page x 89.17-138.28 mm and y 148.06-155.68 mm: 3.7 mm past the keyword ink, 1.1 mm below the certification ink, 2.2 mm above the bottom rule and 18.0 mm short of the right rule, inside the signature area.
+
 ---
 
 ## Edge Cases & Failure Modes
@@ -268,6 +323,9 @@ The single-page strip, unchanged from revision 1, reaches 0.34 mm into the certi
 | 6.3 | `feat(postnord): recognize the tracked letter pdf label template` | `stamping.py`, test file |
 | 6.3 | `feat(postnord): anchor the combined pdf stamp on the cn22 keyword` | `stamping.py`, test file |
 | 6.3 | `test(postnord): classify then stamp every combined capture` | test file |
+| 7.2 | `test(postnord): add international parcel label and cn22 fixtures` | `tests/postnord/fixtures/postnord_label_cn22_international_parcel.*`, `tests/postnord/test_label_cn22_international_parcel.py` |
+| 7.2 | `feat(postnord): recognize international parcel label and cn22 sections` | `stamping.py`, both combined test files |
+| 7.2 | `feat(postnord): anchor the combined zpl seed in the keyword's reading frame` | `stamping.py`, both combined test files |
 
 Paths are relative to `modules/connectors/postnord/`.
 
@@ -278,17 +336,22 @@ Follow-on on `feat-postnord-customs-invoice`: booking-time verification of the r
 
 ## Testing Strategy
 
-`modules/connectors/postnord/tests/postnord/test_label_cn22_stamping.py`, unittest, no network.
+`modules/connectors/postnord/tests/postnord/test_label_cn22_stamping.py` and `test_label_cn22_international_parcel.py`, unittest, no network.
 
 | Class | Covers |
 |-------|--------|
 | `TestPostnordCombinedFixtures` | Each capture's structure: one `^XZ`, markers once and ordered, keyword once; one A4 page, or two A4 pages with the label then the CN22; marker text present or absent; tracked letter markers on no CN22 page |
 | `TestPostnordDocumentSections` | Metadata publishes `DOCUMENT_SECTIONS`; classification of all six fixtures (two-page PDF on page 2) and a label-only ZPL |
-| `TestLabelCn22ZplStamp` | Seed reuses the CN22 anchor; both combined ZPLs yield the lone CN22's `^GFA` field; carrier bytes before `^XZ` unchanged |
+| `TestLabelCn22ZplStamp` | Seed anchors the CN22 keyword in its reading frame; both combined letter ZPLs yield the lone CN22's `^GFA` field; carrier bytes before `^XZ` unchanged |
 | `TestLabelCn22PdfMeasurement` | The combined page's frame placement and landmarks match the measurement constants; the box rule separates the sections |
 | `TestLabelCn22TwoPageMeasurement` | Page 2's frame placement, keyword, box rules and certification baseline match the measurement constants |
-| `TestLabelCn22PdfStamp` | Revision 2; no LETTER leak; classify-then-stamp lands along the keyword within the measured strip on the single page and within the measured free area on page 2 of the two-page capture, page 1 untouched, page count and text unchanged |
-| `TestLabelCn22ClassifyThenStamp` | Every combined capture (two ZPL, two PDF) classified then stamped with the classified type and page |
+| `TestLabelCn22PdfStamp` | Revision 3; no LETTER leak; classify-then-stamp lands along the keyword within the measured strip on the single page and within the measured free area on page 2 of the two-page capture, page 1 untouched, page count and text unchanged |
+| `TestLabelCn22ClassifyThenStamp` | Every combined letter capture (two ZPL, two PDF) classified then stamped with the classified type and page |
+| `TestInternationalParcelFixtures` | 91 ZPL: two formats, markers and keyword once each in their own format, the measured V2 layout; 91 PDF: two A4 pages, label then CN22 text |
+| `TestInternationalParcelMarkers` | No label marker alternative in any CN22 section and no CN22 alternative in any label section across all ZPL fixtures; the International Parcel PDF markers on none of the four CN22 pages |
+| `TestInternationalParcelClassification` | 91 ZPL `label_cn22` (page `None`); 91 PDF `label_cn22` on page 2; the 91 label format alone is not customs-bearing |
+| `TestInternationalParcelZplStamp` | Measured keyword ink clears both signature areas; the V2 stamp in the CN22 format, upright, ink within the measured area and `^LL840`, label format byte-identical; the rotated letter stamp still at `^FO7,303`, rotated, within its strip |
+| `TestInternationalParcelPdfStamp` | Page 2 landmarks match the measurement constants; classify-then-stamp lands upright within the measured signature area on page 2, page 1 untouched |
 
 The pre-existing `test_cn22_stamping.py` behavior tests are unchanged; only the seed key-set assertion lists the new keys.
 
@@ -319,9 +382,10 @@ Rollback is reverting the commits; the `cn22` seeds and consumers stamping under
 
 ## Known Limits
 
-The label markers `Brev utrikes` (PDF) and `SE_INTERNATIONAL_LETTER_LABEL` (ZPL) are letter-specific, taken from export letter (UX) captures.
-Service 91 is uncaptured; if its label prints other wording or another field comment, its composed printout would classify as a lone `cn22` in both formats.
-This is revisited after the live booking captures of change tasks 5.1 and 5.2.
+The label markers are template-specific: the letter (`Brev utrikes`, `SE_INTERNATIONAL_LETTER_LABEL`), tracked letter (`PostNord Tracked Letter`) and International Parcel (`International Parcel`, `NORDIC_SHIPPING_LABEL`) templates are captured.
+A further template would classify as a lone `cn22` until its markers are added as another `lib.AnyOf` alternative.
+The 91 ZPL and PDF come from separate live bookings of the same day; the 91 PDF stamp is verified here, and live PDF stamping remains consumer-side.
+The V2 signature area was measured from a Labelary render, which emulates Zebra font 0; a printer's own font metrics may differ slightly, and the stamp clears the keyword ink by 63 dots.
 
 The two-page PDF and the tracked letter label template come from a sandbox booking; whether the live booking returns the same template is unconfirmed (change task 5.1.2).
 On that layout the stamp sits inside the signature area rather than on the box rules, and on the single-page layout it overlaps the certification text's descenders by 0.34 mm.
