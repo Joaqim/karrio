@@ -10,7 +10,9 @@ from .stamping_helpers import (
     b64,
     blank_pdf_b64,
     page_count,
+    png_document,
     providers,
+    signature_png_b64,
     text_pdf_b64,
     zpl_doc_b64,
 )
@@ -269,6 +271,30 @@ class TestPdfClassification(unittest.TestCase):
 
         self.assertEqual(document.base64, original)
         self.assertEqual(page_count(document.base64), 1)
+
+
+class TestUnsupportedFormats(unittest.TestCase):
+    def test_png_is_rejected_naming_the_format(self):
+        with self.assertRaisesRegex(ValueError, r"detected as 'PNG'"):
+            stamping.classify_customs_composition(
+                png_document(), sections=ACME_SECTIONS
+            )
+
+    def test_detected_format_outranks_the_declared_format(self):
+        document = models.ShippingDocument(
+            category="label", format="ZPL", base64=signature_png_b64()
+        )
+
+        with self.assertRaisesRegex(ValueError, r"detected as 'PNG'"):
+            stamping.classify_customs_composition(document, sections=ACME_SECTIONS)
+
+    def test_unrecognized_bytes_are_rejected(self):
+        document = models.ShippingDocument(
+            category="label", format="GIF", base64=b64(b"GIF89a not a label")
+        )
+
+        with self.assertRaisesRegex(ValueError, r"detected as 'GIF'"):
+            stamping.classify_customs_composition(document, sections=ACME_SECTIONS)
 
 
 if __name__ == "__main__":
