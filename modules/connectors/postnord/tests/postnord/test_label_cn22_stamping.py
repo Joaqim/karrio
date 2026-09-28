@@ -377,38 +377,112 @@ def _text_runs(page):
     return runs
 
 
-def _overlay_bounds(document_b64: str):
-    """Page-point bounds of every quarter-turned stamp overlay.
+def _overlays(document_b64: str, page_number: int = 1):
+    """The matrix and page-point bounds of every merged stamp overlay.
 
-    Each merged overlay is a rotated ``cm`` followed by its clip ``re``; the
-    carrier's own page-level ``cm`` is a pure translation and is skipped.
+    Each merged overlay is a ``cm`` and its clip ``re`` followed by the
+    image's own scaling ``cm``; the carrier's page-level ``cm`` and clip are
+    followed by its form's ``Do`` instead and are skipped.
     """
-    page = _pdf_pages(document_b64)[0]
+    page = _pdf_pages(document_b64)[page_number - 1]
     contents = page["/Contents"].get_object()
     streams = contents if isinstance(contents, ArrayObject) else [contents]
     operations = [
-        (tuple(float(value) for value in operands), operator)
+        (
+            () if operator == b"Do" else tuple(float(value) for value in operands),
+            operator,
+        )
         for element in streams
         for operands, operator in ContentStream(
             element.get_object(), page.pdf
         ).operations
-        if operator in (b"cm", b"re")
+        if operator in (b"cm", b"re", b"Do")
     ]
     placed = [
         (matrix, clip[2:])
-        for (matrix, op), (clip, next_op) in zip(operations, operations[1:])
-        if op == b"cm" and next_op == b"re"
+        for (matrix, op), (clip, clip_op), (_, image_op) in zip(
+            operations, operations[1:], operations[2:]
+        )
+        if (op, clip_op, image_op) == (b"cm", b"re", b"cm")
     ]
     return [
         (
-            min(xs := [e + a * u + c * v for u in (0, w) for v in (0, h)]),
-            max(xs),
-            min(ys := [f + b * u + d * v for u in (0, w) for v in (0, h)]),
-            max(ys),
+            (a, b, c, d, e, f),
+            (
+                min(xs := [e + a * u + c * v for u in (0, w) for v in (0, h)]),
+                max(xs),
+                min(ys := [f + b * u + d * v for u in (0, w) for v in (0, h)]),
+                max(ys),
+            ),
         )
         for (a, b, c, d, e, f), (w, h) in placed
+    ]
+
+
+def _overlay_bounds(document_b64: str, page_number: int = 1):
+    """Page-point bounds of every stamp overlay turned a quarter clockwise."""
+    return [
+        bounds
+        for (a, b, *_), bounds in _overlays(document_b64, page_number)
         if abs(a) < 1e-6 and b < 0
     ]
+
+
+def _reads_down_the_page(matrix) -> bool:
+    a, b, c, d, *_ = matrix
+    return abs(a) < 1e-6 and abs(d) < 1e-6 and b < 0 and c > 0
+
+
+def _reads_left_to_right(matrix) -> bool:
+    a, b, c, d, *_ = matrix
+    return abs(b) < 1e-6 and abs(c) < 1e-6 and a > 0 and d > 0
+
+
+def _within(test: unittest.TestCase, bounds, region, tolerance: float = 0.05):
+    left, right, bottom, top = bounds
+    region_left, region_right, region_bottom, region_top = region
+    test.assertGreaterEqual(left, region_left - tolerance)
+    test.assertLessEqual(right, region_right + tolerance)
+    test.assertGreaterEqual(bottom, region_bottom - tolerance)
+    test.assertLessEqual(top, region_top + tolerance)
+
+
+def _rotated_strip_region():
+    """The single-page capture's measured strip in bottom-up page points."""
+    (x_lo, x_hi), (y_lo, y_hi) = _strip_mm()
+    return _pt(x_lo), _pt(x_hi), PAGE_HEIGHT_PT - _pt(y_hi), PAGE_HEIGHT_PT - _pt(y_lo)
+
+
+# Measured on page 2 of the two-page booking PDF with pypdf. The page draws
+# the upright CN22 as /Form2 (BBox 297.57635 x 467.468 pt, the 839 x 1318-dot
+# label frame) placed by a pure translation. In form points: the keyword text
+# matrix origin, the CN22 box's inner left, right and bottom rules (label dots
+# x 11 and 829, y 834), and the baseline of the certification text's last line.
+TWO_PAGE_FORM_ORIGIN_PT = (148.84964, 187.21091)
+TWO_PAGE_FORM_SIZE_PT = (297.57635, 467.468)
+TWO_PAGE_KEYWORD_TM_PT = (8.867, 184.4335)
+TWO_PAGE_BOX_INNER_RULES_PT = {"left": 3.9015, "right": 294.0296, "bottom": 171.665}
+TWO_PAGE_CERTIFICATION_BASELINE_PT = 203.9409
+# The certification text's lowest ink row, page y in millimetres from the top,
+# read from a 300 dpi pdftoppm render of page 2: its descenders end 0.42 mm
+# below the baseline above.
+TWO_PAGE_CERTIFICATION_INK_MM = 159.43
+
+
+def _two_page_free_area():
+    """The upright signature area in bottom-up page points.
+
+    Along the keyword's line it spans the box between its inner left and right
+    rules; across, from the box's inner bottom rule up to the certification
+    text's lowest ink.
+    """
+    form_x, form_y = TWO_PAGE_FORM_ORIGIN_PT
+    return (
+        form_x + TWO_PAGE_BOX_INNER_RULES_PT["left"],
+        form_x + TWO_PAGE_BOX_INNER_RULES_PT["right"],
+        form_y + TWO_PAGE_BOX_INNER_RULES_PT["bottom"],
+        PAGE_HEIGHT_PT - _pt(TWO_PAGE_CERTIFICATION_INK_MM),
+    )
 
 
 class TestLabelCn22PdfMeasurement(unittest.TestCase):
@@ -460,6 +534,65 @@ class TestLabelCn22PdfMeasurement(unittest.TestCase):
         self.assertFalse({KEYWORD, "CUSTOMS"} & below)
 
 
+class TestLabelCn22TwoPageMeasurement(unittest.TestCase):
+    def _page(self):
+        page = _pdf_pages(_read_b64(TWO_PAGE_PDF_FIXTURE))[1]
+        form = page["/Resources"]["/XObject"]["/Form2"].get_object()
+        return page, form
+
+    def test_page_two_places_the_upright_cn22_frame_by_translation(self):
+        page, form = self._page()
+        ((operands, _),) = [
+            (operands, operator)
+            for operands, operator in ContentStream(
+                page["/Contents"].get_object(), page.pdf
+            ).operations
+            if operator == b"cm"
+        ]
+
+        self.assertEqual(
+            [round(float(value), 5) for value in operands],
+            [1.0, 0.0, 0.0, 1.0, *TWO_PAGE_FORM_ORIGIN_PT],
+        )
+        self.assertEqual(
+            [round(float(value), 5) for value in form["/BBox"]],
+            [0.0, 0.0, *TWO_PAGE_FORM_SIZE_PT],
+        )
+        self.assertAlmostEqual(TWO_PAGE_FORM_SIZE_PT[0] / DOT_PT, 839.0, places=2)
+        self.assertAlmostEqual(TWO_PAGE_FORM_SIZE_PT[1] / DOT_PT, 1318.0, places=2)
+
+    def test_page_two_landmarks(self):
+        page, form = self._page()
+        runs = _text_runs(page)
+        rule_points = {
+            tuple(round(float(value), 4) for value in operands)
+            for operands, operator in ContentStream(form, page.pdf).operations
+            if operator == b"l"
+        }
+        rules = TWO_PAGE_BOX_INNER_RULES_PT
+
+        ((_, keyword_x, keyword_y),) = [run for run in runs if run[0] == KEYWORD]
+        self.assertAlmostEqual(keyword_x, TWO_PAGE_KEYWORD_TM_PT[0], places=3)
+        self.assertAlmostEqual(keyword_y, TWO_PAGE_KEYWORD_TM_PT[1], places=3)
+        self.assertIn((rules["right"], rules["bottom"]), rule_points)
+        self.assertIn((rules["left"], rules["bottom"]), rule_points)
+        self.assertIn(
+            TWO_PAGE_CERTIFICATION_BASELINE_PT,
+            [round(y, 4) for text, _, y in runs if text.startswith("article or")],
+        )
+        # The keyword line is the last text above the bottom rule.
+        self.assertEqual(
+            min(y for _, _, y in runs if y > rules["bottom"]), keyword_y
+        )
+        baseline_mm = (
+            PAGE_HEIGHT_PT
+            - TWO_PAGE_FORM_ORIGIN_PT[1]
+            - TWO_PAGE_CERTIFICATION_BASELINE_PT
+        ) * 25.4 / 72.0
+        self.assertGreater(TWO_PAGE_CERTIFICATION_INK_MM, baseline_mm)
+        self.assertLess(TWO_PAGE_CERTIFICATION_INK_MM - baseline_mm, 1.0)
+
+
 class TestLabelCn22PdfStamp(unittest.TestCase):
     def test_pdf_seed_resolves_to_the_measured_strip(self):
         (x_lo, x_hi), (y_lo, y_hi) = _strip_mm()
@@ -474,8 +607,8 @@ class TestLabelCn22PdfStamp(unittest.TestCase):
         self.assertAlmostEqual(placement.x + placement.height, x_hi, places=2)
         self.assertAlmostEqual(placement.y + placement.width, y_hi, places=2)
 
-    def test_pdf_seed_is_the_first_combined_measurement(self):
-        self.assertEqual(postnord_stamping.LABEL_CN22_SEED.revision, 1)
+    def test_pdf_seed_is_the_keyword_anchored_revision(self):
+        self.assertEqual(postnord_stamping.LABEL_CN22_SEED.revision, 2)
 
     def test_pdf_seed_does_not_leak_to_letter(self):
         self.assertIsNone(stamping._default_registry("postnord/label_cn22/PDF/LETTER"))
@@ -493,20 +626,43 @@ class TestLabelCn22PdfStamp(unittest.TestCase):
             page=result.page,
         )
 
-        (x_lo, x_hi), (y_lo, y_hi) = _strip_mm()
-        strip_left, strip_right = _pt(x_lo), _pt(x_hi)
-        strip_bottom, strip_top = PAGE_HEIGHT_PT - _pt(y_hi), PAGE_HEIGHT_PT - _pt(y_lo)
-        tolerance = 0.05
-        bounds = _overlay_bounds(stamped.base64)
+        overlays = _overlays(stamped.base64)
 
         self.assertEqual((result.doc_type, result.page), ("label_cn22", 1))
         self.assertEqual(len(_pdf_pages(stamped.base64)), 1)
-        self.assertEqual(len(bounds), 2)
-        for left, right, bottom, top in bounds:
-            self.assertGreaterEqual(left, strip_left - tolerance)
-            self.assertLessEqual(right, strip_right + tolerance)
-            self.assertGreaterEqual(bottom, strip_bottom - tolerance)
-            self.assertLessEqual(top, strip_top + tolerance)
+        self.assertEqual(len(overlays), 2)
+        for matrix, bounds in overlays:
+            self.assertTrue(_reads_down_the_page(matrix))
+            _within(self, bounds, _rotated_strip_region())
+
+    def test_classified_two_page_pdf_stamps_page_two_in_the_free_area(self):
+        document = _document(TWO_PAGE_PDF_FIXTURE, "PDF")
+        result = lib.classify_customs_composition(document, carrier="postnord")
+
+        stamped = lib.stamp_document(
+            document,
+            image=_signature_png_b64(),
+            date="2026-09-28",
+            carrier="postnord",
+            doc_type=result.doc_type,
+            page=result.page,
+        )
+        overlays = _overlays(stamped.base64, 2)
+        original_label = _pdf_pages(document.base64)[0]
+        stamped_label = _pdf_pages(stamped.base64)[0]
+
+        self.assertEqual((result.doc_type, result.page), ("label_cn22", 2))
+        self.assertEqual(len(_pdf_pages(stamped.base64)), 2)
+        self.assertEqual(len(overlays), 2)
+        for matrix, bounds in overlays:
+            self.assertTrue(_reads_left_to_right(matrix))
+            _within(self, bounds, _two_page_free_area())
+        self.assertEqual(_overlays(stamped.base64, 1), [])
+        self.assertEqual(
+            stamped_label["/Contents"].get_object().get_data(),
+            original_label["/Contents"].get_object().get_data(),
+        )
+        self.assertEqual(_page_text(stamped.base64, 2), _page_text(document.base64, 2))
 
     def test_stamp_leaves_the_label_section_untouched(self):
         document = _document(COMBINED_PDF_FIXTURE, "PDF")
