@@ -6,7 +6,14 @@ import karrio.core.models as models
 import karrio.core.metadata as metadata
 import karrio.core.utils.stamping as stamping
 
-from .stamping_helpers import providers, zpl_doc_b64
+from .stamping_helpers import (
+    b64,
+    blank_pdf_b64,
+    page_count,
+    providers,
+    text_pdf_b64,
+    zpl_doc_b64,
+)
 
 # Synthetic section markers for the carrier-neutral "acme" plugin.
 ACME_SECTIONS = {
@@ -42,6 +49,16 @@ def zpl_form(*sections: str) -> models.ShippingDocument:
     stream = "\n".join(["^XA", *sections, "^XZ"])
     return models.ShippingDocument(
         category="label", format="ZPL", base64=zpl_doc_b64(stream)
+    )
+
+
+DECLARATION_LINES = ["ACME DECLARATION", "CN22", "Sender signature"]
+LABEL_LINES = ["Acme letter", "RR123456785SE"]
+
+
+def pdf_form(*pages) -> models.ShippingDocument:
+    return models.ShippingDocument(
+        category="label", format="PDF", base64=text_pdf_b64(*pages)
     )
 
 
@@ -155,6 +172,103 @@ class TestZplClassification(unittest.TestCase):
 
         with self.assertRaises(AttributeError):
             result.doc_type = "label_cn22"
+
+
+class TestPdfClassification(unittest.TestCase):
+    def classify(self, document):
+        return stamping.classify_customs_composition(document, sections=ACME_SECTIONS)
+
+    def test_combined_label_and_declaration_on_one_page(self):
+        result = self.classify(pdf_form(DECLARATION_LINES + LABEL_LINES))
+
+        self.assertEqual(
+            result,
+            stamping.CustomsClassification(
+                composition=stamping.CustomsComposition.label_with_declaration,
+                kinds=("cn22", "label"),
+                doc_type="label_cn22",
+                page=1,
+            ),
+        )
+
+    def test_lone_declaration(self):
+        result = self.classify(pdf_form(DECLARATION_LINES))
+
+        self.assertEqual(
+            result,
+            stamping.CustomsClassification(
+                composition=stamping.CustomsComposition.declaration,
+                kinds=("cn22",),
+                doc_type="cn22",
+                page=1,
+            ),
+        )
+
+    def test_multi_page_names_the_declaration_page(self):
+        result = self.classify(
+            pdf_form(LABEL_LINES, DECLARATION_LINES, DECLARATION_LINES)
+        )
+
+        self.assertEqual(
+            result.composition, stamping.CustomsComposition.label_with_declaration
+        )
+        self.assertEqual(result.page, 2)
+
+    def test_lone_declaration_after_an_unmarked_page(self):
+        result = self.classify(pdf_form(["Terms and conditions"], DECLARATION_LINES))
+
+        self.assertEqual(result.doc_type, "cn22")
+        self.assertEqual(result.page, 2)
+
+    def test_marker_broken_across_lines_still_matches(self):
+        result = self.classify(pdf_form(["ACME", "DECLARATION", "CN22"]))
+
+        self.assertEqual(result.doc_type, "cn22")
+
+    def test_text_matching_no_marker_is_not_customs_bearing(self):
+        result = self.classify(pdf_form(["Commercial invoice"]))
+
+        self.assertEqual(result, stamping.CustomsClassification())
+
+    def test_label_without_declaration_is_not_customs_bearing(self):
+        result = self.classify(pdf_form(LABEL_LINES))
+
+        self.assertEqual(result.composition, stamping.CustomsComposition.none)
+        self.assertEqual(result.kinds, ("label",))
+        self.assertIsNone(result.page)
+
+    def test_partial_declaration_markers_are_not_customs_bearing(self):
+        result = self.classify(pdf_form(["ACME DECLARATION"] + LABEL_LINES))
+
+        self.assertEqual(result.composition, stamping.CustomsComposition.none)
+
+    def test_declaration_markers_split_across_pages_do_not_match(self):
+        result = self.classify(pdf_form(["ACME DECLARATION"], ["CN22"]))
+
+        self.assertEqual(result.composition, stamping.CustomsComposition.none)
+
+    def test_pages_without_text_are_not_customs_bearing(self):
+        document = models.ShippingDocument(
+            category="label", format="PDF", base64=blank_pdf_b64(pages=2)
+        )
+
+        self.assertEqual(self.classify(document), stamping.CustomsClassification())
+
+    def test_unparseable_pdf_is_not_customs_bearing(self):
+        document = models.ShippingDocument(
+            category="label", format="PDF", base64=b64(b"%PDF-1.4 garbage")
+        )
+
+        self.assertEqual(self.classify(document), stamping.CustomsClassification())
+
+    def test_classification_leaves_the_document_unchanged(self):
+        document = pdf_form(DECLARATION_LINES + LABEL_LINES)
+        original = document.base64
+
+        self.classify(document)
+
+        self.assertEqual(document.base64, original)
+        self.assertEqual(page_count(document.base64), 1)
 
 
 if __name__ == "__main__":

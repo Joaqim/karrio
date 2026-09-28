@@ -10,6 +10,7 @@ import io
 import os
 import re
 import base64
+import typing
 import contextlib
 from unittest import mock
 
@@ -116,6 +117,37 @@ def form_pdf_b64(with_image: bool = False) -> str:
         page.merge_transformed_page(
             logo_page, pypdf.Transformation().translate(72, FORM_IMAGE_Y_PT)
         )
+
+    return _pdf_b64(writer)
+
+
+def text_pdf_b64(*pages: typing.Sequence[str]) -> str:
+    """An A4 PDF whose pages each set their lines in a selectable text layer.
+
+    Each argument is one page's lines, drawn top-down in standard-14
+    Helvetica (no embedding) so ``extract_text`` reads them back.
+    """
+    writer = pypdf.PdfWriter()
+    for lines in pages:
+        page = writer.add_blank_page(width=595, height=842)
+        font = DictionaryObject()
+        font.update(
+            {
+                NameObject("/Type"): NameObject("/Font"),
+                NameObject("/Subtype"): NameObject("/Type1"),
+                NameObject("/BaseFont"): NameObject("/Helvetica"),
+            }
+        )
+        fonts = DictionaryObject({NameObject("/F1"): writer._add_object(font)})
+        page[NameObject("/Resources")] = DictionaryObject({NameObject("/Font"): fonts})
+        content = DecodedStreamObject()
+        content.set_data(
+            "".join(
+                f"BT /F1 12 Tf 72 {760 - 20 * index} Td ({line}) Tj ET\n"
+                for index, line in enumerate(lines)
+            ).encode("latin-1")
+        )
+        page[NameObject("/Contents")] = writer._add_object(content)
 
     return _pdf_b64(writer)
 

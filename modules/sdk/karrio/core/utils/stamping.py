@@ -1067,12 +1067,26 @@ def _zpl_section_texts(document_b64: str) -> typing.List[str]:
     return [helpers.decode_bytes(base64.b64decode(document_b64))]
 
 
+def _pdf_section_texts(document_b64: str) -> typing.List[str]:
+    """Return each PDF page's extracted text, in page order.
+
+    A PDF pypdf cannot parse yields no pages, so it classifies as carrying no
+    sections rather than raising: only an unsupported format is a caller error.
+    """
+    try:
+        pages = pypdf.PdfReader(helpers.to_buffer(document_b64)).pages
+        return [page.extract_text() or "" for page in pages]
+    except pypdf.errors.PyPdfError:
+        return []
+
+
 # Per-format text units the section markers are matched against, and whether
 # a unit's position is a reportable one-based page.
 _SECTION_TEXTS: typing.Dict[
     str, typing.Tuple[typing.Callable[[str], typing.List[str]], bool]
 ] = {
     "ZPL": (_zpl_section_texts, False),
+    "PDF": (_pdf_section_texts, True),
 }
 
 
