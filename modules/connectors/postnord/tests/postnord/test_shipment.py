@@ -1837,6 +1837,56 @@ class TestPostNordStandaloneCustomsDocument(unittest.TestCase):
             ["cn22"],
         )
 
+    def test_opted_in_retrieval_failure_keeps_booking(self):
+        failures = [
+            (
+                "error_body",
+                CustomsRetrievalErrorResponse,
+                "EDI_NOT_FOUND",
+                "No EDI found for item id 00373500454541020957",
+            ),
+            (
+                "per_id_failure",
+                CustomsPrintoutsIdNotFoundResponse,
+                None,
+                "customs document retrieval failed for item id "
+                "00373500454541020957: id not found",
+            ),
+            (
+                "transport_failure",
+                ConnectionError("connection reset"),
+                None,
+                "customs document retrieval failed: connection reset",
+            ),
+        ]
+        bookings = [
+            ("PDF", CombinedBookingResponse, CombinedLabelPDF),
+            ("ZPL", CombinedBookingZPLResponse, _b64(CombinedLabelZPL)),
+        ]
+        for service in ["postnord_export_letter", "postnord_postpaket_utrikes"]:
+            for label_type, booking, label in bookings:
+                for name, failure, code, text in failures:
+                    with self.subTest(
+                        service=service, label_type=label_type, failure=name
+                    ):
+                        mock, details, messages = self._book(
+                            service,
+                            label_type,
+                            [booking, failure],
+                            options={"postnord_standalone_customs_documents": True},
+                        )
+                        self.assertEqual(mock.call_count, 2)
+                        self.assertIsNotNone(details)
+                        self.assertEqual(
+                            details.tracking_number, "00373500454541020957"
+                        )
+                        self.assertEqual(details.docs.label, label)
+                        self.assertEqual(details.docs.extra_documents, [])
+                        self.assertEqual(
+                            [(message.code, message.message) for message in messages],
+                            [(code, text)],
+                        )
+
     def test_not_opted_in_cn22_services_attach_no_standalone_document(self):
         cases = [
             ("PDF", CombinedBookingResponse, CombinedLabelPDF),
