@@ -309,6 +309,10 @@ NON_EU_VAT_POSTAL_RANGES: typing.Tuple[typing.Tuple[str, int, int], ...] = (
 # Warning code shared with the DHL Freight Sweden connector.
 CUSTOMS_OMITTED_INTRA_EU = "customs_omitted_intra_eu"
 
+# Warning for a CN22 booking whose returned label does not classify as the
+# shipping label composed with the CN22.
+POSTNORD_UNEXPECTED_LABEL_COMPOSITION = "postnord_unexpected_label_composition"
+
 
 def in_eu_vat_area(
     country_code: typing.Optional[str],
