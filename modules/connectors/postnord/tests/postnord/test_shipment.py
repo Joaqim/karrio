@@ -1857,6 +1857,64 @@ class TestPostNordStandaloneCustomsDocument(unittest.TestCase):
                     )
 
 
+class TestPostNordCustomsFormatInterchangeability(unittest.TestCase):
+    def setUp(self):
+        self.maxDiff = None
+
+    def _book_letter(self, label_type: str, opt_in: bool):
+        booking, printouts = {
+            "PDF": (CombinedBookingResponse, CustomsPrintoutsResponse),
+            "ZPL": (CombinedBookingZPLResponse, CustomsPrintoutsZPLResponse),
+        }[label_type]
+        payload = {
+            **ExportLetterCustomsPayload,
+            "label_type": label_type,
+            "options": {"postnord_standalone_customs_documents": opt_in},
+        }
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.side_effect = [booking, printouts]
+            details, messages = (
+                karrio.Shipment.create(models.ShipmentRequest(**payload))
+                .from_(gateway)
+                .parse()
+            )
+        classification = lib.classify_customs_composition(
+            models.ShippingDocument(
+                category="label", format=details.label_type, base64=details.docs.label
+            ),
+            carrier="postnord",
+        )
+        outcome = dict(
+            composition=classification.composition,
+            printout_composition=details.meta["printout_composition"],
+            document_kinds=[
+                document.category for document in details.docs.extra_documents
+            ],
+            messages=lib.to_dict(messages),
+            http_calls=mock.call_count,
+        )
+        formats = [
+            details.label_type,
+            *(document.format for document in details.docs.extra_documents),
+        ]
+        return outcome, formats
+
+    def test_pdf_and_zpl_bookings_are_interchangeable(self):
+        for opt_in, kinds in [(False, []), (True, ["cn22"])]:
+            with self.subTest(opt_in=opt_in):
+                pdf, pdf_formats = self._book_letter("PDF", opt_in)
+                zpl, zpl_formats = self._book_letter("ZPL", opt_in)
+                self.assertEqual(pdf, zpl)
+                self.assertEqual(
+                    pdf["composition"], lib.CustomsComposition.label_with_declaration
+                )
+                self.assertEqual(pdf["printout_composition"], ["cn22", "label"])
+                self.assertEqual(pdf["document_kinds"], kinds)
+                self.assertEqual(pdf["messages"], [])
+                self.assertEqual(pdf_formats, ["PDF"] * (1 + len(kinds)))
+                self.assertEqual(zpl_formats, ["ZPL"] * (1 + len(kinds)))
+
+
 class TestPostNordCustomsInvoice(unittest.TestCase):
     def setUp(self):
         self.maxDiff = None
