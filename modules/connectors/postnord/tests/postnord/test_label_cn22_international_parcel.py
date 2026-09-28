@@ -253,6 +253,67 @@ class TestInternationalParcelMarkers(unittest.TestCase):
         self.assertEqual(cn22_pages, 4)
 
 
+class TestInternationalParcelClassification(unittest.TestCase):
+    def test_zpl_fixture_classifies_as_label_cn22(self):
+        result = lib.classify_customs_composition(
+            _document(ZPL_FIXTURE, "ZPL"), carrier="postnord"
+        )
+
+        self.assertEqual(result, COMBINED)
+
+    def test_pdf_fixture_classifies_as_label_cn22_on_page_two(self):
+        result = lib.classify_customs_composition(
+            _document(PDF_FIXTURE, "PDF"), carrier="postnord"
+        )
+
+        self.assertEqual(result, lib.CustomsClassification(
+            composition=COMBINED.composition,
+            kinds=COMBINED.kinds,
+            doc_type=COMBINED.doc_type,
+            page=2,
+        ))
+
+    def test_zpl_label_format_alone_is_not_customs_bearing(self):
+        label, _ = _formats(_zpl_stream(ZPL_FIXTURE))
+        document = models.ShippingDocument(
+            category="label",
+            format="ZPL",
+            base64=base64.b64encode(label.encode("utf-8")).decode("utf-8"),
+        )
+
+        result = lib.classify_customs_composition(document, carrier="postnord")
+
+        self.assertEqual(result.composition, lib.CustomsComposition.none)
+        self.assertEqual(result.kinds, ("label",))
+
+
+class TestInternationalParcelZplStamp(unittest.TestCase):
+    def test_measured_keyword_ink_clears_the_signature_areas(self):
+        self.assertLess(V2_KEYWORD_INK[0][1], V2_SIGNATURE_AREA[0][0])
+        self.assertLess(ROTATED_KEYWORD_INK_END_Y, STRIP_LABEL_DOTS[1][0])
+        self.assertLessEqual(V2_BOX_BOTTOM_RULE_ROW, V2_LABEL_LENGTH)
+
+    def test_rotated_letter_cn22_still_stamps_in_its_measured_strip(self):
+        for name in COMBINED_ZPL_FIXTURES:
+            with self.subTest(fixture=name):
+                _, result, stamped = _stamp(name, "ZPL")
+                original = _zpl_stream(name)
+                zpl = _decode_zpl(stamped.base64)
+                (field,) = _grf_fields(zpl)
+                width, height = _grf_extent(field)
+
+                self.assertEqual(result.doc_type, "label_cn22")
+                self.assertEqual(field[:2], (7, 303))
+                # Rotated: the raster runs down the page, taller than wide.
+                self.assertGreater(height, width)
+                _assert_dots_within(self, _grf_ink_bounds(field), STRIP_LABEL_DOTS)
+                self.assertEqual(zpl.count("^XZ"), 1)
+                self.assertEqual(
+                    zpl[: original.rindex("^XZ")],
+                    original[: original.rindex("^XZ")],
+                )
+
+
 def _parcel_signature_area():
     """The page-2 signature area in bottom-up page points.
 
@@ -322,6 +383,26 @@ class TestInternationalParcelPdfStamp(unittest.TestCase):
             _pt(PARCEL_KEYWORD_INK_RIGHT_MM),
             PARCEL_FORM_ORIGIN_PT[0] + PARCEL_KEYWORD_TM_PT[0],
         )
+
+    def test_classified_pdf_stamps_page_two_in_the_signature_area(self):
+        document, result, stamped = _stamp(PDF_FIXTURE, "PDF")
+        overlays = _overlays(stamped.base64, 2)
+        original_label = _pdf_pages(document.base64)[0]
+        stamped_label = _pdf_pages(stamped.base64)[0]
+
+        self.assertEqual((result.doc_type, result.page), ("label_cn22", 2))
+        self.assertEqual(stamped.format, document.format)
+        self.assertEqual(len(_pdf_pages(stamped.base64)), 2)
+        self.assertEqual(len(overlays), 2)
+        for matrix, bounds in overlays:
+            self.assertTrue(_reads_left_to_right(matrix))
+            _within(self, bounds, _parcel_signature_area())
+        self.assertEqual(_overlays(stamped.base64, 1), [])
+        self.assertEqual(
+            stamped_label["/Contents"].get_object().get_data(),
+            original_label["/Contents"].get_object().get_data(),
+        )
+        self.assertEqual(_page_text(stamped.base64, 2), _page_text(document.base64, 2))
 
 
 if __name__ == "__main__":
