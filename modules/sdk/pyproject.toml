@@ -24,10 +24,10 @@ dependencies = [
     "lxml",
     "lxml-stubs",
     "py-soap",
-    "Pillow",
+    "Pillow>=10.1",
     "phonenumbers",
     "python-barcode",
-    "PyPDF2",
+    "pypdf",
     "toml",
     "loguru",
 ]
