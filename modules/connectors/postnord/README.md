@@ -163,6 +163,7 @@ Registration-number keys under shipment `options` are rejected with a field erro
 
 For letter services and International Parcel (91) booked with customs data, PostNord composes the CN22 into the booking printout in both formats: one PDF or one ZPL format carrying the CN22 section and the shipping label section.
 In a PDF the two sections may share one A4 page or sit on separate pages (a sandbox export letter booking returned the tracked letter label on page 1 and the CN22 on page 2); verification accepts both layouts.
+For International Parcel (91), PostNord returns the parcel label followed by an upright CN22 V2, as a second `^XA`...`^XZ` format in ZPL and a second page in PDF; this composed printout is `docs.label` and passes verification without a warning.
 `docs.label` is that composed printout, returned unchanged, and `meta.printout_composition` reports the composed kinds, e.g. `["cn22", "label"]`.
 The connector verifies the label with the SDK customs classifier (`lib.classify_customs_composition`) using PostNord's declared section markers (`DOCUMENT_SECTIONS` in `providers/postnord/stamping.py`).
 A label that does not classify as the shipping label composed with a CN22 is still returned unchanged, with a `postnord_unexpected_label_composition` warning message naming the expected and the classified composition; the booking never fails on it.
