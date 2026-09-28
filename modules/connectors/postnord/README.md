@@ -159,6 +159,12 @@ Registration numbers are optional on the customs invoice.
 
 Registration-number keys under shipment `options` are rejected with a field error, because unknown shipment options would otherwise be dropped silently.
 
+For letter services and International Parcel (91) booked with customs data, PostNord composes the CN22 into the booking printout in both formats: one A4 PDF page or one ZPL format carrying the CN22 section and the shipping label section.
+`docs.label` is that composed printout, returned unchanged, and `meta.printout_composition` reports the composed kinds, e.g. `["cn22", "label"]`.
+The connector verifies the label with the SDK customs classifier (`lib.classify_customs_composition`) using PostNord's declared section markers (`DOCUMENT_SECTIONS` in `providers/postnord/stamping.py`).
+A label that does not classify as the shipping label composed with a CN22 is still returned unchanged, with a `postnord_unexpected_label_composition` warning message naming the expected and the classified composition; the booking never fails on it.
+Bookings without customs data or within the EU VAT area are not verified.
+
 For Export Letter (UX) and parcel-product bookings with customs data, the connector also fetches the standalone customs document (`POST /rest/shipment/v3/labels/ids/{pdf,zpl}` with `definePrintout=onlyCustomsDeclarations`), keyed by the booking's `printId`, and attaches it to `docs.extra_documents`.
 The document category is the kind PostNord reports in `printoutComposition` (`cn22`, `customsInvoice`, …), falling back to `customs_declaration`.
 A failed fetch never fails the booking; it surfaces as a message.
