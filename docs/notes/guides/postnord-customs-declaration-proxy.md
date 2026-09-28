@@ -13,9 +13,12 @@ via `gateway.proxy.create_customs_declaration` and
 precedent).
 
 Two flows produce customs documents in this connector.
-Booking-time declaration (unified `customs` payload mapped to the CN22 branch)
-and the implicit standalone customs document for export-letter bookings are
-handled by `karrio.Shipment.create` itself and are not this guide's subject.
+Booking-time declaration (unified `customs` payload mapped to the CN22 branch for
+letters and International Parcel, or to the customs invoice branch for parcel
+products) and the standalone customs document (fetched for customs-invoice parcel
+bookings, and for CN22 bookings only with the `postnord_standalone_customs_documents`
+opt-in) are handled by `karrio.Shipment.create` itself and are not this guide's
+subject.
 This guide covers the third flow: the caller owns the declaration object —
 branch, ids, update semantics — and karrio builds the wire envelope, submits,
 and reports.
