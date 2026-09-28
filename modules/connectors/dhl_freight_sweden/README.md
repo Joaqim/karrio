@@ -53,6 +53,18 @@ For parcelshop/parcelstation-addressed 109 shipments the mandatory "Customer inf
 Phone format per product manual Appendix D: exactly one prefix (foreign country prefixes are fine), then digits, dash, and space only — dots, letters, and slash are forbidden.
 The connector transmits `phone_number` as given, so callers should pre-format numbers to those constraints.
 
+## Per-product requirements
+
+Parcel dimensions are sent in centimetres, and some products enforce minimum piece dimensions.
+
+| Product | Minimum length | Minimum width | Minimum height |
+|---------|----------------|---------------|----------------|
+| 102 Paket | 15 cm | 11 cm | 2 cm |
+| 601 Home Delivery International B2C | 15 cm | 11 cm | 3 cm |
+
+DHL validates these minimums server-side at booking; the connector does not check them and forwards the dimensions as given.
+Home Delivery B2C (401) is delivered through the `doorstepDelivery` additional service rather than an access-point party: set the `dhl_freight_sweden_doorstep_access_code` option and the connector sends it as `additionalServices.doorstepDelivery.accessCode`.
+
 ## Capabilities
 
 | Capability | Notes |
