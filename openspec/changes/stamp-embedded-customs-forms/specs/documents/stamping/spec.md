@@ -44,6 +44,11 @@ Classification SHALL NOT treat the declaration marker alone as proof that the do
 - **WHEN** a consumer classifies the captured PostNord booking PDF whose first page carries the tracked letter label section and whose second page carries the CN22 section
 - **THEN** the result is a shipping label composed with a CN22, names the combined document type, and names page 2 as the CN22 page
 
+#### Scenario: A two-page PostNord International Parcel PDF is classified as combined
+
+- **WHEN** a consumer classifies the captured International Parcel PDF whose first page carries the parcel label and whose second page carries the CN22 section
+- **THEN** the result is a shipping label composed with a CN22 and names page 2 as the CN22 page
+
 #### Scenario: Alternative label templates are recognized
 
 - **WHEN** a carrier declares two alternative marker sets for the label section and a document's page text fully matches only the second set

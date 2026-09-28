@@ -94,7 +94,7 @@ A live International Parcel (`91`) ZPL booking (`~/Documents/postnord_postpaket_
 The ZPL section markers gain `AnyOf` alternatives for both kinds.
 ZPL keyword anchoring previously applied the seed offset along page axes and ignored field orientation, and inserted the stamp before the stream's last `^XZ`; on the upright V2 CN22 the stamp landed at `^FO12,1053`, beyond the format's `^LL840`.
 ZPL keyword geometry therefore becomes relative to the matched field's reading frame (effective `^FW`/`^A` orientation), mirroring D7 for PDF, and the stamp is inserted into the format containing the keyword.
-The International Parcel PDF template is uncaptured; PDF verification for 91 may warn until a capture adds its label markers (PDF stamping is consumer-side per user decision).
+The International Parcel PDF (`~/Documents/postnord_postpaket_utrikes.pdf`, 2026-09-28) is two A4 pages: a parcel label ("International Parcel", "Shipment Item-ID") and a CN22 page; it adds a third PDF label marker alternative, and the keyword-anchored PDF seed of D7 is verified against its CN22 page (PDF stamping remains consumer-side per user decision).
 
 ## Risks / Trade-offs
 
