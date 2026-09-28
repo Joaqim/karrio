@@ -12,6 +12,11 @@
 # A branch whose tip is an ancestor of upstream/main has no commits of its own;
 # it is reported as empty and ignored for staleness and order checks.
 #
+# A local branch other than develop, develop-next, main and backup-* whose
+# commits since upstream/main include an assembly merge ("merge: <branch>")
+# was based on develop and cannot be registered; it is reported as a warning
+# and, like an unregistered worktree, does not change the exit status.
+#
 # Exit status: 0 when develop contains every non-empty BRANCHES tip, 1 when it
 # does not, 2 when a required ref is missing or another error occurs.
 set -euo pipefail
@@ -25,8 +30,8 @@ while (($#)); do
   case "$1" in
   --fetch) fetch=1 ;;
   -r) start=${2:?-r needs a path}; shift ;;
-  -h | --help) sed -n '2,16p' "$0"; exit 0 ;;
-  *) sed -n '2,16p' "$0" >&2; exit 2 ;;
+  -h | --help) sed -n '2,21p' "$0"; exit 0 ;;
+  *) sed -n '2,21p' "$0" >&2; exit 2 ;;
   esac
   shift
 done
@@ -123,6 +128,17 @@ for m in "${merged[@]}"; do
   [[ " ${BRANCHES[*]} " == *" $m "* ]] || problems+=("develop merges $m, which is not in BRANCHES")
 done
 
+declare -A on_develop=()
+while read -r b; do
+  case "$b" in
+  develop | develop-next | main | backup-*) continue ;;
+  esac
+  if [[ -n "$(g rev-list -1 --merges -E --grep='^merge: [^ ]+$' "upstream/main..refs/heads/$b")" ]]; then
+    on_develop[$b]=1
+    problems+=("$b is based on develop (cannot be registered); recreate it from upstream/main or its parent branch")
+  fi
+done < <(g for-each-ref --format='%(refname:short)' refs/heads)
+
 echo
 echo "worktrees"
 main_branch=$(g symbolic-ref -q --short HEAD || echo detached)
@@ -139,6 +155,7 @@ while read -r key value; do
     [[ "${wt:-}" == "$repo/.worktrees/"* ]] || { wt=; continue; }
     dirty=$(git -C "$wt" status --porcelain --ignore-submodules=all | wc -l)
     state=$( ((dirty)) && echo "dirty ($dirty)" || echo clean)
+    [[ -z "${on_develop[$wb]:-}" ]] || state="$state, based on develop"
     if [[ " ${BRANCHES[*]} " != *" $wb "* ]]; then
       case "$wb" in
       docs-* | dev-* | develop-next) ;;

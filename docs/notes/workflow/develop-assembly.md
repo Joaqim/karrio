@@ -45,7 +45,7 @@ Agents follow these steps so that feature branches and the generated `develop` a
 The scripts live in `docs/notes/workflow/` on `develop` and `docs-openspec`; from other branches run them from `/home/joaqim/projects/karrio/.worktrees/docs-openspec/docs/notes/workflow/`.
 
 1. At the start of work, run `develop-status.sh` (add `--fetch` to refresh the remotes) before stating anything about `develop`, `origin` or a branch's push state.
-   It lists each `BRANCHES` entry with its containment in `develop` and its state against `origin`, compares `develop` with `origin/develop` and `upstream/main`, and flags dirty worktrees and worktrees on branches missing from `BRANCHES`.
+   It lists each `BRANCHES` entry with its containment in `develop` and its state against `origin`, compares `develop` with `origin/develop` and `upstream/main`, and flags dirty worktrees, worktrees on branches missing from `BRANCHES`, and local branches based on `develop`, whose history contains assembly merges.
    It exits 0 when `develop` contains every `BRANCHES` tip, 1 when it is stale and 2 on error.
 2. Put new work in a worktree under `.worktrees/`, branched from its parent feature branch, or from `upstream/main` for a fix meant for upstream.
    Register the branch in `BRANCHES` right after its parent.
