@@ -39,7 +39,7 @@ Tests run in the nix dev shell per `docs/notes/workflow/nix-dev-shell-worktrees.
 - [x] 4.3 Keep customs-invoice parcel products on their current fetch path; verify the existing customs-invoice tests pass unchanged
 - [x] 4.4 Verify format interchangeability with a paired test booking the same CN22 letter in PDF and ZPL (with and without opt-in) and asserting equal composition, document kinds, and messages
 - [x] 4.5 Verify a retrieval failure with opt-in set leaves the booking successful and reports messages, for both formats
-- [ ] 4.6 Add a changelog entry marking the loss of the default standalone CN22 for export letters as breaking, with the opt-in as migration; verify the entry names the option and the connection-level fallback
+- [x] 4.6 No changelog entry: per user decision 2026-09-28 the feature has never been merged upstream or promoted, so the fork is the only consumer and no breaking-change note is required
 
 ## 5. Live verification and integration
 

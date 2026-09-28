@@ -10,7 +10,7 @@ The existing stamping design assumed PDF labels and declarations are always sepa
 - Add registry seeds for the combined form in ZPL (keyword) and PDF (placement measured on the combined page); the existing `cn22/ZPL/*` and `cn22/PDF/A4` seeds are kept unchanged.
 - Specify that PostNord bookings for CN22-bearing letter services return the complete composed printout (label + CN22) as `docs.label` in both formats, with PDF and ZPL following one interchangeable flow.
 - Verify the returned label at booking with the classifier in both formats; an unexpected composition is a warning message, never a booking failure, since the label remains valid and post-booking customs verification is the consumer's responsibility.
-- Make standalone customs documents opt-in through a booking option for both formats, extended to every CN22-bearing letter service including 91. **BREAKING** for export letter consumers that currently receive a standalone CN22 in `extra_documents` by default.
+- Make standalone customs documents opt-in through a booking option for both formats, extended to every CN22-bearing letter service including 91. This changes the default for export letters, which currently receive a standalone CN22 in `extra_documents`; the feature has not been merged upstream, so the fork is its only consumer.
 - Out of scope, recorded as follow-ups: a second `declarationOnly` call as an opt-out, CN23 for service 91, and parcel customs-invoice composition.
 
 ## Capabilities
