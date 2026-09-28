@@ -132,6 +132,9 @@ NON_EU_VAT_POSTAL_RANGES: typing.Tuple[typing.Tuple[str, int, int], ...] = (
     ("IT", 22061, 22061),  # Campione d'Italia
 )
 
+# Warning code shared with the PostNord connector.
+CUSTOMS_OMITTED_INTRA_EU = "customs_omitted_intra_eu"
+
 
 def in_eu_vat_area(
     country_code: typing.Optional[str],

@@ -76,7 +76,7 @@ def _customs_omitted_message(
     return models.Message(
         carrier_name=settings.carrier_name,
         carrier_id=settings.carrier_id,
-        code="customs_omitted_intra_eu",
+        code=provider_units.CUSTOMS_OMITTED_INTRA_EU,
         level="warning",
         message=(
             "Customs data was not sent: the shipment from "
