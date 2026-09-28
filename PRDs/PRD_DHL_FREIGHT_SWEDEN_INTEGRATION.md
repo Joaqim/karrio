@@ -58,7 +58,7 @@ The connector targets the API Farm only.
 | D5 | Rate-sheet zones follow the Product API destination footprint: 109 → 24 Europe countries, 112 → the same minus FR, 232 → 26 countries (adds CH/GB/GR, drops HR), 107 → Sweden, international freight → unrestricted | A Nordic-only zone hid the parcel family on SE→PL (live 2026-09-10); zones match the recipient, so the return lane 107 (EU→SE) is gated on SE and keeps `domicile=True` because the mixin classifies delivery in the account country as domicile |
 | D6 | No geographic gate in the connector | DHL validation is authoritative; international products to and from SE are allowed |
 | D7 | Label layout is selectable (`pageOptions.pageType`, default `Label`); raster format is not | The Print API has no format parameter and the account emits PDF A4 regardless of config (live 2026-09-10); the label type is derived from the decoded document's magic prefix, then the report `contentType`, then the `label_type` setting |
-| D8 | Booking-required fields: `payerCode` (option, then `customs.incoterm`, then `1`), consignor party id = `account_number`, reference qualifier `CU`, commodity `procedureCode` default `1042`, one customs document always emitted | Live 400 validation dumps for products 601 and 102 plus the SE product manual v5.23; both corrected bookings returned 200 (2026-09-08); the separate FreightPayer party was dropped because its id is a customer number, not the payer code |
+| D8 | Booking-required fields: `payerCode` (option, then `customs.incoterm`, then `1`), consignor party id = `account_number`, reference qualifier `CU`, commodity `procedureCode` default `1042`, one customs document emitted whenever customs information is sent (shipments leaving the EU VAT area) | Live 400 validation dumps for products 601 and 102 plus the SE product manual v5.23; both corrected bookings returned 200 (2026-09-08); the separate FreightPayer party was dropped because its id is a customer number, not the payer code |
 | D9 | A customs declaration has a single currency: `duty.currency`, else the commodities' common currency; per-line gaps are filled, conflicts raise a field error | Mixed per-line currencies corrupt `customsValueCurrency`/`invoiceCurrency` consistency |
 | D10 | Service-point bookings require the full AccessPoint party (id, name, street, city, postal code, country code) via options; `subType` is `ParcelShop` (default) or `ParcelStation`; missing details raise a field error before any carrier call | DHL rejects an id-only party (22001 "Address/Name is mandatory for party AccessPoint", 22006 linehaul failure); full parties booked 103 SE and 109 DK (2026-09-10); the Consignee party stays alongside |
 | D11 | The consignee phone is always sent; no client-side suppression by destination | DHL's label renderer applies the per-country print rules server-side (SE→DE and DK PUDO labels printed only the sender phone, 2026-09-10) |
@@ -74,6 +74,7 @@ The connector targets the API Farm only.
 | D21 | Under `enforce` a definitive negative (flag false or a 4xx `ErrorResult`) blocks the booking; a lookup without a verdict (network error, timeout, 5xx) warns and proceeds in both modes | A PostalCodes outage must not take down bookings; the warning keeps persistent breakage visible |
 | D22 | Mode values resolve case-insensitively; unrecognized values resolve to `off` | A bad stored value never silently enables the check |
 | D23 | The mode enum is named `ServabilityMode` | `karrio.references.parse_type` classifies any enum whose name contains "Address" as the Address model, which the dashboard config renderer drops; a references regression test pins the string-enum classification |
+| D24 | Customs information and the customs additional services are sent only when the shipper or the recipient lies outside the EU VAT area; within it they are dropped without validation and the response carries a `customs_omitted_intra_eu` warning | Callers may send customs data regardless of lane, and no customs declaration is required inside the EU VAT area; the area is the EU member states plus Monaco and the Northern Ireland `BT` postcode area, excluding special fiscal territories identified by country code (e.g. AX, IC) or postal-code range (e.g. Åland, the Canary Islands, Mount Athos) |
 
 ---
 
@@ -148,8 +149,8 @@ create_shipment(request)
 | `options.shipper_instructions` / `recipient_instructions` | `pickupInstruction` / `deliveryInstruction` | D12 |
 | `options.dhl_freight_sweden_service_point[_type,_name,_street,_city,_postal_code,_country_code]` | `parties[AccessPoint]` | D10 |
 | `options.dhl_freight_sweden_notification`, `pre_advice`, `tail_lift_unloading`, `insurance`, `doorstep_access_code` | `additionalServices` | |
-| `customs.commodities[]` | `customsInformation.customsCommodities[]` | description (max 35), `hsItemId`, value and currency (D9), weight, quantity, origin, `procedureCode` (D8) |
-| `customs` invoice data | `customsInformation.customsDocuments[0]` | `CommercialInvoice` when invoice data exists, else `ProformaInvoice`; `transportMovement=Export` for foreign destinations |
+| `customs.commodities[]` | `customsInformation.customsCommodities[]` | only when the shipment leaves the EU VAT area (D24); description (max 35), `hsItemId`, value and currency (D9), origin, `procedureCode` (D8); `customsValue` and `netWeight` are line totals (per-unit value and weight times `quantity`), `netWeight` is converted to kilograms (a missing weight unit is read as kilograms), and `numberOfUnits` is the quantity (default 1) |
+| `customs` invoice data | `customsInformation.customsDocuments[0]` | only when the shipment leaves the EU VAT area (D24); `CommercialInvoice` when `customs.commercial_invoice` is set, else `ProformaInvoice`; `transportMovement=Export` for foreign destinations |
 
 ### Products
 
@@ -183,6 +184,7 @@ The address fields map one-to-one onto the service-point booking options.
 | Service-point option without full details | Field error naming the missing options, no carrier call (D10) |
 | Invented service-point id or name | DHL does not registry-validate them at booking, so the shipment misroutes rather than fails; source them from `find_service_points` |
 | Mixed commodity currencies | Field error (D9) |
+| Customs data or customs services on a shipment within the EU VAT area | Dropped, booking proceeds, `customs_omitted_intra_eu` warning naming the countries and any dropped customs services (D24) |
 | Product matches without both parties | Field error (D15) |
 | Locator in-band `status`/`errorMessage` on a 200 | Parsed into messages; an empty point list is not an error |
 | `postalCodeExcludes` per destination | Passed through to callers; `ServiceZone` supports inclusion lists only |
