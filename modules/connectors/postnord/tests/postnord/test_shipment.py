@@ -1029,7 +1029,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
         self.assertEqual(details.meta["printout_composition"], ["cn22", "label"])
 
     def test_create_shipment_customs_document_fetch(self):
-        # Export letter + customs: after the booking, a second POST fetches
+        # Export letter + customs + opt-in: after the booking, a second POST fetches
         # the standalone customs document by the booking response's printId
         # (live finding 2026-09-21: /v3/labels/ids resolves a real booking's
         # printId, not its item id) with definePrintout=onlyCustomsDeclarations,
@@ -1039,7 +1039,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
             mock.side_effect = [CombinedBookingResponse, CustomsPrintoutsResponse]
             parsed_response = (
                 karrio.Shipment.create(
-                    models.ShipmentRequest(**ExportLetterCustomsPayload)
+                    models.ShipmentRequest(**StandaloneExportLetterPayload)
                 )
                 .from_(gateway)
                 .parse()
@@ -1099,7 +1099,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
             ]
             parsed_response = (
                 karrio.Shipment.create(
-                    models.ShipmentRequest(**ExportLetterCustomsPayload)
+                    models.ShipmentRequest(**StandaloneExportLetterPayload)
                 )
                 .from_(gateway)
                 .parse()
@@ -1130,7 +1130,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
             ]
             parsed_response = (
                 karrio.Shipment.create(
-                    models.ShipmentRequest(**ExportLetterCustomsPayload)
+                    models.ShipmentRequest(**StandaloneExportLetterPayload)
                 )
                 .from_(gateway)
                 .parse()
@@ -1159,7 +1159,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
             parsed_response = (
                 karrio.Shipment.create(
                     models.ShipmentRequest(
-                        **{**ExportLetterCustomsPayload, "label_type": "ZPL"}
+                        **{**StandaloneExportLetterPayload, "label_type": "ZPL"}
                     )
                 )
                 .from_(gateway)
@@ -1196,7 +1196,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
             ]
             parsed_response = (
                 karrio.Shipment.create(
-                    models.ShipmentRequest(**ExportLetterCustomsPayload)
+                    models.ShipmentRequest(**StandaloneExportLetterPayload)
                 )
                 .from_(gateway)
                 .parse()
@@ -1219,7 +1219,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
             ]
             parsed_response = (
                 karrio.Shipment.create(
-                    models.ShipmentRequest(**ExportLetterCustomsPayload)
+                    models.ShipmentRequest(**StandaloneExportLetterPayload)
                 )
                 .from_(gateway)
                 .parse()
@@ -1238,7 +1238,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
             mock.side_effect = [CombinedBookingResponse, CustomsRetrievalErrorResponse]
             parsed_response = (
                 karrio.Shipment.create(
-                    models.ShipmentRequest(**ExportLetterCustomsPayload)
+                    models.ShipmentRequest(**StandaloneExportLetterPayload)
                 )
                 .from_(gateway)
                 .parse()
@@ -1266,7 +1266,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
             ]
             parsed_response = (
                 karrio.Shipment.create(
-                    models.ShipmentRequest(**ExportLetterCustomsPayload)
+                    models.ShipmentRequest(**StandaloneExportLetterPayload)
                 )
                 .from_(gateway)
                 .parse()
@@ -1296,7 +1296,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
             ]
             parsed_response = (
                 karrio.Shipment.create(
-                    models.ShipmentRequest(**ExportLetterCustomsPayload)
+                    models.ShipmentRequest(**StandaloneExportLetterPayload)
                 )
                 .from_(gateway)
                 .parse()
@@ -1334,7 +1334,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
             ]
             parsed_response = (
                 karrio.Shipment.create(
-                    models.ShipmentRequest(**ExportLetterCustomsPayload)
+                    models.ShipmentRequest(**StandaloneExportLetterPayload)
                 )
                 .from_(gateway)
                 .parse()
@@ -1361,7 +1361,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
             ]
             parsed_response = (
                 karrio.Shipment.create(
-                    models.ShipmentRequest(**ExportLetterCustomsPayload)
+                    models.ShipmentRequest(**StandaloneExportLetterPayload)
                 )
                 .from_(gateway)
                 .parse()
@@ -1384,7 +1384,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
             mock.side_effect = [CombinedBookingResponse, UnreadableBodyResponse]
             parsed_response = (
                 karrio.Shipment.create(
-                    models.ShipmentRequest(**ExportLetterCustomsPayload)
+                    models.ShipmentRequest(**StandaloneExportLetterPayload)
                 )
                 .from_(gateway)
                 .parse()
@@ -1406,7 +1406,7 @@ class TestPostNordCustomsDocument(unittest.TestCase):
             mock.return_value = CustomsBookingNoIdsResponse
             parsed_response = (
                 karrio.Shipment.create(
-                    models.ShipmentRequest(**ExportLetterCustomsPayload)
+                    models.ShipmentRequest(**StandaloneExportLetterPayload)
                 )
                 .from_(gateway)
                 .parse()
@@ -1419,11 +1419,15 @@ class TestPostNordCustomsDocument(unittest.TestCase):
         self.assertIn("totalValue is mandatory", messages[0].message)
 
     def test_create_shipment_export_letter_without_customs_skips_fetch(self):
-        # The fetch is gated on customs data being present: an export letter
-        # without customs books exactly as before (one call, no documents).
+        # The fetch is gated on customs data being present: an opted-in export
+        # letter without customs books exactly as before (one call, no
+        # documents).
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
             mock.return_value = CustomsBookingResponse
-            payload = {**ShipmentPayload, "service": "postnord_export_letter"}
+            payload = {
+                **StandaloneExportLetterPayload,
+                "customs": None,
+            }
             parsed_response = (
                 karrio.Shipment.create(models.ShipmentRequest(**payload))
                 .from_(gateway)
@@ -1755,6 +1759,102 @@ class TestPostNordStandaloneCustomsOptIn(unittest.TestCase):
         request = self._request({"postnord_standalone_customs_documents": True})
         service = lib.to_dict(request.serialize())["shipment"][0]["service"]
         self.assertEqual(service, {"basicServiceCode": "UX"})
+
+
+class TestPostNordStandaloneCustomsDocument(unittest.TestCase):
+    def setUp(self):
+        self.maxDiff = None
+
+    CN22_SERVICES = [
+        "postnord_export_letter",
+        "postnord_tracked_letter",
+        "postnord_postpaket_utrikes",
+    ]
+
+    def _book(self, service: str, label_type: str, responses: list, carrier=gateway, options=None):
+        payload = {
+            **CustomsShipmentPayload,
+            "service": service,
+            "label_type": label_type,
+            **({"options": options} if options is not None else {}),
+        }
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.side_effect = responses
+            details, messages = (
+                karrio.Shipment.create(models.ShipmentRequest(**payload))
+                .from_(carrier)
+                .parse()
+            )
+        return mock, details, messages
+
+    def test_opted_in_cn22_services_fetch_standalone_customs_document(self):
+        cases = [
+            (
+                "PDF",
+                CombinedBookingResponse,
+                CustomsPrintoutsResponse,
+                {"category": "cn22", "format": "PDF", "base64": CustomsPDFData},
+            ),
+            (
+                "ZPL",
+                CombinedBookingZPLResponse,
+                CustomsPrintoutsZPLResponse,
+                {"category": "cn22", "format": "ZPL", "base64": _b64(CustomsRawZPL)},
+            ),
+        ]
+        for service in self.CN22_SERVICES:
+            for label_type, booking, printouts, document in cases:
+                with self.subTest(service=service, label_type=label_type):
+                    mock, details, messages = self._book(
+                        service,
+                        label_type,
+                        [booking, printouts],
+                        options={"postnord_standalone_customs_documents": True},
+                    )
+                    self.assertEqual(mock.call_count, 2)
+                    self.assertEqual(
+                        mock.call_args_list[1][1]["url"],
+                        f"{gateway.settings.server_url}/rest/shipment/v3/labels/ids/"
+                        f"{label_type.lower()}"
+                        "?apikey=TEST_API_KEY&definePrintout=onlyCustomsDeclarations",
+                    )
+                    self.assertEqual(messages, [])
+                    self.assertEqual(
+                        lib.to_dict(details.docs.extra_documents), [document]
+                    )
+
+    def test_connection_opt_in_fetches_standalone_customs_document(self):
+        mock, details, messages = self._book(
+            "postnord_postpaket_utrikes",
+            "PDF",
+            [CombinedBookingResponse, CustomsPrintoutsResponse],
+            carrier=gateway_with_standalone_customs,
+        )
+        self.assertEqual(mock.call_count, 2)
+        self.assertEqual(messages, [])
+        self.assertEqual(
+            [document.category for document in details.docs.extra_documents],
+            ["cn22"],
+        )
+
+    def test_not_opted_in_cn22_services_attach_no_standalone_document(self):
+        cases = [
+            ("PDF", CombinedBookingResponse, CombinedLabelPDF),
+            ("ZPL", CombinedBookingZPLResponse, _b64(CombinedLabelZPL)),
+        ]
+        for service in self.CN22_SERVICES:
+            for label_type, booking, label in cases:
+                with self.subTest(service=service, label_type=label_type):
+                    mock, details, messages = self._book(
+                        service, label_type, [booking]
+                    )
+                    mock.assert_called_once()
+                    self.assertEqual(messages, [])
+                    self.assertEqual(details.docs.label, label)
+                    self.assertEqual(details.docs.extra_documents, [])
+                    self.assertEqual(
+                        details.meta["printout_composition"], ["cn22", "label"]
+                    )
 
 
 class TestPostNordCustomsInvoice(unittest.TestCase):
@@ -2573,13 +2673,22 @@ QuantityThreeCN22Payload = {
     },
 }
 
-# Export letter (UX) to an international recipient with the customs block:
-# the payload shape that triggers the implicit by-id customs document fetch.
+# Export letter (UX) to an international recipient with the customs block;
+# with the standalone customs documents opt-in it triggers the by-id customs
+# document fetch.
 ExportLetterCustomsPayload = {
     **ShipmentPayload,
     "recipient": {**ShipmentPayload["recipient"], "country_code": "US"},
     "service": "postnord_export_letter",
     "customs": CustomsShipmentPayload["customs"],
+}
+
+StandaloneExportLetterPayload = {
+    **ExportLetterCustomsPayload,
+    "options": {
+        **ExportLetterCustomsPayload["options"],
+        "postnord_standalone_customs_documents": True,
+    },
 }
 
 # Parcel product from Sweden to Norway with customs: the payload shape that
