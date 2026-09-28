@@ -94,7 +94,7 @@ Alternative considered: treating any non-declaration page as the label. Rejected
 - [PDF text extraction depends on PostNord embedding real text] → the captures carry extractable text; a PDF yielding no marker text classifies as `none`, which surfaces as a booking warning rather than a failure.
 - [PostNord could rename its `^FX` section comments or PDF label wording] → classification returns `none` or `declaration`, which surfaces as a warning at booking rather than a failure, and the markers are one constant to update.
 - [Export letter consumers lose the default standalone CN22] → called out in the changelog; consumers restore it by setting the opt-in on the connection.
-- [`label_cn22` stamping relies on the keyword occurring exactly once] → the existing keyword resolution already fails explicitly on zero or multiple matches, and a test asserts the live capture resolves.
+- [Keyword stamping anchors on the first match of the keyword] → resolution fails explicitly when the keyword is absent; the PostNord captures carry the signature keyword once per document (ZPL) or per page (PDF), asserted by fixture tests, so a first-match rule is unambiguous for them. PDF anchoring uses the start of the text run containing the keyword, which equals the keyword in all captures.
 
 ## Migration Plan
 
