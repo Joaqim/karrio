@@ -26,6 +26,7 @@
 10. [Risk Assessment](#risk-assessment)
 11. [Migration & Rollback](#migration--rollback)
 12. [Known Limits](#known-limits)
+13. [Appendices](#appendices)
 
 ---
 
@@ -151,7 +152,7 @@ if result.doc_type:  # "cn22" or "label_cn22"
 | Lone fixtures | `tests/postnord/fixtures/postnord_cn22.zpl`, `postnord_cn22.pdf` | Lone classification and seed tests |
 | Combined fixtures | `postnord_label_cn22_booking.zpl`, `postnord_label_cn22_printid.zpl`, `postnord_label_cn22_printid.pdf`, `postnord_label_cn22_booking_two_pages.pdf` | Export-letter (UX) captures: live booking ZPL, live by-id ZPL and PDF without `definePrintout`, sandbox booking PDF (two pages, test sender data only) |
 | International Parcel fixtures | `postnord_label_cn22_international_parcel.zpl`, `postnord_label_cn22_international_parcel.pdf` | Live service 91 bookings of 2026-09-28 (test recipient data): two ZPL formats, two A4 PDF pages |
-| CN22 measurement | Appendix B of `KEYWORD_ANCHORED_STAMPING.md` (keyword-anchored stamping change) | Label-dot strip and landmarks reused for the combined page |
+| CN22 measurement | [Appendix A](#appendix-a-cn22-measurement-derivation) | Label-dot strip and landmarks reused for the combined page |
 
 ### Architecture Overview
 
@@ -389,3 +390,25 @@ The V2 signature area was measured from a Labelary render, which emulates Zebra 
 
 The two-page PDF and the tracked letter label template come from a sandbox booking; whether the live booking returns the same template is unconfirmed (change task 5.1.2).
 On that layout the stamp sits inside the signature area rather than on the box rules, and on the single-page layout it overlaps the certification text's descenders by 0.34 mm.
+
+---
+
+## Appendices
+
+### Appendix A: CN22 measurement derivation
+
+The lone CN22 seed (`CN22_SEED`) was measured on the vendored ZPL form (`postnord_cn22.zpl`) and cross-checked against the lone CN22 PDF (`postnord_cn22.pdf`), so that both formats pin the same physical strip.
+
+The PDF draws the label form as one `/Form1` XObject whose `BBox` (297.57635 x 538.40393 pt) is the 839 x 1518-dot label frame at 203 dpi, placed by a pure translation that puts the label origin at page (52.51, 53.53) mm.
+The fonts use a `/Differences` cipher, so text positions are decoded through pypdf's `extract_text` visitor.
+The mapping was validated before use: the PDF's vector separator columns land at label x 153.1, 200.2, 370.1, 420.1, 540.2, 590.2, 660.2 and 710.2 dots against the ZPL separators' integer dots, and the rule y-span [15.2, 694.9] against the `^FO10,15` `^GB820,680` form box, agreeing to under one dot throughout.
+The decoded landmarks are the keyword field at label (25.00, 35.00) against `^FO20,35`, "Sweden Post" at (670.00, 35.00) against `^FO665,35`, and the certification block at (130.00, 35.00) against `^FO25,35`.
+
+On this sideways (`^FWR`) form, `^FO` y is exactly where the line's reading starts, and `^FO` x anchors the descender-side bottom of the text (baseline plus the 5-dot descender at font size 20), so `^FO20,35` is the keyword field's absolute origin on the label.
+From that origin, (2.5025, 4.3793) mm, the keyword offset `(x=-1.673, y=33.529)` mm resolves to (0.829, 37.908) mm, which is `^FO7,303`.
+The `49.1 x 7.6` mm extent at rotation 90 is a pre-rotation 392 x 61-dot raster, rotated to 61 x 392 dots, so the strip covers label x 7-68 and y 303-695 dots: the signature column, with its bottom edge on the form box's bottom rule.
+Mapped through `/Form1`, the same strip spans page x 53.34-60.96 mm and y 91.44-140.55 mm (label x 6.63-67.53, y 302.97-695.44 dots), which is the coordinate `placement` (x 53.34, y 91.44 mm, 49.11 x 7.62 mm, rotation 90) of the current seed.
+
+The cross-check also showed that the earlier PDF placement (x 32.55, y 112.15 mm, 7.6 x 49.1 mm, rotation 90) mapped to label x -159.5 to 232.9 and y 468.5 to 529.2 dots, a horizontal strip starting 19.96 mm off the label's left edge.
+It shares its centre, about page (57.1, 115.9) mm, with the measured vertical strip: it was the measured strip turned 90 degrees about its centre, a residue of the first seed revision's centre-pivot rotation that had been converted to the corner-anchored rotation without re-measurement.
+The PDF placement was re-measured to the vertical strip, the coordinate `placement` that `CN22_SEED` and `LABEL_CN22_SEED` now carry.
