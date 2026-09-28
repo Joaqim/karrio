@@ -161,6 +161,14 @@ class StampData(serializers.Serializer):
             "ignored by the PDF backend"
         ),
     )
+    page = serializers.IntegerField(
+        required=False,
+        min_value=1,
+        help_text=(
+            "One-based PDF page on which the carrier/doc_type seed is applied "
+            "instead of the seed's own page; rejected with a placement or ZPL"
+        ),
+    )
 
 
 class StampedDocument(serializers.Serializer):
