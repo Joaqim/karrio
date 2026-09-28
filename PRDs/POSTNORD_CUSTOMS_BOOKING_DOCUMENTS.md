@@ -63,6 +63,7 @@ The connector-side section markers and stamp seeds are covered by [POSTNORD_CN22
 | D3 | Opt-in placement | Shipment `options` key, connection config fallback, not a `ShippingOption` | Every truthy `ShippingOption` member is sent as an `additionalServiceCode` | 2026-09-28 |
 | D4 | Opt-in gate | Every service whose `customs_structure` is `cn22` | UX, the other CN22 letters, and 91 follow one flow | 2026-09-28 |
 | D5 | Unclassifiable label format | Warning naming the classifier's error | A classifier `ValueError` must not fail a booking that PostNord accepted | 2026-09-28 |
+| D6 | PDF page layout | Verification accepts the CN22 and label sections on one page or on separate pages of the same PDF | A sandbox UX PDF booking returned two A4 pages (tracked letter label, then an upright CN22); the classifier matches the label by alternative marker sets (letter template, tracked letter template) | 2026-09-28 |
 
 ---
 
@@ -96,7 +97,7 @@ The earlier convention that PDF labels and declarations are separate while ZPL c
 
 | Metric | Target |
 |--------|--------|
-| Combined label (PDF or ZPL) | No composition warning |
+| Combined label (PDF on one page or two pages, or ZPL) | No composition warning |
 | Plain label, lone CN22 as label, PDF without CN22 text | One `postnord_unexpected_label_composition` warning, label unchanged, booking successful |
 | No customs or EU VAT area | Messages identical to the pre-change output |
 | Opt-in off | One HTTP call, no standalone document |
@@ -163,7 +164,7 @@ Caller        create.py (request)          Proxy                      PostNord
  POST /v3/edi/labels/{pdf,zpl}  (default definePrintout)
         |
         v
- composed printout: label + CN22 in one PDF page or one ZPL format
+ composed printout: label + CN22 in one PDF (one page or two) or one ZPL format
         |
         v
  create.py parser (_extract_details) --> docs.label (unchanged), ids, tracking
@@ -229,15 +230,15 @@ Paths are relative to `modules/connectors/postnord/`.
 ## Testing Strategy
 
 `modules/connectors/postnord/tests/postnord/test_shipment.py`, unittest, mocked `lib.request`.
-Combined labels are the live fixtures `postnord_label_cn22_printid.pdf` and `postnord_label_cn22_booking.zpl`; the lone CN22 is `postnord_cn22.zpl`.
+Combined labels are the live fixtures `postnord_label_cn22_printid.pdf` (one page) and `postnord_label_cn22_booking.zpl`, and the sandbox-captured PDF booking `postnord_label_cn22_booking_two_pages.pdf` (tracked letter label on page 1, CN22 on page 2); the lone CN22 is `postnord_cn22.zpl`.
 
 | Area | Covers |
 |------|--------|
-| Verification | ZPL combined, ZPL plain, ZPL lone CN22, PDF combined, PDF without CN22 text; label unchanged in every case |
+| Verification | ZPL combined, ZPL plain, ZPL lone CN22, PDF combined on one page and on two pages, PDF without CN22 text; label unchanged in every case |
 | No verification | No customs and EU VAT area, both formats, messages equal to the pre-change output |
 | Opt-in resolution | Options key, connection fallback, options overriding the connection, never an `additionalServiceCode` |
 | Opt-in fetch | PDF and ZPL for UX and 91 opted in; no fetch when not opted in |
-| Interchangeability | The same CN22 letter in PDF and ZPL, with and without opt-in |
+| Interchangeability | The same CN22 letter in PDF (one-page and two-page printouts) and ZPL, with and without opt-in |
 | Retrieval failure | Opted-in PDF and ZPL fetch failures leave the booking successful |
 
 ```bash
@@ -252,7 +253,7 @@ python -m unittest discover -v -f modules/sdk/tests
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
 | UX consumers relied on the default standalone CN22 | Medium | Medium | Breaking-change note; set the opt-in on the connection |
-| Booking-call printouts differ from the by-id captures | Low | Low | Warning only; live booking captures per change task 5.1 |
+| Booking-call printouts differ from the by-id captures | Low | Low | Warning only; the two-page sandbox PDF booking is a fixture; live booking captures per change task 5.1 |
 | PostNord renames markers | Low | Low | Warnings surface it; one constant to update |
 
 ---
