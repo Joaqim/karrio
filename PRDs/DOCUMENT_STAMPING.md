@@ -8,7 +8,7 @@
 | Status | In Progress |
 | Owner | Joaqim Planstedt |
 | Type | Enhancement |
-| Reference | [AGENTS.md](../AGENTS.md); fork readers: the openspec `documents/stamping` spec on the `docs-openspec` branch |
+| Reference | [AGENTS.md](../AGENTS.md) |
 
 ---
 
