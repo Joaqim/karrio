@@ -67,6 +67,14 @@ class ConnectionConfig(lib.Enum):
     # (see CountryLocale); other countries fall back to "en". Default off.
     locale_by_recipient = lib.OptionEnum("locale_by_recipient", bool, False)
 
+    # Connection default for attaching the standalone customs document of
+    # CN22-structured bookings; overridden per shipment by the options key of
+    # the same name. Not a ShippingOption, whose truthy members are sent to
+    # PostNord as additionalServiceCode.
+    postnord_standalone_customs_documents = lib.OptionEnum(
+        "postnord_standalone_customs_documents", bool, False
+    )
+
 
 class CountryLocale:
     """Map recipient country codes to PostNord's Nordic locales.
@@ -308,6 +316,14 @@ NON_EU_VAT_POSTAL_RANGES: typing.Tuple[typing.Tuple[str, int, int], ...] = (
 
 # Warning code shared with the DHL Freight Sweden connector.
 CUSTOMS_OMITTED_INTRA_EU = "customs_omitted_intra_eu"
+
+def to_flag(value: typing.Any) -> bool:
+    """Read a boolean option that may arrive as a string such as ``"false"``."""
+    if isinstance(value, str):
+        return value.strip().lower() in ("true", "1", "yes")
+
+    return bool(value)
+
 
 # Warning for a CN22 booking whose returned label does not classify as the
 # shipping label composed with the CN22.
