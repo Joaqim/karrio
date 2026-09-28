@@ -9,7 +9,8 @@ the stamped content — that responsibility belongs to the consumer.
 A carrier may compose a customs declaration with the shipping label in one
 printout, so the document type to stamp under is not always the category the
 document arrived with. ``classify_customs_composition`` reads the section
-markers the carrier plugin declares in ``document_sections`` and names the
+markers the carrier plugin declares in ``document_sections`` (a kind may list
+alternative marker sets with ``AnyOf`` when carrier templates differ) and names the
 registry document type (``cn22`` or ``label_cn22``) and, for PDF, the page
 carrying the declaration; the consumer passes both to ``stamp_document``, which
 applies the seed on that page (ZPL classifies with no page). A seed anchors a
@@ -47,7 +48,8 @@ import karrio.core.units as units
 import karrio.core.utils.helpers as helpers
 
 RegistryLookup = typing.Callable[[str], typing.Optional["StampPlacement"]]
-SectionMarkers = typing.Union[str, typing.Sequence[str]]
+MarkerSet = typing.Union[str, typing.Sequence[str]]
+SectionMarkers = typing.Union[MarkerSet, "AnyOf"]
 DocumentSections = typing.Mapping[str, typing.Mapping[str, SectionMarkers]]
 
 MM_PER_INCH: float = 25.4
@@ -1353,30 +1355,52 @@ class CustomsClassification:
     page: typing.Optional[int] = None
 
 
+@attr.s(frozen=True, init=False)
+class AnyOf:
+    """Alternative marker sets for one section kind in ``document_sections``.
+
+    Each set is a string (one marker) or a sequence of markers that must all
+    match, exactly as a bare declaration; the kind is present when any one
+    set fully matches, so differing carrier templates for the same section
+    are recognized. A bare string, tuple or list keeps its single-set meaning.
+    """
+
+    sets: typing.Tuple[MarkerSet, ...] = attr.ib()
+
+    def __init__(self, *sets: MarkerSet):
+        self.__attrs_init__(sets=tuple(sets))
+
+
 def _normalize_whitespace(text: str) -> str:
     return " ".join(text.split())
+
+
+def _marker_sets(value: SectionMarkers) -> typing.Tuple[MarkerSet, ...]:
+    return value.sets if isinstance(value, AnyOf) else (value,)
 
 
 def _kinds_present(
     text: str, sections: typing.Mapping[str, SectionMarkers]
 ) -> typing.FrozenSet[str]:
-    """Return the kinds whose markers all occur in ``text``.
+    """Return the kinds with a marker set whose markers all occur in ``text``.
 
     Whitespace runs collapse on both sides, so a PDF marker still matches when
     text extraction breaks it across lines. A lone string is one marker rather
-    than a sequence of characters, and a kind declaring no markers never
-    matches.
+    than a sequence of characters, an :class:`AnyOf` declares alternative
+    sets of which one must fully match, and an empty set never matches.
     """
     haystack = _normalize_whitespace(text)
-    markers = {
-        kind: (value,) if isinstance(value, str) else tuple(value)
-        for kind, value in sections.items()
-    }
+
+    def matches(markers: MarkerSet) -> bool:
+        values = (markers,) if isinstance(markers, str) else tuple(markers)
+        return bool(values) and all(
+            _normalize_whitespace(value) in haystack for value in values
+        )
 
     return frozenset(
         kind
-        for kind, values in markers.items()
-        if values and all(_normalize_whitespace(value) in haystack for value in values)
+        for kind, value in sections.items()
+        if any(matches(markers) for markers in _marker_sets(value))
     )
 
 
@@ -1418,7 +1442,8 @@ def classify_customs_composition(
     Markers come from the injected ``sections`` mapping when supplied, else
     from the carrier plugin's ``document_sections``, keyed by format then by
     composed kind. A ZPL kind is present when its markers occur in the stream;
-    a PDF kind when its markers occur in one page's extracted text. The
+    a PDF kind when its markers occur in one page's extracted text; a kind
+    declared as :class:`AnyOf` is present when any one of its sets matches. The
     declaration marker alone never implies a lone declaration: a document
     carrying the declaration and label kinds is ``label_with_declaration``,
     one carrying the declaration without the label is ``declaration``, and
