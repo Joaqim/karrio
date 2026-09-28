@@ -1683,6 +1683,46 @@ class TestPostNordLabelComposition(unittest.TestCase):
             ],
         )
 
+    def test_customs_booking_without_label_data_warns(self):
+        cases = [
+            ("pdf", CustomsBookingResponse, "PDF"),
+            ("zpl", CustomsBookingZPLResponse, "ZPL"),
+        ]
+        for name, response, label_type in cases:
+            with self.subTest(case=name):
+                without_printouts = json.dumps(
+                    {**json.loads(response), "labelPrintout": []}
+                )
+                details, messages = self._book(
+                    without_printouts, label_type=label_type
+                )
+                self.assertIsNotNone(details)
+                self.assertEqual(details.tracking_number, "00373500454541020957")
+                self.assertIsNone(details.docs.label)
+                self.assertEqual(
+                    [
+                        (message.code, message.level, message.message)
+                        for message in messages
+                    ],
+                    [
+                        (
+                            "postnord_unexpected_label_composition",
+                            "warning",
+                            "The label was expected to be the shipping label "
+                            "composed with a CN22 (label_with_declaration) but "
+                            "no label data was returned",
+                        )
+                    ],
+                )
+
+    def test_invalid_base64_label_warns(self):
+        details, messages = self._book(_customs_booking_pdf("not-base64!"))
+        self.assertEqual(details.docs.label, "not-base64!")
+        self.assertEqual(
+            [(message.code, message.level) for message in messages],
+            [("postnord_unexpected_label_composition", "warning")],
+        )
+
     def test_bookings_without_expected_cn22_are_not_verified(self):
         # Non-combined labels throughout: a verification run would warn.
         intra_eu_payload = {**CustomsShipmentPayload, "recipient": GermanyRecipient}

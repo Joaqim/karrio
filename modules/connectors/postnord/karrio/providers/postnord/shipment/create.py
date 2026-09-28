@@ -102,23 +102,26 @@ def _label_composition_message(
     """Verify the booking label is the shipping label composed with a CN22.
 
     The label is classified with PostNord's declared document sections; any
-    other composition yields a warning and leaves the label unchanged, since
-    the booking is already made and the label remains valid.
+    other composition, or a booking returning no label data, yields a warning
+    and leaves the label unchanged, since the booking is already made.
     """
     expected = lib.CustomsComposition.label_with_declaration
-    try:
-        classification = lib.classify_customs_composition(
-            models.ShippingDocument(
-                category="label",
-                format=shipment.label_type,
-                base64=shipment.docs.label,
-            ),
-            sections=provider_stamping.DOCUMENT_SECTIONS,
-        )
-        finding = f"was classified as {classification.composition.value}"
-    except ValueError as classification_error:
-        classification = None
-        finding = f"could not be classified: {classification_error}"
+    classification = None
+    if not shipment.docs.label:
+        finding = "no label data was returned"
+    else:
+        try:
+            classification = lib.classify_customs_composition(
+                models.ShippingDocument(
+                    category="label",
+                    format=shipment.label_type,
+                    base64=shipment.docs.label,
+                ),
+                sections=provider_stamping.DOCUMENT_SECTIONS,
+            )
+            finding = f"was classified as {classification.composition.value}"
+        except ValueError as classification_error:
+            finding = f"could not be classified: {classification_error}"
 
     if classification is not None and classification.composition == expected:
         return None
