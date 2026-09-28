@@ -10,8 +10,10 @@ PDF printouts carry base64 data; ZPL printouts carry raw UTF-8 ZPL text
 with ``printout.encoding`` set to ``"none"`` (observed on the live
 endpoint; the swagger documents base64 only).
 
-Export-letter and parcel-product bookings that embed customs data (a CN22
-declaration or a customs invoice) additionally fetch the standalone customs
+Parcel-product bookings that embed a customs invoice, and CN22-structured
+bookings that embed a CN22 declaration with the
+``postnord_standalone_customs_documents`` opt-in (shipment options, falling
+back to the connection config), additionally fetch the standalone customs
 document PostNord composed, keyed by the booking's printId, falling back
 to the item id when no printId was allocated (``POST
 /v3/labels/ids/{pdf,zpl}`` with ``definePrintout=onlyCustomsDeclarations``,
