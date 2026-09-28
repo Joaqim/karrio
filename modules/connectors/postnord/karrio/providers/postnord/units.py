@@ -317,6 +317,7 @@ NON_EU_VAT_POSTAL_RANGES: typing.Tuple[typing.Tuple[str, int, int], ...] = (
 # Warning code shared with the DHL Freight Sweden connector.
 CUSTOMS_OMITTED_INTRA_EU = "customs_omitted_intra_eu"
 
+
 def to_flag(value: typing.Any) -> bool:
     """Read a boolean option that may arrive as a string such as ``"false"``."""
     if isinstance(value, str):

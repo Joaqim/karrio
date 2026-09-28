@@ -1603,7 +1603,10 @@ class TestPostNordLabelComposition(unittest.TestCase):
             details, messages = (
                 karrio.Shipment.create(
                     models.ShipmentRequest(
-                        **{**(payload or CustomsShipmentPayload), "label_type": label_type}
+                        **{
+                            **(payload or CustomsShipmentPayload),
+                            "label_type": label_type,
+                        }
                     )
                 )
                 .from_(gateway)
@@ -1693,9 +1696,7 @@ class TestPostNordLabelComposition(unittest.TestCase):
                 without_printouts = json.dumps(
                     {**json.loads(response), "labelPrintout": []}
                 )
-                details, messages = self._book(
-                    without_printouts, label_type=label_type
-                )
+                details, messages = self._book(without_printouts, label_type=label_type)
                 self.assertIsNotNone(details)
                 self.assertEqual(details.tracking_number, "00373500454541020957")
                 self.assertIsNone(details.docs.label)
@@ -1811,7 +1812,14 @@ class TestPostNordStandaloneCustomsDocument(unittest.TestCase):
         "postnord_postpaket_utrikes",
     ]
 
-    def _book(self, service: str, label_type: str, responses: list, carrier=gateway, options=None):
+    def _book(
+        self,
+        service: str,
+        label_type: str,
+        responses: list,
+        carrier=gateway,
+        options=None,
+    ):
         payload = {
             **CustomsShipmentPayload,
             "service": service,
@@ -1935,9 +1943,7 @@ class TestPostNordStandaloneCustomsDocument(unittest.TestCase):
         for service in self.CN22_SERVICES:
             for label_type, booking, label in cases:
                 with self.subTest(service=service, label_type=label_type):
-                    mock, details, messages = self._book(
-                        service, label_type, [booking]
-                    )
+                    mock, details, messages = self._book(service, label_type, [booking])
                     mock.assert_called_once()
                     self.assertEqual(messages, [])
                     self.assertEqual(details.docs.label, label)
@@ -3477,9 +3483,9 @@ def _customs_booking_zpl(zpl: str) -> str:
 # Live export letter (UX) printouts: the label composed with the CN22 as one
 # PDF page and one ZPL format, and the lone CN22 ZPL.
 CombinedLabelPDF = _read_b64("postnord_label_cn22_printid.pdf")
-CombinedLabelZPL = base64.b64decode(_read_b64("postnord_label_cn22_booking.zpl")).decode(
-    "utf-8"
-)
+CombinedLabelZPL = base64.b64decode(
+    _read_b64("postnord_label_cn22_booking.zpl")
+).decode("utf-8")
 LoneCN22ZPL = base64.b64decode(_read_b64("postnord_cn22.zpl")).decode("utf-8")
 BlankPDF = _blank_pdf()
 
