@@ -112,7 +112,9 @@ class TestPostnordStampSeeds(unittest.TestCase):
         # reads them, without importing the connector first.
         seeds = references.collect_providers_data()["postnord"].stamp_seeds
 
-        self.assertEqual(set(seeds), {"cn22/PDF/A4", "cn22/ZPL/*"})
+        self.assertEqual(
+            set(seeds), {"cn22/PDF/A4", "cn22/ZPL/*", "label_cn22/ZPL/*"}
+        )
         self.assertIs(seeds["cn22/PDF/A4"], postnord_stamping.CN22_SEED)
 
     def test_cn22_seed_resolves_to_the_measured_strip(self):

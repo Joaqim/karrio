@@ -22,11 +22,20 @@ CN22_SEED = lib.StampSeed(
     ),
 )
 
+# The combined label + CN22 printout carries the CN22 section unchanged, with
+# the keyword occurring once, so its ZPL anchor is the lone CN22's keyword and
+# offset.
+LABEL_CN22_SEED = lib.StampSeed(
+    keyword=CN22_SEED.keyword,
+    keyword_placement=CN22_SEED.keyword_placement,
+)
+
 # One seed serves both formats: a PDF key resolves the coordinate placement and
 # a ZPL key the keyword anchor.
 STAMP_SEEDS = {
     "cn22/PDF/A4": CN22_SEED,
     "cn22/ZPL/*": CN22_SEED,
+    "label_cn22/ZPL/*": LABEL_CN22_SEED,
 }
 
 # PostNord composes the CN22 and the letter label into one printout: a single

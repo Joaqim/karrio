@@ -7,6 +7,7 @@ onlyCustomsDeclarations`` capture already vendored as ``postnord_cn22.pdf``.
 """
 
 import io
+import re
 import base64
 import unittest
 
@@ -18,7 +19,13 @@ import karrio.core.models as models
 import karrio.core.utils.stamping as stamping
 import karrio.providers.postnord.stamping as postnord_stamping
 
-from postnord.test_cn22_stamping import KEYWORD, _read_b64
+from postnord.test_cn22_stamping import (
+    KEYWORD,
+    _decode_zpl,
+    _grf_fields,
+    _read_b64,
+    _signature_png_b64,
+)
 
 COMBINED_ZPL_FIXTURES = (
     "postnord_label_cn22_booking.zpl",
@@ -201,6 +208,62 @@ class TestPostnordDocumentSections(unittest.TestCase):
         self.assertEqual(result.composition, lib.CustomsComposition.none)
         self.assertEqual(result.kinds, ("label",))
         self.assertIsNone(result.doc_type)
+
+
+def _stamped_zpl(name: str, doc_type: str) -> str:
+    stamped = lib.stamp_document(
+        _document(name, "ZPL"),
+        image=_signature_png_b64(),
+        date="2026-09-28",
+        carrier="postnord",
+        doc_type=doc_type,
+    )
+    return _decode_zpl(stamped.base64)
+
+
+def _stamp_field(zpl: str) -> str:
+    (field,) = re.findall(r"\^FO\d+,\d+\^GFA,[0-9,A-F]*\^FS", zpl)
+    return field
+
+
+class TestLabelCn22ZplStamp(unittest.TestCase):
+    def test_zpl_seed_reuses_the_cn22_keyword_anchor(self):
+        seeds = references.collect_providers_data()["postnord"].stamp_seeds
+        combined, lone = seeds["label_cn22/ZPL/*"], seeds["cn22/ZPL/*"]
+
+        self.assertEqual(combined.keyword, KEYWORD)
+        self.assertEqual(combined.keyword_placement, lone.keyword_placement)
+
+    def test_combined_zpl_stamps_at_the_lone_cn22_placement(self):
+        lone_field = _stamp_field(_stamped_zpl(LONE_ZPL_FIXTURE, "cn22"))
+        ((lone_x, lone_y, *_),) = _grf_fields(lone_field)
+        self.assertEqual((lone_x, lone_y), (7, 303))
+
+        for name in COMBINED_ZPL_FIXTURES:
+            with self.subTest(fixture=name):
+                zpl = _stamped_zpl(name, "label_cn22")
+
+                self.assertEqual(_stamp_field(zpl), lone_field)
+
+    def test_combined_zpl_label_section_is_byte_identical(self):
+        # The backend splices its one ^GFA field immediately before ^XZ, so
+        # everything the carrier emitted, the label section from its marker
+        # up to ^XZ included, keeps its bytes and offsets.
+        for name in COMBINED_ZPL_FIXTURES:
+            with self.subTest(fixture=name):
+                original = _zpl_stream(name)
+                zpl = _stamped_zpl(name, "label_cn22")
+                close = original.rindex("^XZ")
+                label_start = original.index(ZPL_LABEL_MARKER)
+
+                self.assertEqual(
+                    zpl[label_start:close], original[label_start:close]
+                )
+                self.assertEqual(zpl[:close], original[:close])
+                self.assertEqual(
+                    zpl[close:], _stamp_field(zpl) + original[close:]
+                )
+                self.assertIn("^BCR,95,N,N,N,N", zpl[label_start:close])
 
 
 if __name__ == "__main__":
