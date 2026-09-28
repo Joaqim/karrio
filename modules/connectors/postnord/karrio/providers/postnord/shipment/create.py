@@ -705,6 +705,15 @@ def shipment_request(
         else None
     )
 
+    requested_standalone = (payload.options or {}).get(
+        "postnord_standalone_customs_documents"
+    )
+    standalone_customs_documents = provider_units.to_flag(
+        settings.connection_config.postnord_standalone_customs_documents.state
+        if requested_standalone is None
+        else requested_standalone
+    )
+
     # Assign a client-controlled shipmentId from the merchant reference so the
     # booking carries a searchable Track & Trace id; without one PostNord
     # auto-allocates an opaque id. Prefer the caller reference; fall back to a
@@ -897,6 +906,7 @@ def shipment_request(
             customs_declared=(
                 customs_declaration is not None or customs_invoice is not None
             ),
+            standalone_customs_documents=standalone_customs_documents,
             customs_omitted=lib.identity(
                 dict(
                     shipper_country_code=shipper.country_code,
