@@ -385,6 +385,12 @@ Open questions: which branch PostNord expects for NVIT flows, whether to add a u
 Per-parcel linkage requires replacing the constant `itemId="0"` with unique item ids.
 Until then, callers can submit caller-built `customsInvoice` declarations per item id through `create_customs_declaration`.
 
+### Validate-only bookings
+
+PostNord's `ediInstruction.testIndicator` validates a booking against business rules without sending EDI, and a test label can be fetched by item id.
+The connector sends `testIndicator` equal to `test_mode`, so validate-only is available only on sandbox connections.
+A separate per-request validate-only flag would let production connections check a booking without creating it.
+
 ### Per-product credential verification
 
 A connector-local `validate_credentials` proxy method could probe Transit Time, Service Points, and Track & Trace with side-effect-free GETs and report `authorized`, `unauthorized`, or `unknown` per product.
