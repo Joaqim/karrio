@@ -18,10 +18,11 @@ def _b64(raw: bytes) -> str:
     return base64.b64encode(raw).decode("utf-8")
 
 
-def _a4_pdf_b64() -> str:
-    """A minimal 1-page A4 PDF (595 x 842 pt) that detects as the A4 variant."""
+def _a4_pdf_b64(pages: int = 1) -> str:
+    """A minimal blank A4 PDF (595 x 842 pt) that detects as the A4 variant."""
     writer = pypdf.PdfWriter()
-    writer.add_blank_page(width=595, height=842)
+    for _ in range(pages):
+        writer.add_blank_page(width=595, height=842)
     buffer = io.BytesIO()
     writer.write(buffer)
     return _b64(buffer.getvalue())
@@ -135,6 +136,49 @@ class TestDocumentStamper(APITestCase):
         self.assertEqual(response.data.get("format"), "PDF")
         decoded = base64.b64decode(response.data["doc_file"])
         self.assertTrue(decoded.startswith(b"%PDF"))
+
+    def test_stamp_seed_on_the_requested_page(self):
+        """A page applies the carrier plugin's page-1 seed on that page."""
+        with _providers():
+            response = self.client.post(
+                self.url,
+                {
+                    "document": _a4_pdf_b64(pages=2),
+                    "image": SIGNATURE_PNG_BASE64,
+                    "carrier": "acme",
+                    "doc_type": "customs_declaration",
+                    "page": 2,
+                },
+                format="json",
+            )
+
+        self.assertResponseNoErrors(response)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        pages = pypdf.PdfReader(
+            io.BytesIO(base64.b64decode(response.data["doc_file"]))
+        ).pages
+        self.assertEqual(
+            ["/Contents" in page for page in pages],
+            [False, True],
+        )
+
+    def test_stamp_seed_page_beyond_the_document_returns_400(self):
+        """A requested page past the last page is a 400 naming the bounds."""
+        with _providers():
+            response = self.client.post(
+                self.url,
+                {
+                    "document": A4_PDF_BASE64,
+                    "image": SIGNATURE_PNG_BASE64,
+                    "carrier": "acme",
+                    "doc_type": "customs_declaration",
+                    "page": 2,
+                },
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("1 page(s)", str(response.content))
 
     def test_stamp_rejects_png_document(self):
         """A PNG document is a client fault: 400, not 500."""
