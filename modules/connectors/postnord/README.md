@@ -58,7 +58,7 @@ Connection config options (under the connection's config):
 | `label_type` | `PDF` | Per-connection default label file format (`PDF` or `ZPL`), overridden per request by the shipment `label_type`. PostNord selects the format by endpoint path (`/labels/pdf` vs `/labels/zpl`). |
 | `label_size` | — (unset) | PostNord physical label size, sent as the `labelType` query parameter: `standard` (190×105mm), `small` (75×105mm), or `ste` (PDF-only). Unset omits the parameter and PostNord defaults to `standard`. |
 | `enable_transit_times` | `false` | Opt-in: call the Transit Time API to enrich `transit_days`/estimated delivery and filter by serviceability. Requires the key to be subscribed to the Transit Time product. |
-| `language` | — (unset) | Default booking locale when a shipment sets no `options.language`. |
+| `language` | `en` | Default booking locale when a shipment sets no `options.language`. Leaving it unset still books in `en` unless `locale_by_recipient` resolves a Nordic locale first; setting it outranks `locale_by_recipient`. |
 | `locale_by_recipient` | `false` | Derive the booking locale from the recipient country (`SE`→`sv`, `DK`→`da`, `NO`→`no`, `FI`→`fi`) when neither `options.language` nor `language` is set. The server also persists the derived locale on the shipment and its tracker. |
 | `offer_tracked_letter` | `false` | Offer Tracked Letter (34) in rates. |
 | `offer_export_letter` | `false` | Offer Export Letter (UX) in rates; requires issuer `Z12`. |
