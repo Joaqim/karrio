@@ -17,7 +17,13 @@ applies the seed on that page (ZPL classifies with no page). A seed anchors a
 PDF either at measured coordinates or, when it carries PDF keyword geometry,
 by locating its keyword in the page text and laying the strip out along that
 text's direction, so one seed serves carrier layouts that print the same form
-upright on its own page or turned beside the label::
+upright on its own page or turned beside the label. A ZPL seed anchors by its
+keyword either at a label-axis offset from the matched field's ``^FO`` or,
+with ``zpl_keyword_frame_placement``, in the field's reading frame from its
+effective ``^FW``/``^A`` orientation, the same way; either way the stamp is
+spliced into the ``^XA``...``^XZ`` format that contains the keyword, so a
+printout composing the label and the declaration as separate formats keeps
+the label format untouched::
 
     result = lib.classify_customs_composition(document, carrier="acme")
     if result.doc_type:
@@ -135,6 +141,9 @@ class StampRequest:
     ``graphic_name`` opts the ZPL backend into the send-once-per-printer cache:
     the raster is downloaded once as a stored ``~DY`` object and recalled per
     label with ``^XG`` instead of inlining ``^GFA``; the PDF backend ignores it.
+    ``zpl_format`` is the zero-based index of the ``^XA``...``^XZ`` format the
+    ZPL field is spliced into (see :func:`_splice_zpl_field`); ``None`` means
+    the stream's last format. The PDF backend ignores it.
     """
 
     image: str = None
@@ -142,6 +151,7 @@ class StampRequest:
     layer: str = "overlay"
     date: str = None
     graphic_name: str = None
+    zpl_format: typing.Optional[int] = None
 
 
 @attr.s(auto_attribs=True)
@@ -150,9 +160,15 @@ class StampSeed:
 
     ``placement`` is the PDF coordinate anchor. ``keyword`` is the text the
     carrier form prints beside its signature field, shared by both formats.
-    ``keyword_placement`` is the ZPL keyword geometry: the strip's extent,
-    rotation and ``dpi``, with ``x``/``y`` as millimetre offsets from the
-    located ``^FO`` origin in label axes. ``pdf_keyword_placement`` is the PDF
+    ``keyword_placement`` is the ZPL keyword geometry in label axes: the
+    strip's extent, rotation and ``dpi``, with ``x``/``y`` as millimetre
+    offsets from the located ``^FO`` origin, whatever the field's orientation.
+    ``zpl_keyword_frame_placement`` is the ZPL keyword geometry in the matched
+    field's reading frame, with the same meaning as ``pdf_keyword_placement``
+    (``dpi`` is the target density); the frame's origin is where the field's
+    text starts, on the glyph-top edge of its character cell (see
+    :func:`_zpl_text_origin`). When both ZPL geometries are set the reading
+    frame one wins. ``pdf_keyword_placement`` is the PDF
     keyword geometry, in millimetres in the keyword's reading frame: ``x``
     runs along the text from the start of the run containing the keyword,
     ``y`` runs perpendicular to it toward the glyph baseline's underside,
@@ -170,6 +186,7 @@ class StampSeed:
     keyword: str = None
     keyword_placement: StampPlacement = None
     pdf_keyword_placement: StampPlacement = None
+    zpl_keyword_frame_placement: StampPlacement = None
 
 
 def mm_to_points(value: float) -> float:
@@ -598,18 +615,27 @@ def _encode_grf(image: "PIL.Image.Image") -> typing.Tuple[str, int, int]:
     return "".join(rows), bytes_per_row * height, bytes_per_row
 
 
-def _splice_zpl_field(stream: str, field: str) -> str:
-    """Insert ``field`` immediately before the carrier stream's trailing ``^XZ``.
+def _splice_zpl_field(
+    stream: str, field: str, format_index: typing.Optional[int] = None
+) -> str:
+    """Insert ``field`` immediately before the ``^XZ`` closing one format.
 
-    ZPL has no z-order; a later field is drawn on top, so splicing before the
-    format-close ``^XZ`` draws the graphic over the carrier content. A stream
-    with no ``^XZ`` is closed after the appended field.
+    A format spans from just after the previous ``^XZ`` (or the stream start)
+    to its own ``^XZ``, so a redundant header ``^XA`` opening a format does not
+    start another one. ``format_index`` is the zero-based format to splice
+    into, ``None`` meaning the last one. ZPL has no z-order; a later field is
+    drawn on top, so splicing before the format-close ``^XZ`` draws the
+    graphic over that format's content. A stream with no ``^XZ``, or a format
+    index past its last ``^XZ`` (an unterminated trailing format), is closed
+    after the appended field.
     """
     marker = "^XZ"
-    index = stream.rfind(marker)
-    if index == -1:
+    closes = [match.start() for match in re.finditer(re.escape(marker), stream)]
+    position = (closes[-1:] if format_index is None else closes[format_index:])[:1]
+    if not position:
         return f"{stream}{field}{marker}"
 
+    index = position[0]
     return f"{stream[:index]}{field}{stream[index:]}"
 
 
@@ -617,43 +643,113 @@ def _splice_zpl_field(stream: str, field: str) -> str:
 # parameters up to the next caret. ZPL field data cannot contain a raw caret
 # (carets are hex-escaped via ^FH), so an ^FD token's parameters are exactly
 # its field's text, spanning physical lines when the generator wrapped them.
-_ZPL_COMMAND_PATTERN = re.compile(r"\^([A-Z][A-Z0-9])([^^]*)")
+_ZPL_COMMAND_PATTERN = re.compile(r"\^([A-Z][A-Z0-9@])([^^]*)")
+
+# Clockwise degrees of the ZPL orientation codes: normal, rotated,
+# inverted and read bottom-up.
+ZPL_ORIENTATIONS: typing.Dict[str, int] = {"N": 0, "R": 90, "I": 180, "B": 270}
+
+# Character height, in dots, of the printer's power-on default font (^CF
+# font A at 9 dots), used when no ^CF or ^A in the format sets a height.
+ZPL_DEFAULT_FONT_HEIGHT: float = 9.0
 
 
-def _locate_zpl_field(stream: str, keyword: str) -> typing.Tuple[float, float]:
-    """Return the ``^FO`` origin (dots) of the first field whose text matches.
+@attr.s(auto_attribs=True, frozen=True)
+class _ZplFieldMatch:
+    """The first ZPL field whose text contains a keyword.
+
+    ``origin`` is the field's ``^FO`` operands in dots, ``orientation`` its
+    effective clockwise orientation in degrees, ``height`` its effective
+    character height in dots, and ``format_index`` the zero-based
+    ``^XA``...``^XZ`` format containing it.
+    """
+
+    origin: typing.Tuple[float, float]
+    orientation: int = 0
+    height: float = ZPL_DEFAULT_FONT_HEIGHT
+    format_index: int = 0
+
+
+def _float_operand(
+    operands: typing.Sequence[str], index: int
+) -> typing.Optional[float]:
+    try:
+        return float(operands[index])
+    except (IndexError, ValueError):
+        return None
+
+
+def _match_zpl_field(stream: str, keyword: str) -> _ZplFieldMatch:
+    """Return the first field whose ``^FD`` text contains ``keyword``.
 
     The scan walks command tokens rather than lines because carrier streams mix
     inline and newline-separated styles and an ``^FD`` block's text may span
     physical lines. Each ``^FO`` token updates the running origin with its first
     two operands parsed as floats (generators emit float operands such as
     ``^FO385,488.3333333333333``); the first ``^FD`` block whose text contains
-    ``keyword`` resolves to the nearest preceding ``^FO``. Zero matches raise
-    naming the keyword.
+    ``keyword`` resolves to the nearest preceding ``^FO`` in its format.
+
+    Formats are delimited by ``^XZ`` alone (see :func:`_splice_zpl_field`), and
+    the running ``^FO``, ``^FW`` orientation and ``^CF`` height reset at each
+    one. A field font ``^A<font><orientation>,<height>`` sets the orientation
+    and height of the field it belongs to, ending at that field's ``^FS``;
+    its omitted operands fall back to the format's latest ``^FW`` (normal
+    without one) and ``^CF`` height (``ZPL_DEFAULT_FONT_HEIGHT`` without
+    one). Zero matches raise naming the keyword.
     """
     origin: typing.Optional[typing.Tuple[float, float]] = None
+    format_index = 0
+    orientation, height = 0, ZPL_DEFAULT_FONT_HEIGHT
+    field_orientation: typing.Optional[int] = None
+    field_height: typing.Optional[float] = None
 
     for command in _ZPL_COMMAND_PATTERN.finditer(stream):
         name, parameters = command.group(1), command.group(2)
 
-        if name == "FO":
+        if name == "XZ":
+            format_index += 1
+            origin = field_orientation = field_height = None
+            orientation, height = 0, ZPL_DEFAULT_FONT_HEIGHT
+        elif name == "FS":
+            field_orientation = field_height = None
+        elif name == "FO":
             operands = parameters.split(",")
-            try:
-                origin = (float(operands[0]), float(operands[1]))
-            except (IndexError, ValueError):
-                continue
+            x, y = _float_operand(operands, 0), _float_operand(operands, 1)
+            if x is not None and y is not None:
+                origin = (x, y)
+        elif name == "FW":
+            orientation = ZPL_ORIENTATIONS.get(parameters.strip()[:1], orientation)
+        elif name == "CF":
+            height = _float_operand(parameters.split(","), 1) or height
+        elif name[0] == "A":
+            code = parameters[:1]
+            field_orientation = ZPL_ORIENTATIONS.get(code)
+            operands = parameters[1:] if field_orientation is not None else parameters
+            field_height = _float_operand(operands.split(","), 1)
         elif name == "FD" and keyword in parameters:
             if origin is None:
                 raise ValueError(
                     "The ZPL field matching the stamp keyword "
                     f"'{keyword}' has no preceding ^FO origin"
                 )
-            return origin
+            return _ZplFieldMatch(
+                origin=origin,
+                orientation=(
+                    field_orientation if field_orientation is not None else orientation
+                ),
+                height=field_height or height,
+                format_index=format_index,
+            )
 
     raise ValueError(
         f"No ZPL field matching the stamp keyword '{keyword}' was found "
         "in the document"
     )
+
+
+def _locate_zpl_field(stream: str, keyword: str) -> typing.Tuple[float, float]:
+    """Return the ``^FO`` origin (dots) of the first field whose text matches."""
+    return _match_zpl_field(stream, keyword).origin
 
 
 def _zpl_raster_extent(placement: StampPlacement) -> typing.Tuple[int, int]:
@@ -741,12 +837,12 @@ def stamp_zpl(document_b64: str, request: StampRequest) -> str:
     if request.graphic_name:
         download = f"~DY{request.graphic_name},A,G,{total},{bytes_per_row},{hexdata}"
         field = f"^FO{x_dots},{y_dots}^XG{request.graphic_name},1,1^FS"
-        result = f"{download}\n{_splice_zpl_field(stream, field)}"
+        result = f"{download}\n{_splice_zpl_field(stream, field, request.zpl_format)}"
     else:
         field = (
             f"^FO{x_dots},{y_dots}^GFA,{total},{total}," f"{bytes_per_row},{hexdata}^FS"
         )
-        result = _splice_zpl_field(stream, field)
+        result = _splice_zpl_field(stream, field, request.zpl_format)
 
     return base64.b64encode(result.encode("utf-8")).decode("utf-8")
 
@@ -825,26 +921,72 @@ def _registry_key(
     )
 
 
-def _resolve_keyword_placement(
-    document_b64: str, keyword: str, geometry: StampPlacement
-) -> StampPlacement:
-    """Return ``geometry`` with its position derived from the located field.
+def _zpl_text_origin(match: _ZplFieldMatch, keyword: str) -> typing.Tuple[float, float]:
+    """Return, in dots, where a matched field's text starts on the page.
 
-    Only the position comes from the carrier form: the matched field's ``^FO``
-    origin converts from dots to millimetres at the geometry's ``dpi``, and the
-    geometry's own ``x``/``y`` (``None`` meaning 0) add as millimetre offsets.
-    Extent, rotation, and ``dpi`` stay geometry-owned, so the resolved
-    placement meets the same anchor and operand validation as a
-    consumer-supplied one.
+    ``^FO`` addresses the top-left corner of the field's box in label axes
+    whatever the field's orientation, so it is the text's own start only for a
+    normal field. A rotated field's text runs down the page with its glyph tops
+    facing right, so its start on the glyph-top edge of the character cell is
+    the box's top-right corner, one character height right of ``^FO``. An
+    inverted or bottom-up field starts at the box's far end, one rendered text
+    length from ``^FO``; ZPL streams do not carry that length (it depends on
+    the printer's font metrics), so such a field raises naming the keyword and
+    the orientation.
+    """
+    x, y = match.origin
+    if match.orientation == 0:
+        return (x, y)
+    if match.orientation == 90:
+        return (x + match.height, y)
+
+    raise ValueError(
+        f"The ZPL field matching the stamp keyword '{keyword}' is oriented "
+        f"{match.orientation} degrees clockwise; a reading-frame placement "
+        "needs where its text starts, which for an inverted or bottom-up field "
+        "depends on the rendered text length the ZPL stream does not carry"
+    )
+
+
+def _resolve_keyword_placement(
+    document_b64: str,
+    keyword: str,
+    geometry: StampPlacement,
+    frame: bool = False,
+) -> typing.Tuple[StampPlacement, int]:
+    """Return ``geometry`` placed from the located field, and the field's format.
+
+    With ``frame`` unset only the position comes from the carrier form: the
+    matched field's ``^FO`` origin converts from dots to millimetres at the
+    geometry's ``dpi``, and the geometry's own ``x``/``y`` (``None`` meaning 0)
+    add as millimetre offsets in label axes; extent and rotation stay
+    geometry-owned. With ``frame`` set the geometry is measured in the field's
+    reading frame from where its text starts (see :func:`_zpl_text_origin`
+    and :class:`StampSeed`) and is mapped onto the label like the PDF
+    keyword geometry, its rotation adding the field's orientation. Either way
+    the resolved placement meets the same anchor and operand validation as a
+    consumer-supplied one, and the returned format index names the
+    ``^XA``...``^XZ`` format the stamp belongs in.
     """
     stream = helpers.decode_bytes(base64.b64decode(document_b64))
-    origin_x, origin_y = _locate_zpl_field(stream, keyword)
+    match = _match_zpl_field(stream, keyword)
 
-    return attr.evolve(
-        geometry,
-        x=dots_to_mm(origin_x, geometry.dpi) + (geometry.x or 0.0),
-        y=dots_to_mm(origin_y, geometry.dpi) + (geometry.y or 0.0),
-    )
+    if frame:
+        origin = _zpl_text_origin(match, keyword)
+        placement = _frame_placement(
+            tuple(dots_to_mm(value, geometry.dpi) for value in origin),
+            match.orientation,
+            geometry,
+        )
+    else:
+        origin_x, origin_y = match.origin
+        placement = attr.evolve(
+            geometry,
+            x=dots_to_mm(origin_x, geometry.dpi) + (geometry.x or 0.0),
+            y=dots_to_mm(origin_y, geometry.dpi) + (geometry.y or 0.0),
+        )
+
+    return placement, match.format_index
 
 
 Matrix = typing.Tuple[float, float, float, float, float, float]
@@ -864,6 +1006,37 @@ _TEXT_FRAMES: typing.Dict[
     180: ((-1, 0), (0, -1)),
     270: ((0, -1), (1, 0)),
 }
+
+
+def _frame_placement(
+    origin: typing.Tuple[float, float], direction: int, geometry: StampPlacement
+) -> StampPlacement:
+    """Map reading-frame ``geometry`` onto the page, returning page axes.
+
+    ``origin`` is the frame's origin in page millimetres and ``direction`` the
+    text's clockwise angle, a key of ``_TEXT_FRAMES``. The geometry's ``x``
+    runs along the text and its ``y`` toward the text's underside (``None``
+    meaning 0); its rotated rectangle is laid out along those axes and the
+    resolved placement anchors its page-axis bounding box's top-left, with the
+    geometry's rotation added to the text's.
+    """
+    (dx, dy), (nx, ny) = _TEXT_FRAMES[direction]
+    min_x, max_x, min_y, max_y = _rotated_bounds(
+        geometry.width, geometry.height, geometry.rotation or 0
+    )
+    left, top = geometry.x or 0.0, geometry.y or 0.0
+    corners = [
+        (origin[0] + along * dx + across * nx, origin[1] + along * dy + across * ny)
+        for along in (left, left + max_x - min_x)
+        for across in (top, top + max_y - min_y)
+    ]
+
+    return attr.evolve(
+        geometry,
+        x=min(x for x, _ in corners),
+        y=min(y for _, y in corners),
+        rotation=(direction + (geometry.rotation or 0)) % 360,
+    )
 
 
 def _concat(m: typing.Sequence[float], n: typing.Sequence[float]) -> Matrix:
@@ -1056,29 +1229,14 @@ def _resolve_pdf_keyword_placement(
 
     index, matrix = match
     height_pt = float(pages[index].mediabox.height)
-    rotation = _text_rotation(matrix, keyword)
-    (dx, dy), (nx, ny) = _TEXT_FRAMES[rotation]
     origin = (
         matrix[4] * MM_PER_INCH / POINTS_PER_INCH,
         (height_pt - matrix[5]) * MM_PER_INCH / POINTS_PER_INCH,
     )
 
-    min_x, max_x, min_y, max_y = _rotated_bounds(
-        geometry.width, geometry.height, geometry.rotation or 0
-    )
-    left, top = geometry.x or 0.0, geometry.y or 0.0
-    corners = [
-        (origin[0] + along * dx + across * nx, origin[1] + along * dy + across * ny)
-        for along in (left, left + max_x - min_x)
-        for across in (top, top + max_y - min_y)
-    ]
-
     return attr.evolve(
-        geometry,
+        _frame_placement(origin, _text_rotation(matrix, keyword), geometry),
         page=index + 1,
-        x=min(x for x, _ in corners),
-        y=min(y for _, y in corners),
-        rotation=(rotation + (geometry.rotation or 0)) % 360,
     )
 
 
@@ -1145,16 +1303,20 @@ def _default_registry(key: str) -> typing.Optional[StampPlacement]:
 
 def _seed_keyword_geometry(
     seed: typing.Optional[StampSeed], document_format: str
-) -> typing.Optional[StampPlacement]:
-    """Return a seed's keyword geometry for a format, if it carries one."""
-    if seed is None:
-        return None
+) -> typing.Tuple[typing.Optional[StampPlacement], bool]:
+    """Return a seed's keyword geometry for a format and whether it is framed.
 
-    return (
-        seed.keyword_placement
-        if document_format == "ZPL"
-        else seed.pdf_keyword_placement
-    )
+    The flag is set when the geometry is measured in the keyword's reading
+    frame rather than in ZPL label axes; PDF keyword geometry always is.
+    """
+    if seed is None:
+        return None, False
+    if document_format != "ZPL":
+        return seed.pdf_keyword_placement, True
+    if seed.zpl_keyword_frame_placement is not None:
+        return seed.zpl_keyword_frame_placement, True
+
+    return seed.keyword_placement, False
 
 
 def _resolve_keyword(
@@ -1163,12 +1325,18 @@ def _resolve_keyword(
     keyword: str,
     geometry: StampPlacement,
     page: int = None,
-) -> StampPlacement:
-    """Resolve a keyword-anchored placement with the format's locator."""
-    if document_format == "ZPL":
-        return _resolve_keyword_placement(document_b64, keyword, geometry)
+    frame: bool = False,
+) -> typing.Tuple[StampPlacement, typing.Optional[int]]:
+    """Resolve a keyword-anchored placement with the format's locator.
 
-    return _resolve_pdf_keyword_placement(document_b64, keyword, geometry, page)
+    Returns the placement and, for ZPL, the format the stamp belongs in.
+    ``frame`` selects ZPL reading-frame geometry; PDF geometry is always
+    measured in the text's reading frame.
+    """
+    if document_format == "ZPL":
+        return _resolve_keyword_placement(document_b64, keyword, geometry, frame)
+
+    return _resolve_pdf_keyword_placement(document_b64, keyword, geometry, page), None
 
 
 def stamp_document(
@@ -1209,7 +1377,12 @@ def stamp_document(
     placement's rotation.
 
     ZPL keywords are located in the field stream and anchor at the matched
-    field's ``^FO`` origin. PDF keywords are located in the page text of the
+    field's ``^FO`` origin, offset in label axes, or, for a seed's
+    ``zpl_keyword_frame_placement``, in the field's reading frame from where
+    its text starts (see :class:`StampSeed`); the stamp is spliced into the
+    ``^XA``...``^XZ`` format containing the field, and a consumer-supplied
+    geometry or an injected registry's geometry is a label-axis offset. PDF
+    keywords are located in the page text of the
     target page and anchor at the start of the matched text run, in page
     space, with the geometry laid out along the run's direction (see
     :class:`StampSeed`); a target page without extractable text, a keyword
@@ -1261,10 +1434,11 @@ def stamp_document(
             "(both x and y set); set the page on the placement instead"
         )
 
+    zpl_format: typing.Optional[int] = None
     if fully_anchored:
         resolved = placement
     elif keyword:
-        geometry = placement
+        geometry, frame = placement, False
         if geometry is None:
             key = _registry_key(
                 carrier,
@@ -1273,7 +1447,9 @@ def stamp_document(
                 _detect_paper_variant(document.base64, document_format),
             )
             if registry is None:
-                geometry = _seed_keyword_geometry(_resolve_seed(key), document_format)
+                geometry, frame = _seed_keyword_geometry(
+                    _resolve_seed(key), document_format
+                )
             else:
                 # A supplied registry replaces the carrier seeds wherever they
                 # would be consulted, so a custom lookup never silently falls
@@ -1285,8 +1461,8 @@ def stamp_document(
                     f"registry seed with keyword geometry resolves for key "
                     f"'{key}'"
                 )
-        resolved = _resolve_keyword(
-            document_format, document.base64, keyword, geometry, page
+        resolved, zpl_format = _resolve_keyword(
+            document_format, document.base64, keyword, geometry, page, frame
         )
     else:
         paper = _detect_paper_variant(document.base64, document_format)
@@ -1294,10 +1470,15 @@ def stamp_document(
         resolved = None
         if registry is None:
             seed = _resolve_seed(key)
-            geometry = _seed_keyword_geometry(seed, document_format)
+            geometry, frame = _seed_keyword_geometry(seed, document_format)
             if seed is not None and seed.keyword and geometry is not None:
-                resolved = _resolve_keyword(
-                    document_format, document.base64, seed.keyword, geometry, page
+                resolved, zpl_format = _resolve_keyword(
+                    document_format,
+                    document.base64,
+                    seed.keyword,
+                    geometry,
+                    page,
+                    frame,
                 )
             elif seed is not None and document_format != "ZPL":
                 resolved = seed.placement
@@ -1317,6 +1498,7 @@ def stamp_document(
         layer=layer,
         date=date,
         graphic_name=graphic_name,
+        zpl_format=zpl_format,
     )
     stamped = _BACKENDS[document_format](document.base64, request)
 
