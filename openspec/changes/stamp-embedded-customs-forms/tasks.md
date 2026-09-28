@@ -10,11 +10,11 @@ Tests run in the nix dev shell per `docs/notes/workflow/nix-dev-shell-worktrees.
 
 ## 1. SDK customs composition classification (`feat-document-stamping`)
 
-- [ ] 1.1 Add the `PluginMetadata.document_sections` field (per format: ZPL field-comment markers, PDF page-text markers, keyed by composed kind) and a lookup helper modelled on `_carrier_seeds`; verify a unit test resolves declared sections for a test carrier and an empty result for an undeclaring carrier
-- [ ] 1.2 Implement the pure classifier returning composition, composed kinds, stamp `doc_type` (`cn22` / `label_cn22` / none) and PDF page index, with ZPL marker matching; verify unit tests for lone, combined, and no-customs ZPL using synthetic markers, and that the input bytes are unchanged
-- [ ] 1.3 Add PDF classification by per-page text extraction with pypdf; verify unit tests for combined, lone, and no-marker-text PDFs built in-test, including a multi-page PDF naming the correct page index
-- [ ] 1.4 Reject unsupported formats with an explicit error naming the detected format; verify a test with a PNG input
-- [ ] 1.5 Export the classifier and result type through `karrio.lib` and document classify-then-stamp usage in the stamping module docstring; verify `python -m unittest discover -v -f modules/sdk/tests` passes
+- [x] 1.1 Add the `PluginMetadata.document_sections` field (per format: ZPL field-comment markers, PDF page-text markers, keyed by composed kind) and a lookup helper modelled on `_carrier_seeds`; verify a unit test resolves declared sections for a test carrier and an empty result for an undeclaring carrier
+- [x] 1.2 Implement the pure classifier returning composition, composed kinds, stamp `doc_type` (`cn22` / `label_cn22` / none) and PDF page index, with ZPL marker matching; verify unit tests for lone, combined, and no-customs ZPL using synthetic markers, and that the input bytes are unchanged
+- [x] 1.3 Add PDF classification by per-page text extraction with pypdf; verify unit tests for combined, lone, and no-marker-text PDFs built in-test, including a multi-page PDF naming the correct page index
+- [x] 1.4 Reject unsupported formats with an explicit error naming the detected format; verify a test with a PNG input
+- [x] 1.5 Export the classifier and result type through `karrio.lib` and document classify-then-stamp usage in the stamping module docstring; verify `python -m unittest discover -v -f modules/sdk/tests` passes
 
 ## 2. PostNord sections, fixtures, and combined seeds (`feat-postnord-cn22-stamping`)
 
