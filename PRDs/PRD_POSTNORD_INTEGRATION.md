@@ -366,7 +366,7 @@ python -m unittest discover -v -f modules/connectors/postnord/tests
 | Rate-sheet prices drift from contracts | Medium | Prices are merchant-maintained; documented |
 | Undocumented live behaviors change | Medium | Each is isolated in one parser branch and covered by fixtures modeled on live captures |
 | Customs data previously ignored now reaches PostNord | Low | Intended; CN22 is emitted only when commodities are present |
-| Duplicate CN22 pages between booking printout and standalone document | Low | Accepted; `definePrintout=onlyLabels` is the lever if consumers report double printing |
+| Duplicate CN22 pages between booking printout and standalone document | Low | The standalone CN22 is off by default and fetched only with `postnord_standalone_customs_documents`, so a duplicate appears only on opt-in; `definePrintout=onlyLabels` was rejected because it makes PDF and ZPL printouts non-interchangeable (see `POSTNORD_CUSTOMS_BOOKING_DOCUMENTS.md`) |
 
 ---
 
