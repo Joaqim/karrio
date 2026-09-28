@@ -41,6 +41,14 @@ Tests run in the nix dev shell per `docs/notes/workflow/nix-dev-shell-worktrees.
 - [x] 4.5 Verify a retrieval failure with opt-in set leaves the booking successful and reports messages, for both formats
 - [x] 4.6 No changelog entry: per user decision 2026-09-28 the feature has never been merged upstream or promoted, so the fork is the only consumer and no breaking-change note is required
 
+## 6. Live-verification follow-up: PDF keyword anchoring and alternative markers (design D7)
+
+- [ ] 6.1 SDK (`feat-document-stamping`): allow a section kind to declare alternative marker sets (any fully matching set marks the kind present); verify unit tests where only the second set matches, and that existing single-set declarations classify unchanged
+- [ ] 6.2 SDK (`feat-document-stamping`): keyword-anchored placement for PDF using page-text positions (origin and text direction) on the requested page or the first page containing the keyword, from caller geometry or seed PDF keyword geometry; keep coordinate-only PDF seeds unchanged; verify tests for a rotated and an upright keyword, no-match and no-text errors, and page override interplay
+- [ ] 6.3 PostNord (`feat-postnord-cn22-stamping`): add the two-page booking PDF fixture, declare the tracked letter label marker set as an alternative, and switch `label_cn22/PDF/A4` to PDF keyword geometry measured against both the single-page and two-page captures; verify classification (page 2 for the two-page PDF) and in-region stamps for both captures with oracles derived from measurement
+- [ ] 6.4 PostNord (`feat-postnord-customs-invoice`): verify a PDF booking returning the two-page fixture passes verification without a warning; update the PRDs touched by D7
+- [ ] 6.5 Restack, rebuild and push `develop` for redeploy; re-run the UX PDF live/sandbox booking
+
 ## 5. Live verification and integration
 
 - [ ] 5.1 Capture live booking-call printouts (not by-id) for export letter UX and service 91 in PDF and ZPL, with and without opt-in, saving to `$XDG_STATE_HOME/agent-logs/karrio/`; verify each classifies as combined and no composition warning is emitted (bookings are not cancellable; unshipped test bookings are not billed)

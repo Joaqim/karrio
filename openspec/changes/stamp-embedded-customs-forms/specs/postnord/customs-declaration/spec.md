@@ -18,8 +18,9 @@ The response SHALL report the label's composition so a consumer can tell the lab
 #### Scenario: PDF booking returns the combined printout as the label
 
 - **WHEN** an export letter is booked with a PDF label and customs data, and PostNord composes a CN22
-- **THEN** the response's label is one PDF carrying both the CN22 section and the shipping label section
+- **THEN** the response's label is one PDF carrying both the CN22 section and the shipping label section, on one page or on separate pages
 - **AND** the response reports the label composition as label plus `cn22`
+- **AND** no composition warning is emitted when the label and CN22 sections are on separate pages
 
 #### Scenario: Formats are interchangeable
 

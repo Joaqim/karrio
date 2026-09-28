@@ -77,9 +77,20 @@ When true, the proxy's by-id `onlyCustomsDeclarations` fetch runs in the label's
 The booking call is unchanged and keeps PostNord's default `definePrintout`, so `docs.label` is the composed printout in both formats.
 Alternative: request `definePrintout=onlyLabels` for PDF. Rejected because it would make the formats non-interchangeable and rests on the karrio convention this change removes.
 
+### D7. PDF keyword anchoring and alternative marker sets (added after live verification)
+
+A sandbox booking of the export letter with a PDF label (`~/Documents/postnord_cn22_and_label_two_pages.pdf`, 2026-09-28) returned two A4 pages: page 1 a "PostNord Tracked Letter" label without the `Brev utrikes`/`Parcel ID` text, page 2 an upright CN22 whose form sits at a different offset and height than the rotated single-page layout.
+Two consequences follow.
+First, one registry key (`label_cn22/PDF/A4`) cannot carry coordinates for both layouts, so the combined PDF seed resolves by the CN22 keyword located in the classified page's text via pypdf's text-position visitor, with position and rotation taken from the matched text; this extends the ZPL keyword mechanism to PDF and replaces the measured coordinate seed of D4 for the combined type.
+The lone `cn22/PDF/A4` seed keeps its coordinate placement, so lone-CN22 behavior is unchanged.
+Alternative considered: a layout discriminator in the registry key with one measured seed per layout. Rejected because each new PostNord template would need a new key and measurement, whereas the signature keyword is stable across all captured layouts.
+Second, label templates vary, so a section kind may declare alternative marker sets, present when any set fully matches; PostNord declares the letter template and the tracked letter template.
+Alternative considered: treating any non-declaration page as the label. Rejected because an unrelated extra page would then count as a label.
+
 ## Risks / Trade-offs
 
 - [The captures are export letter (UX) by-id printouts, not booking-call printouts, and service 91 is uncaptured] → a live booking capture for UX and 91 in both formats is a task; the UX by-id captures serve as fixtures until then. Bookings are not cancellable but unshipped test bookings are not billed.
+- [Sandbox and live templates may differ; the two-page PDF was captured in sandbox and the combined ZPL in live] → both layouts are fixtures; further templates are added as alternative marker sets and verified by keyword anchoring rather than new coordinates.
 - [PDF text extraction depends on PostNord embedding real text] → the captures carry extractable text; a PDF yielding no marker text classifies as `none`, which surfaces as a booking warning rather than a failure.
 - [PostNord could rename its `^FX` section comments or PDF label wording] → classification returns `none` or `declaration`, which surfaces as a warning at booking rather than a failure, and the markers are one constant to update.
 - [Export letter consumers lose the default standalone CN22] → called out in the changelog; consumers restore it by setting the opt-in on the connection.
