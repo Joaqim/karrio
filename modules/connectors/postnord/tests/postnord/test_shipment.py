@@ -1635,6 +1635,58 @@ class TestPostNordLabelComposition(unittest.TestCase):
         self.assertEqual(details.docs.label, TwoPageLabelPDF)
         self.assertEqual(details.meta["printout_composition"], ["cn22", "label"])
 
+    def test_international_parcel_labels_pass_verification(self):
+        cases = [
+            (
+                "zpl",
+                InternationalParcelBookingZPLResponse,
+                "ZPL",
+                _b64(InternationalParcelLabelZPL),
+            ),
+            (
+                "pdf",
+                InternationalParcelBookingResponse,
+                "PDF",
+                InternationalParcelLabelPDF,
+            ),
+        ]
+        for name, response, label_type, label in cases:
+            with self.subTest(case=name):
+                details, messages = self._book(
+                    response,
+                    payload=InternationalParcelCustomsPayload,
+                    label_type=label_type,
+                )
+                self.assertListEqual(lib.to_dict(messages), [])
+                self.assertEqual(details.docs.label, label)
+                self.assertEqual(
+                    details.meta["printout_composition"], ["cn22", "label"]
+                )
+
+    def test_international_parcel_label_without_cn22_format_warns(self):
+        details, messages = self._book(
+            _customs_booking_zpl(InternationalParcelParcelLabelZPL),
+            payload=InternationalParcelCustomsPayload,
+            label_type="ZPL",
+        )
+        self.assertEqual(details.docs.label, _b64(InternationalParcelParcelLabelZPL))
+        self.assertListEqual(
+            lib.to_dict(messages),
+            [
+                {
+                    "carrier_id": "postnord",
+                    "carrier_name": "postnord",
+                    "code": "postnord_unexpected_label_composition",
+                    "level": "warning",
+                    "message": (
+                        "The label was expected to be the shipping label "
+                        "composed with a CN22 (label_with_declaration) but "
+                        "was classified as none"
+                    ),
+                }
+            ],
+        )
+
     def test_unexpected_label_compositions_warn(self):
         cases = [
             ("zpl_plain_label", CustomsBookingZPLResponse, "ZPL", _b64(RawZPL), "none"),
@@ -2854,6 +2906,11 @@ ExportLetterCustomsPayload = {
     "customs": CustomsShipmentPayload["customs"],
 }
 
+InternationalParcelCustomsPayload = {
+    **ExportLetterCustomsPayload,
+    "service": "postnord_postpaket_utrikes",
+}
+
 StandaloneExportLetterPayload = {
     **ExportLetterCustomsPayload,
     "options": {
@@ -3510,9 +3567,23 @@ BlankPDF = _blank_pdf()
 # letter label, page 2 the upright CN22.
 TwoPageLabelPDF = _read_b64("postnord_label_cn22_booking_two_pages.pdf")
 
+# Live International Parcel (91) bookings (2026-09-28): the ZPL carries the
+# parcel label and the upright CN22 V2 as two formats, the PDF as two pages.
+InternationalParcelLabelZPL = base64.b64decode(
+    _read_b64("postnord_label_cn22_international_parcel.zpl")
+).decode("utf-8")
+InternationalParcelLabelPDF = _read_b64("postnord_label_cn22_international_parcel.pdf")
+InternationalParcelParcelLabelZPL = InternationalParcelLabelZPL[
+    : InternationalParcelLabelZPL.index("^XZ") + len("^XZ")
+]
+
 CombinedBookingResponse = _customs_booking_pdf(CombinedLabelPDF)
 CombinedBookingZPLResponse = _customs_booking_zpl(CombinedLabelZPL)
 TwoPageBookingResponse = _customs_booking_pdf(TwoPageLabelPDF)
+InternationalParcelBookingZPLResponse = _customs_booking_zpl(
+    InternationalParcelLabelZPL
+)
+InternationalParcelBookingResponse = _customs_booking_pdf(InternationalParcelLabelPDF)
 CombinedBookingNoPrintIdResponse = CustomsBookingNoPrintIdResponse.replace(
     '"data": "JVBERi0xLjQK"', f'"data": "{CombinedLabelPDF}"'
 )
