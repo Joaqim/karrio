@@ -168,7 +168,10 @@ class TestPostnordDocumentSections(unittest.TestCase):
             sections,
             {
                 "ZPL": {"cn22": ZPL_CN22_MARKER, "label": ZPL_LABEL_MARKER},
-                "PDF": {"cn22": PDF_CN22_TEXT, "label": PDF_LABEL_TEXT},
+                "PDF": {
+                    "cn22": PDF_CN22_TEXT,
+                    "label": lib.AnyOf(PDF_LABEL_TEXT, PDF_TRACKED_LETTER_TEXT),
+                },
             },
         )
 
@@ -201,6 +204,21 @@ class TestPostnordDocumentSections(unittest.TestCase):
                 kinds=("cn22", "label"),
                 doc_type="label_cn22",
                 page=1,
+            ),
+        )
+
+    def test_two_page_pdf_fixture_classifies_as_label_cn22_on_page_two(self):
+        result = lib.classify_customs_composition(
+            _document(TWO_PAGE_PDF_FIXTURE, "PDF"), carrier="postnord"
+        )
+
+        self.assertEqual(
+            result,
+            lib.CustomsClassification(
+                composition=COMBINED,
+                kinds=("cn22", "label"),
+                doc_type="label_cn22",
+                page=2,
             ),
         )
 
