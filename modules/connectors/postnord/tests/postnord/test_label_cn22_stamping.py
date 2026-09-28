@@ -432,6 +432,7 @@ class TestLabelCn22PdfStamp(unittest.TestCase):
             date="2026-09-28",
             carrier="postnord",
             doc_type=result.doc_type,
+            page=result.page,
         )
 
         (x_lo, x_hi), (y_lo, y_hi) = _strip_mm()
