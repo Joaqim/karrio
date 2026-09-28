@@ -1566,6 +1566,29 @@ class TestPostNordCustomsDocument(unittest.TestCase):
         self.assertEqual(details.docs.extra_documents, [])
 
 
+class TestPostNordLabelComposition(unittest.TestCase):
+    def setUp(self):
+        self.maxDiff = None
+
+    def test_unexpected_label_composition_code_is_unique(self):
+        other_codes = {
+            provider_units.CUSTOMS_OMITTED_INTRA_EU,
+            "ENTRY_CODE_LENGTH",
+            "not_supported",
+            "cancellation_unsupported",
+            "service_not_bookable",
+            "transit_time_unauthorized",
+            "transit_time_unavailable",
+        }
+        self.assertEqual(
+            provider_units.POSTNORD_UNEXPECTED_LABEL_COMPOSITION,
+            "postnord_unexpected_label_composition",
+        )
+        self.assertNotIn(
+            provider_units.POSTNORD_UNEXPECTED_LABEL_COMPOSITION, other_codes
+        )
+
+
 class TestPostNordCustomsInvoice(unittest.TestCase):
     def setUp(self):
         self.maxDiff = None
