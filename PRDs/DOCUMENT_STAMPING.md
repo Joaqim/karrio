@@ -3,9 +3,9 @@
 | Field | Value |
 |-------|-------|
 | Project | Karrio |
-| Version | 1.0 |
-| Date | 2026-09-24 |
-| Status | Completed |
+| Version | 1.1 |
+| Date | 2026-09-28 |
+| Status | In Progress |
 | Owner | Joaqim Planstedt |
 | Type | Enhancement |
 | Reference | [AGENTS.md](../AGENTS.md); fork readers: the openspec `documents/stamping` spec on the `docs-openspec` branch |
@@ -25,7 +25,8 @@
 9. [Testing Strategy](#testing-strategy)
 10. [Risk Assessment](#risk-assessment)
 11. [Migration & Rollback](#migration--rollback)
-12. [Appendix A: Contributing a carrier seed](#appendix-a-contributing-a-carrier-seed)
+12. [Customs composition classification](#customs-composition-classification)
+13. [Appendix A: Contributing a carrier seed](#appendix-a-contributing-a-carrier-seed)
 
 ---
 
@@ -45,6 +46,7 @@ The utility composites pixels only: it stores nothing and asserts nothing about 
 | 4 | ZPL: a 1-bpp GRF graphic binarized with a fixed ink threshold and spliced before the trailing `^XZ` | ZPL has no z-order; a later field draws on top, and a threshold keeps thin strokes connected |
 | 5 | Anchor resolution chain: placement, then keyword, then carrier seed | An explicit anchor always wins; a miss raises instead of guessing |
 | 6 | Carrier plugins contribute seeds through `PluginMetadata.stamp_seeds` | The core stays carrier-neutral; seeds are declarative data like `options` and `services` |
+| 7 | Classify a document's customs composition from carrier-declared section markers (`PluginMetadata.document_sections`) | A consumer learns the registry document type to stamp under without inspecting the document; see [Customs composition classification](#customs-composition-classification) |
 
 ### Scope
 
@@ -304,6 +306,119 @@ karrio test --failfast karrio.server.documents.tests
 
 The change is additive: a new SDK utility, a new optional plugin metadata field and a new endpoint, with no data migration.
 Rollback is reverting the commits.
+
+---
+
+## Customs composition classification
+
+### Problem
+
+`stamp_document` resolves a seed from the caller's `doc_type`, but it never inspects the document to decide that type.
+Some carriers return a customs declaration composed with the shipping label in one printout: a single ZPL format, or a single PDF page, carrying both sections.
+Neither page count nor `^XZ` count separates a lone declaration from a combined printout, so a consumer cannot tell which seed applies without reading carrier-specific markers itself.
+
+### Design
+
+A pure classifier reads carrier-declared section markers and returns the composition together with the registry `doc_type` to stamp under.
+The SDK stays carrier-agnostic: markers are declarative plugin data beside `stamp_seeds`, and the classifier knows only the composed kind names.
+
+```
+ consumer / connector parser
+        |  document (base64 PDF|ZPL), carrier? | sections?
+        v
+ +---------------------------------------------------------------+
+ | karrio.core.utils.stamping.classify_customs_composition       |
+ |                                                               |
+ |  sniff_document_format --> ZPL | PDF | other(ValueError)      |
+ |                                                               |
+ |  sections: injected mapping, else                             |
+ |            PluginMetadata.document_sections[FORMAT]           |
+ |                        ^                                      |
+ |              +---------+----------+                           |
+ |              | carrier plugin     |                           |
+ |              +--------------------+                           |
+ |                                                               |
+ |  ZPL: kind present when all its markers occur in the stream   |
+ |  PDF: per-page text (pypdf), whitespace-collapsed; kind       |
+ |       present when all its markers occur on one page          |
+ |                                                               |
+ |  cn22 absent            --> none                   doc_type - |
+ |  cn22, label absent     --> declaration            cn22       |
+ |  cn22 and label present --> label_with_declaration label_cn22 |
+ |  PDF page = first page carrying the cn22 markers              |
+ +---------------------------------------------------------------+
+        |  CustomsClassification (frozen)
+        v
+ lib.stamp_document(document, carrier=..., doc_type=result.doc_type, ...)
+```
+
+A seed's own placement names the page it stamps; `page` lets a consumer that supplies its own placement target the declaration page of a PDF.
+
+The declaration marker alone never implies a lone declaration: a combined printout carries it too, so `declaration` means the declaration kind is present and the label kind is absent.
+A document with no matching markers, and a carrier declaring no sections for the format, classify as `none` rather than raising.
+Only a format that is neither ZPL nor PDF raises, naming the detected format, because that is a caller error rather than a composition outcome.
+Classification performs no I/O beyond the plugin metadata lookup and never modifies the document.
+
+### Data model
+
+| Type | Field | Meaning |
+|------|-------|---------|
+| `PluginMetadata` | `document_sections` | `{FORMAT: {kind: markers}}`; ZPL markers are field-comment substrings of the stream, PDF markers are page-text substrings; a kind is present when all its markers match; a single string is one marker |
+| `CustomsComposition` | `none`, `declaration`, `label_with_declaration` | String enum of the composition outcome |
+| `CustomsClassification` | `composition` | A `CustomsComposition` member |
+| | `kinds` | Sorted tuple of composed kinds present, such as `("cn22", "label")` |
+| | `doc_type` | `cn22`, `label_cn22`, or `None` for `none` |
+| | `page` | One-based PDF page carrying the declaration; `None` for ZPL and for `none` |
+
+`lib` exports `classify_customs_composition`, `CustomsClassification` and `CustomsComposition`.
+
+```python
+METADATA = PluginMetadata(
+    id="acme",
+    label="Acme",
+    document_sections={
+        "ZPL": {"cn22": "^FX ACME_CN22^FS", "label": "^FX ACME_LABEL^FS"},
+        "PDF": {"cn22": ("CUSTOMS DECLARATION", "CN22"), "label": ("Acme letter",)},
+    },
+)
+
+result = lib.classify_customs_composition(document, carrier="acme")
+if result.doc_type:
+    stamped = lib.stamp_document(document, image=signature, carrier="acme", doc_type=result.doc_type)
+```
+
+### Implementation plan
+
+| Task | Commit | Files |
+|------|--------|-------|
+| 1.1 | `feat(sdk): declare document sections in plugin metadata` | `modules/sdk/karrio/core/metadata.py`, `modules/sdk/karrio/core/utils/stamping.py` (`_carrier_sections`), `modules/sdk/tests/core/test_stamping_classification.py` |
+| 1.2 | `feat(sdk): classify customs composition of zpl documents` | `stamping.py` (`CustomsComposition`, `CustomsClassification`, `classify_customs_composition`), `test_stamping_classification.py` |
+| 1.3 | `feat(sdk): classify customs composition of pdf documents` | `stamping.py`, `modules/sdk/tests/core/stamping_helpers.py` (text-page PDF generator), `test_stamping_classification.py` |
+| 1.4 | `test(sdk): reject unsupported formats in customs classification` | `test_stamping_classification.py` |
+| 1.5 | `feat(sdk): export customs classification through karrio.lib` | `modules/sdk/karrio/lib.py`, `stamping.py` (module docstring), `test_stamping_classification.py` |
+
+Carrier markers, combined seeds (`label_cn22/ZPL/*`, `label_cn22/PDF/A4`) and booking-time verification belong to the carrier connector and are out of scope for this SDK section.
+
+### Testing strategy
+
+`test_stamping_classification.py` exercises a synthetic `acme` plugin with synthetic markers, served by patching `karrio.references.collect_providers_data` as the seed tests do, and the injected `sections` mapping.
+
+| Case | Expected |
+|------|----------|
+| ZPL with declaration and label markers in one format | `label_with_declaration`, `label_cn22`, page `None` |
+| ZPL with the declaration marker only | `declaration`, `cn22` |
+| ZPL with the label marker only, and with neither | `none`, no `doc_type` |
+| PDF generated in-test with both sections on one page | `label_with_declaration`, `label_cn22`, page 1 |
+| PDF with the declaration only | `declaration`, `cn22`, page 1 |
+| Multi-page PDF with the declaration on page 2 | page 2 |
+| PDF whose text matches no marker, and a PDF with a partial multi-marker kind | `none` |
+| Carrier declaring no sections for the format | `none` |
+| PNG input | `ValueError` naming `PNG` |
+| Any input | the document's `base64` is unchanged |
+
+```bash
+python -m unittest discover -v -f modules/sdk/tests
+```
 
 ---
 
