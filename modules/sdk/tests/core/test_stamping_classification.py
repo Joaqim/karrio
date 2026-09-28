@@ -357,5 +357,96 @@ class TestClassifyThenStamp(unittest.TestCase):
                 )
 
 
+# Two label templates for one kind: the letter label and a tracked letter.
+ALTERNATIVE_SECTIONS = {
+    "ZPL": {
+        "cn22": "^FX ACME_CN22^FS",
+        "label": lib.AnyOf("^FX ACME_LABEL^FS", ("^FX ACME_TRACKED^FS", "^FDTR")),
+    },
+    "PDF": {
+        "cn22": ("ACME DECLARATION", "CN22"),
+        "label": lib.AnyOf(("Acme letter",), ["Tracked letter", "TR123"]),
+    },
+}
+
+
+class TestAlternativeMarkerSets(unittest.TestCase):
+    def classify(self, document, sections=ALTERNATIVE_SECTIONS):
+        return stamping.classify_customs_composition(document, sections=sections)
+
+    def test_only_the_second_zpl_alternative_matches(self):
+        tracked = "^FX ACME_TRACKED^FS\n^FO40,600^FDTR123456785SE^FS"
+        result = self.classify(zpl_form(DECLARATION_SECTION, tracked))
+
+        self.assertEqual(result.kinds, ("cn22", "label"))
+        self.assertEqual(result.doc_type, "label_cn22")
+
+    def test_only_the_second_pdf_alternative_matches_on_its_page(self):
+        result = self.classify(
+            pdf_form(["Tracked letter", "TR123456785SE"], DECLARATION_LINES)
+        )
+
+        self.assertEqual(
+            result,
+            stamping.CustomsClassification(
+                composition=stamping.CustomsComposition.label_with_declaration,
+                kinds=("cn22", "label"),
+                doc_type="label_cn22",
+                page=2,
+            ),
+        )
+
+    def test_a_partially_matching_alternative_is_absent(self):
+        # Each alternative is all-of: the tracked template's comment without
+        # its barcode field, and the first template's comment is absent.
+        result = self.classify(zpl_form(DECLARATION_SECTION, "^FX ACME_TRACKED^FS"))
+
+        self.assertEqual(result.kinds, ("cn22",))
+        self.assertEqual(result.doc_type, "cn22")
+
+    def test_no_alternative_matching_is_absent(self):
+        result = self.classify(pdf_form(DECLARATION_LINES, ["Commercial invoice"]))
+
+        self.assertEqual(result.kinds, ("cn22",))
+        self.assertEqual(result.composition, stamping.CustomsComposition.declaration)
+
+    def test_a_single_alternative_behaves_like_the_bare_set(self):
+        wrapped = {
+            "PDF": {
+                "cn22": lib.AnyOf(("ACME DECLARATION", "CN22")),
+                "label": lib.AnyOf("Acme letter"),
+            }
+        }
+        cases = (
+            pdf_form(DECLARATION_LINES + LABEL_LINES),
+            pdf_form(DECLARATION_LINES),
+            pdf_form(["ACME DECLARATION"] + LABEL_LINES),
+            pdf_form(["Commercial invoice"]),
+        )
+        for document in cases:
+            with self.subTest(text=document.base64[-12:]):
+                self.assertEqual(
+                    self.classify(document, wrapped),
+                    self.classify(document, ACME_SECTIONS),
+                )
+
+    def test_a_list_keeps_its_all_of_meaning(self):
+        listed = {"PDF": {"cn22": ["ACME DECLARATION", "CN22"]}}
+
+        self.assertEqual(
+            self.classify(pdf_form(["ACME DECLARATION"]), listed).kinds, ()
+        )
+        self.assertEqual(
+            self.classify(pdf_form(DECLARATION_LINES), listed).doc_type, "cn22"
+        )
+
+    def test_alternatives_are_immutable(self):
+        alternatives = lib.AnyOf("a", ("b", "c"))
+
+        self.assertEqual(alternatives.sets, ("a", ("b", "c")))
+        with self.assertRaises(AttributeError):
+            alternatives.sets = ()
+
+
 if __name__ == "__main__":
     unittest.main()
