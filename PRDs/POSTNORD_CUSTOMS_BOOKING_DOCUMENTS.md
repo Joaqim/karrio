@@ -8,7 +8,7 @@
 | Status | In Progress |
 | Owner | Joaqim Planstedt |
 | Type | Enhancement (breaking for export letter consumers) |
-| Reference | [AGENTS.md](../AGENTS.md); [PRD_POSTNORD_INTEGRATION.md](./PRD_POSTNORD_INTEGRATION.md); [POSTNORD_CN22_STAMPING.md](./POSTNORD_CN22_STAMPING.md); [DOCUMENT_STAMPING.md](./DOCUMENT_STAMPING.md); fork readers: the openspec change `stamp-embedded-customs-forms` on the `docs-openspec` branch |
+| Reference | [AGENTS.md](../AGENTS.md); [PRD_POSTNORD_INTEGRATION.md](./PRD_POSTNORD_INTEGRATION.md); [POSTNORD_CN22_STAMPING.md](./POSTNORD_CN22_STAMPING.md); [DOCUMENT_STAMPING.md](./DOCUMENT_STAMPING.md) |
 
 ---
 
@@ -256,7 +256,7 @@ python -m unittest discover -v -f modules/sdk/tests
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
 | UX consumers relied on the default standalone CN22 | Medium | Medium | Breaking-change note; set the opt-in on the connection |
-| Booking-call printouts differ from the by-id captures | Low | Low | Warning only; the two-page sandbox PDF booking is a fixture; live booking captures per change task 5.1 |
+| Booking-call printouts differ from the by-id captures | Low | Low | Warning only; the two-page sandbox PDF booking is a fixture; live booking captures cover the export letter (UX) in ZPL and the International Parcel (91) in ZPL and PDF, and bookings with `postnord_standalone_customs_documents` set are not yet captured |
 | PostNord renames markers | Low | Low | Warnings surface it; one constant to update |
 
 ---
