@@ -12,8 +12,11 @@ import unittest
 
 import pypdf
 
+import karrio.lib as lib
+import karrio.references as references
 import karrio.core.models as models
 import karrio.core.utils.stamping as stamping
+import karrio.providers.postnord.stamping as postnord_stamping
 
 from postnord.test_cn22_stamping import KEYWORD, _read_b64
 
@@ -106,6 +109,98 @@ class TestPostnordCombinedFixtures(unittest.TestCase):
             self.assertIn(marker, text)
         for marker in PDF_LABEL_TEXT:
             self.assertNotIn(marker, text)
+
+
+COMBINED = lib.CustomsComposition.label_with_declaration
+DECLARATION = lib.CustomsComposition.declaration
+
+
+class TestPostnordDocumentSections(unittest.TestCase):
+    def test_plugin_metadata_declares_the_document_sections(self):
+        sections = references.collect_providers_data()["postnord"].document_sections
+
+        self.assertIs(sections, postnord_stamping.DOCUMENT_SECTIONS)
+        self.assertEqual(
+            sections,
+            {
+                "ZPL": {"cn22": ZPL_CN22_MARKER, "label": ZPL_LABEL_MARKER},
+                "PDF": {"cn22": PDF_CN22_TEXT, "label": PDF_LABEL_TEXT},
+            },
+        )
+
+    def test_combined_zpl_fixtures_classify_as_label_cn22(self):
+        for name in COMBINED_ZPL_FIXTURES:
+            with self.subTest(fixture=name):
+                result = lib.classify_customs_composition(
+                    _document(name, "ZPL"), carrier="postnord"
+                )
+
+                self.assertEqual(
+                    result,
+                    lib.CustomsClassification(
+                        composition=COMBINED,
+                        kinds=("cn22", "label"),
+                        doc_type="label_cn22",
+                        page=None,
+                    ),
+                )
+
+    def test_combined_pdf_fixture_classifies_as_label_cn22_on_page_one(self):
+        result = lib.classify_customs_composition(
+            _document(COMBINED_PDF_FIXTURE, "PDF"), carrier="postnord"
+        )
+
+        self.assertEqual(
+            result,
+            lib.CustomsClassification(
+                composition=COMBINED,
+                kinds=("cn22", "label"),
+                doc_type="label_cn22",
+                page=1,
+            ),
+        )
+
+    def test_lone_zpl_fixture_classifies_as_cn22(self):
+        result = lib.classify_customs_composition(
+            _document(LONE_ZPL_FIXTURE, "ZPL"), carrier="postnord"
+        )
+
+        self.assertEqual(
+            result,
+            lib.CustomsClassification(
+                composition=DECLARATION, kinds=("cn22",), doc_type="cn22", page=None
+            ),
+        )
+
+    def test_lone_pdf_fixture_classifies_as_cn22_on_page_one(self):
+        result = lib.classify_customs_composition(
+            _document(LONE_PDF_FIXTURE, "PDF"), carrier="postnord"
+        )
+
+        self.assertEqual(
+            result,
+            lib.CustomsClassification(
+                composition=DECLARATION, kinds=("cn22",), doc_type="cn22", page=1
+            ),
+        )
+
+    def test_zpl_label_without_the_cn22_section_is_not_customs_bearing(self):
+        stream = _zpl_stream(COMBINED_ZPL_FIXTURES[0])
+        label_only = (
+            stream[: stream.index(ZPL_CN22_MARKER)]
+            + stream[stream.index(ZPL_LABEL_MARKER) :]
+        )
+        document = models.ShippingDocument(
+            category="label",
+            format="ZPL",
+            base64=base64.b64encode(label_only.encode("utf-8")).decode("utf-8"),
+        )
+
+        result = lib.classify_customs_composition(document, carrier="postnord")
+
+        self.assertEqual(result.composition, lib.CustomsComposition.none)
+        self.assertEqual(result.kinds, ("label",))
+        self.assertIsNone(result.doc_type)
 
 
 if __name__ == "__main__":
