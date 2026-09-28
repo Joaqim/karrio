@@ -6,7 +6,7 @@ Tests run in the nix dev shell per `docs/notes/workflow/nix-dev-shell-worktrees.
 ## 0. Branch readiness
 
 - [x] 0.1 Base `feat-postnord-customs-invoice` on `feat-postnord-cn22-stamping` (which contains `feat-document-stamping`) so the booking check can import the SDK classifier and PostNord section markers; `BRANCHES` already orders cn22-stamping before customs-invoice. Done 2026-09-28: rebased 10 commits onto `f33ddaec5` with identical patches per `git range-diff`; pre-rebase tip kept as `backup/feat-postnord-customs-invoice-pre-cn22-rebase` (`22a0b936d`)
-- [ ] 0.2 (SDK part done in `feat-document-stamping`'s `PRDs/DOCUMENT_STAMPING.md`; PostNord stamping part goes in a new `PRDs/POSTNORD_CN22_STAMPING.md` on `feat-postnord-cn22-stamping`; booking part on `feat-postnord-customs-invoice`) Add or amend the upstream PRD as the first commit on each affected feature branch, covering classification, the combined seeds, and the opt-in standalone documents; verify each PRD has the ASCII flow diagram and file-path plan required by `PRDs/TEMPLATE.md`
+- [x] 0.2 (SDK part done in `feat-document-stamping`'s `PRDs/DOCUMENT_STAMPING.md`; PostNord stamping part goes in a new `PRDs/POSTNORD_CN22_STAMPING.md` on `feat-postnord-cn22-stamping`; booking part on `feat-postnord-customs-invoice`) Add or amend the upstream PRD as the first commit on each affected feature branch, covering classification, the combined seeds, and the opt-in standalone documents; verify each PRD has the ASCII flow diagram and file-path plan required by `PRDs/TEMPLATE.md`
 
 ## 1. SDK customs composition classification (`feat-document-stamping`)
 
@@ -27,18 +27,18 @@ Tests run in the nix dev shell per `docs/notes/workflow/nix-dev-shell-worktrees.
 
 ## 3. Booking-time verification (`feat-postnord-customs-invoice`)
 
-- [ ] 3.1 Add the `POSTNORD_UNEXPECTED_LABEL_COMPOSITION` warning code in `units.py` beside `CUSTOMS_OMITTED_INTRA_EU`; verify it is importable and unique among PostNord message codes
-- [ ] 3.2 In the shipment response parser, classify the decoded label when customs was declared and `customs_structure(service) == cn22`, appending a warning naming expected and classified compositions on mismatch; verify tests for ZPL combined (no warning), ZPL plain label (warning), ZPL lone CN22 as label (warning), PDF combined (no warning), PDF without CN22 text (warning), each returning the shipment with the label unchanged
-- [ ] 3.3 Verify no classification or warning runs for bookings without customs or within the EU VAT area, in both formats, by tests asserting identical messages to the pre-change output
-- [ ] 3.4 Update the PostNord connector README/docstring section on customs documents to state that `docs.label` is the composed printout in both formats and describe the warning; verify the documented composition matches `meta.printout_composition` in the tests
+- [x] 3.1 Add the `POSTNORD_UNEXPECTED_LABEL_COMPOSITION` warning code in `units.py` beside `CUSTOMS_OMITTED_INTRA_EU`; verify it is importable and unique among PostNord message codes
+- [x] 3.2 In the shipment response parser, classify the decoded label when customs was declared and `customs_structure(service) == cn22`, appending a warning naming expected and classified compositions on mismatch; verify tests for ZPL combined (no warning), ZPL plain label (warning), ZPL lone CN22 as label (warning), PDF combined (no warning), PDF without CN22 text (warning), each returning the shipment with the label unchanged
+- [x] 3.3 Verify no classification or warning runs for bookings without customs or within the EU VAT area, in both formats, by tests asserting identical messages to the pre-change output
+- [x] 3.4 Update the PostNord connector README/docstring section on customs documents to state that `docs.label` is the composed printout in both formats and describe the warning; verify the documented composition matches `meta.printout_composition` in the tests
 
 ## 4. Opt-in standalone customs documents (`feat-postnord-customs-invoice`)
 
-- [ ] 4.1 Read `postnord_standalone_customs_documents` from `payload.options` with a `ConnectionConfig` fallback of the same name (default False), without adding it to `ShippingOption`; verify a request-building test that the option never appears in `additionalServiceCode`
-- [ ] 4.2 Gate the proxy's by-id `onlyCustomsDeclarations` fetch on the resolved opt-in and widen it to every service with `customs_structure(service) == cn22` (UX, other CN22 letters, 91), in the label's format; verify proxy tests for opted-in PDF and ZPL (fetch made, `cn22` document attached) and not-opted-in (no fetch, no standalone document)
-- [ ] 4.3 Keep customs-invoice parcel products on their current fetch path; verify the existing customs-invoice tests pass unchanged
-- [ ] 4.4 Verify format interchangeability with a paired test booking the same CN22 letter in PDF and ZPL (with and without opt-in) and asserting equal composition, document kinds, and messages
-- [ ] 4.5 Verify a retrieval failure with opt-in set leaves the booking successful and reports messages, for both formats
+- [x] 4.1 Read `postnord_standalone_customs_documents` from `payload.options` with a `ConnectionConfig` fallback of the same name (default False), without adding it to `ShippingOption`; verify a request-building test that the option never appears in `additionalServiceCode`
+- [x] 4.2 Gate the proxy's by-id `onlyCustomsDeclarations` fetch on the resolved opt-in and widen it to every service with `customs_structure(service) == cn22` (UX, other CN22 letters, 91), in the label's format; verify proxy tests for opted-in PDF and ZPL (fetch made, `cn22` document attached) and not-opted-in (no fetch, no standalone document)
+- [x] 4.3 Keep customs-invoice parcel products on their current fetch path; verify the existing customs-invoice tests pass unchanged
+- [x] 4.4 Verify format interchangeability with a paired test booking the same CN22 letter in PDF and ZPL (with and without opt-in) and asserting equal composition, document kinds, and messages
+- [x] 4.5 Verify a retrieval failure with opt-in set leaves the booking successful and reports messages, for both formats
 - [ ] 4.6 Add a changelog entry marking the loss of the default standalone CN22 for export letters as breaking, with the opt-in as migration; verify the entry names the option and the connection-level fallback
 
 ## 5. Live verification and integration
