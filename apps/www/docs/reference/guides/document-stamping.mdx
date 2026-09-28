@@ -179,7 +179,8 @@ stamped = lib.stamp_document(
 )
 ```
 
-A keyword works on ZPL documents only, cannot be combined with a placement that sets both `x` and `y`, and fails when no field matches.
+On a PDF the keyword is found in the page text, on the requested `page` or else the first page containing it, and the stamp is laid out along the text's direction, so a form printed upright or turned by 90 degrees anchors the same way.
+A keyword cannot be combined with a placement that sets both `x` and `y`, and fails when no field or page text matches or when the target PDF page has no extractable text.
 
 ### Declaring seeds in a carrier plugin
 
