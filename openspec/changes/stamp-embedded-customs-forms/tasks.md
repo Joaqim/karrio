@@ -43,8 +43,8 @@ Tests run in the nix dev shell per `docs/notes/workflow/nix-dev-shell-worktrees.
 
 ## 6. Live-verification follow-up: PDF keyword anchoring and alternative markers (design D7)
 
-- [ ] 6.1 SDK (`feat-document-stamping`): allow a section kind to declare alternative marker sets (any fully matching set marks the kind present); verify unit tests where only the second set matches, and that existing single-set declarations classify unchanged
-- [ ] 6.2 SDK (`feat-document-stamping`): keyword-anchored placement for PDF using page-text positions (origin and text direction) on the requested page or the first page containing the keyword, from caller geometry or seed PDF keyword geometry; keep coordinate-only PDF seeds unchanged; verify tests for a rotated and an upright keyword, no-match and no-text errors, and page override interplay
+- [x] 6.1 SDK (`feat-document-stamping`): allow a section kind to declare alternative marker sets (any fully matching set marks the kind present); verify unit tests where only the second set matches, and that existing single-set declarations classify unchanged
+- [x] 6.2 SDK (`feat-document-stamping`): keyword-anchored placement for PDF using page-text positions (origin and text direction) on the requested page or the first page containing the keyword, from caller geometry or seed PDF keyword geometry; keep coordinate-only PDF seeds unchanged; verify tests for a rotated and an upright keyword, no-match and no-text errors, and page override interplay
 - [ ] 6.3 PostNord (`feat-postnord-cn22-stamping`): add the two-page booking PDF fixture, declare the tracked letter label marker set as an alternative, and switch `label_cn22/PDF/A4` to PDF keyword geometry measured against both the single-page and two-page captures; verify classification (page 2 for the two-page PDF) and in-region stamps for both captures with oracles derived from measurement
 - [ ] 6.4 PostNord (`feat-postnord-customs-invoice`): verify a PDF booking returning the two-page fixture passes verification without a warning; update the PRDs touched by D7
 - [ ] 6.5 Restack, rebuild and push `develop` for redeploy; re-run the UX PDF live/sandbox booking
