@@ -27,6 +27,7 @@ METADATA = PluginMetadata(
     service_levels=units.DEFAULT_SERVICES,
     # Document stamping
     stamp_seeds=stamping.STAMP_SEEDS,
+    document_sections=stamping.DOCUMENT_SECTIONS,
     # Extra info
     website="https://www.postnord.com",
     documentation="https://developer.postnord.com",
