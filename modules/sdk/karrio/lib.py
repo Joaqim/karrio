@@ -42,6 +42,8 @@ typed = utils.typed
 sort_events = utils.sort_events_chronologically
 StampPlacement = stamping.StampPlacement
 StampSeed = stamping.StampSeed
+CustomsClassification = stamping.CustomsClassification
+CustomsComposition = stamping.CustomsComposition
 
 
 # -----------------------------------------------------------
@@ -1077,6 +1079,23 @@ def stamp_document(
         date=date,
         graphic_name=graphic_name,
         keyword=keyword,
+    )
+
+
+def classify_customs_composition(
+    document: models.ShippingDocument,
+    carrier: str = None,
+    sections: stamping.DocumentSections = None,
+) -> stamping.CustomsClassification:
+    """Classify a carrier document's customs composition from section markers.
+
+    See ``karrio.core.utils.stamping.classify_customs_composition`` for the
+    marker matching and the returned stamp document type.
+    """
+    return stamping.classify_customs_composition(
+        document,
+        carrier=carrier,
+        sections=sections,
     )
 
 

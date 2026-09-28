@@ -2,17 +2,22 @@
 
 import unittest
 
+import karrio.lib as lib
 import karrio.core.models as models
 import karrio.core.metadata as metadata
 import karrio.core.utils.stamping as stamping
 
 from .stamping_helpers import (
+    EXAMPLE_SEED,
     b64,
     blank_pdf_b64,
+    decode_zpl,
+    grf_fields,
     page_count,
     png_document,
     providers,
     signature_png_b64,
+    seeded_provider,
     text_pdf_b64,
     zpl_doc_b64,
 )
@@ -295,6 +300,61 @@ class TestUnsupportedFormats(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, r"detected as 'GIF'"):
             stamping.classify_customs_composition(document, sections=ACME_SECTIONS)
+
+
+class TestClassifyThenStamp(unittest.TestCase):
+    def test_lib_exports_the_classifier(self):
+        self.assertIs(lib.CustomsClassification, stamping.CustomsClassification)
+        self.assertIs(lib.CustomsComposition, stamping.CustomsComposition)
+        self.assertEqual(
+            lib.classify_customs_composition(
+                zpl_form(DECLARATION_SECTION), sections=ACME_SECTIONS
+            ),
+            stamping.classify_customs_composition(
+                zpl_form(DECLARATION_SECTION), sections=ACME_SECTIONS
+            ),
+        )
+
+    def test_combined_zpl_stamps_under_the_classified_doc_type(self):
+        plugin = metadata.PluginMetadata(
+            id="acme",
+            label="acme",
+            document_sections=ACME_SECTIONS,
+            stamp_seeds={"label_cn22/ZPL/*": EXAMPLE_SEED},
+        )
+        document = zpl_form(DECLARATION_SECTION, LABEL_SECTION)
+
+        with providers(plugin):
+            result = lib.classify_customs_composition(document, carrier="acme")
+            stamped = lib.stamp_document(
+                document,
+                image=signature_png_b64(),
+                carrier="acme",
+                doc_type=result.doc_type,
+            )
+
+        # The seed's keyword offset from the ^FO20,35 signature field lands
+        # the rotated strip at ^FO7,303 (see EXAMPLE_SEED).
+        self.assertEqual(
+            [field[:2] for field in grf_fields(decode_zpl(stamped.base64))],
+            [(7, 303)],
+        )
+        self.assertIn(LABEL_SECTION, decode_zpl(stamped.base64))
+
+    def test_lone_declaration_type_misses_a_combined_only_seed(self):
+        document = zpl_form(DECLARATION_SECTION)
+
+        with providers(
+            seeded_provider({"label_cn22/ZPL/*": EXAMPLE_SEED}),
+        ):
+            result = lib.classify_customs_composition(document, sections=ACME_SECTIONS)
+            with self.assertRaisesRegex(ValueError, "acme/cn22/ZPL/\\*"):
+                lib.stamp_document(
+                    document,
+                    image=signature_png_b64(),
+                    carrier="acme",
+                    doc_type=result.doc_type,
+                )
 
 
 if __name__ == "__main__":

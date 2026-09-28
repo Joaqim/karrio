@@ -5,6 +5,19 @@ returning the document in the same format and shape it arrived in so consumers
 never branch on document format themselves. It composites pixels only: it stores
 nothing and asserts nothing about the legal validity or signature semantics of
 the stamped content — that responsibility belongs to the consumer.
+
+A carrier may compose a customs declaration with the shipping label in one
+printout, so the document type to stamp under is not always the category the
+document arrived with. ``classify_customs_composition`` reads the section
+markers the carrier plugin declares in ``document_sections`` and names the
+registry document type (``cn22`` or ``label_cn22``) and, for PDF, the page
+carrying the declaration; the consumer passes that type to ``stamp_document``::
+
+    result = lib.classify_customs_composition(document, carrier="acme")
+    if result.doc_type:
+        document = lib.stamp_document(
+            document, image=signature, carrier="acme", doc_type=result.doc_type
+        )
 """
 
 import io
