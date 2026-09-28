@@ -8,7 +8,7 @@
 | Status | In Progress |
 | Owner | Joaqim Planstedt |
 | Type | Enhancement |
-| Reference | [AGENTS.md](../AGENTS.md); [DOCUMENT_STAMPING.md](./DOCUMENT_STAMPING.md); fork readers: the openspec change `stamp-embedded-customs-forms` on the `docs-openspec` branch |
+| Reference | [AGENTS.md](../AGENTS.md); [DOCUMENT_STAMPING.md](./DOCUMENT_STAMPING.md) |
 
 ---
 
@@ -330,7 +330,7 @@ The `label_cn22/PDF/A4` seed resolves to page x 89.17-138.28 mm and y 148.06-155
 
 Paths are relative to `modules/connectors/postnord/`.
 
-Dependencies: `feat-document-stamping` provides the classifier, `document_sections`, and (task 1.6) the page override for seeded PDF stamps.
+Dependencies: `feat-document-stamping` provides the classifier, `document_sections`, and the page override for seeded PDF stamps.
 Follow-on on `feat-postnord-customs-invoice`: booking-time verification of the returned label with the classifier (a warning on unexpected composition) and opt-in standalone customs documents.
 
 ---
