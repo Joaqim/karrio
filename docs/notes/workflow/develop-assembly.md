@@ -25,11 +25,16 @@ It stays on the fork until both parents land upstream.
 ## Adding or changing a feature
 
 1. Branch from `upstream/main`, or from the unmerged branch the work depends on.
+   Always pass the start point explicitly, as in `git worktree add -b <branch> .worktrees/<branch> upstream/main`, because without one it defaults to the main checkout's HEAD, which is `develop`.
+   Never base a branch on `develop` or `develop-next`; such a branch contains the assembly merges and cannot be registered in `BRANCHES`.
 2. Put the PRD commit first, then one commit per logical capability, in the format `type(scope): summary`.
 3. Verify outside nix in `python:3.12-slim-bookworm`, matching upstream CI, and inside the nix dev shell; see [nix-dev-shell-worktrees.md](nix-dev-shell-worktrees.md) for the per-worktree `.envrc`.
 4. If the branch is new, add it to `BRANCHES` in `assemble-develop.sh` on `docs-openspec`, after the branch it is based on, and commit.
 5. Regenerate develop with `rebuild-develop.sh`, then push; see the agent workflow below.
    The scripts read `BRANCHES` from the committed tip of `docs-openspec`, so an uncommitted edit to the list has no effect.
+
+A change that touches independent stacks, such as the PostNord and DHL Freight Sweden connectors, is split into one commit per stack, each landing on the branch that owns that code, or deferred.
+A shared SDK abstraction spanning stacks goes on its own branch off `upstream/main` only when upstream will plausibly accept it.
 
 A merge conflict during assembly means two feature branches disagree.
 Fix it on the feature branches, never in the assembled result.
