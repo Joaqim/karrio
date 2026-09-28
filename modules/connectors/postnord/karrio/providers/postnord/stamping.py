@@ -50,9 +50,11 @@ STAMP_SEEDS = {
 }
 
 # PostNord composes the CN22 and the letter label into one printout: a single
-# ZPL format (one ^XZ) and a single A4 PDF page. The sections are told apart by
-# PostNord's own ^FX field comments in ZPL and by page text in PDF, where the
-# label markers occur only in the label section of the live captures.
+# ZPL format (one ^XZ), and in PDF either one A4 page or, in the sandbox
+# booking capture, a label page followed by a CN22 page. The sections are told
+# apart by PostNord's own ^FX field comments in ZPL and by page text in PDF,
+# where each label marker set occurs on no CN22 page of the captures. The PDF
+# label comes in two templates: the letter label and the tracked letter label.
 DOCUMENT_SECTIONS = {
     "ZPL": {
         "cn22": "^FX CUSTOMS_CN22_ROTATED^FS",
@@ -60,6 +62,9 @@ DOCUMENT_SECTIONS = {
     },
     "PDF": {
         "cn22": ("CUSTOMS DECLARATION", "CN22"),
-        "label": ("Brev utrikes", "Parcel ID"),
+        "label": lib.AnyOf(
+            ("Brev utrikes", "Parcel ID"),
+            ("PostNord Tracked Letter", "Item-ID"),
+        ),
     },
 }
