@@ -10,13 +10,13 @@ or the deployed API container).
 A REST-only variant for drivers that cannot import the connector is described in
 "REST-only variant (no Python SDK)" below.
 No dashboard UI is involved; that is a deliberate decision (2026-09-11), and the
-UI surface (HTTP routes plus a picker) is deferred PUDO-PRD alternative B.
+UI surface (REST/GraphQL routes or dashboard UI for the lookups) is a non-goal of the
+integration PRD, with REST routes for the lookups a deferred alternative there.
 
 Reference material: the connector README documents the lookup calling conventions
-(`modules/connectors/dhl_freight_sweden/README.md`); the integration PRD records the
-booking field semantics and live-verified DHL behavior
-(`PRDs/PRD_DHL_FREIGHT_INTEGRATION.md`); the PUDO workflow PRD records the lookup
-design (`PRDs/DHL_FREIGHT_SWEDEN_PUDO_WORKFLOW.md`).
+and the one-click flow (`modules/connectors/dhl_freight_sweden/README.md`); the
+integration PRD records the booking field semantics, live-verified DHL behavior, and
+the lookup design (`PRDs/PRD_DHL_FREIGHT_SWEDEN_INTEGRATION.md`).
 
 ## Workflow overview
 
@@ -194,9 +194,11 @@ payload = {
         # "shipper_instructions" / "recipient_instructions" →
         # pickupInstruction / deliveryInstruction (max 140 characters each)
     },
-    # international lanes additionally need customs (commodities, incoterm);
-    # payer code resolves from dhl_freight_sweden_payer_code, else
-    # customs.incoterm, else the consignor-pays default "1"
+    # lanes leaving the EU VAT area additionally need customs (commodities,
+    # incoterm); within the EU VAT area customs data is dropped with a
+    # customs_omitted_intra_eu warning; payer code resolves from
+    # dhl_freight_sweden_payer_code, else customs.incoterm, else the
+    # consignor-pays default "1"
 }
 
 details, messages = (
@@ -233,7 +235,7 @@ so only retry when no booking id was returned.
 The workflow above requires a Python runtime with the connector importable.
 A driver in any language can run the same one-click flow by splitting it into
 two halves: the lookups go directly to the DHL API Farm, because karrio
-exposes no REST surface for them (the deferred PUDO-PRD alternative B), and
+exposes no REST surface for them (a deferred alternative in the integration PRD), and
 the booking, tracking, and void legs ride the karrio REST proxy endpoints.
 
 ```
