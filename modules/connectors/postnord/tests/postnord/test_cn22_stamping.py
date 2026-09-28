@@ -113,7 +113,8 @@ class TestPostnordStampSeeds(unittest.TestCase):
         seeds = references.collect_providers_data()["postnord"].stamp_seeds
 
         self.assertEqual(
-            set(seeds), {"cn22/PDF/A4", "cn22/ZPL/*", "label_cn22/ZPL/*"}
+            set(seeds),
+            {"cn22/PDF/A4", "cn22/ZPL/*", "label_cn22/PDF/A4", "label_cn22/ZPL/*"},
         )
         self.assertIs(seeds["cn22/PDF/A4"], postnord_stamping.CN22_SEED)
 
