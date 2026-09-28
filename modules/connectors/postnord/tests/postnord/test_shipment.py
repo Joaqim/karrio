@@ -22,6 +22,7 @@ from .fixture import (
     gateway_zpl_label,
     gateway_with_country_locale,
     gateway_with_language,
+    gateway_with_standalone_customs,
 )
 from .test_cn22_stamping import _read_b64
 
@@ -1718,6 +1719,42 @@ class TestPostNordLabelComposition(unittest.TestCase):
                 )
                 self.assertIsNotNone(details)
                 self.assertListEqual(lib.to_dict(messages), expected)
+
+
+class TestPostNordStandaloneCustomsOptIn(unittest.TestCase):
+    def setUp(self):
+        self.maxDiff = None
+
+    def _request(self, options: dict = None, carrier=gateway):
+        payload = {**ExportLetterCustomsPayload}
+        if options is not None:
+            payload["options"] = options
+        return carrier.mapper.create_shipment_request(models.ShipmentRequest(**payload))
+
+    def test_standalone_customs_documents_resolution(self):
+        opt_in = "postnord_standalone_customs_documents"
+        cases = [
+            ("default", None, gateway, False),
+            ("options_true", {opt_in: True}, gateway, True),
+            ("options_string_true", {opt_in: "true"}, gateway, True),
+            ("options_string_false", {opt_in: "false"}, gateway, False),
+            ("connection_fallback", None, gateway_with_standalone_customs, True),
+            (
+                "options_override_connection",
+                {opt_in: False},
+                gateway_with_standalone_customs,
+                False,
+            ),
+        ]
+        for name, options, carrier, expected in cases:
+            with self.subTest(case=name):
+                request = self._request(options, carrier)
+                self.assertIs(request.ctx["standalone_customs_documents"], expected)
+
+    def test_standalone_customs_documents_is_not_an_additional_service(self):
+        request = self._request({"postnord_standalone_customs_documents": True})
+        service = lib.to_dict(request.serialize())["shipment"][0]["service"]
+        self.assertEqual(service, {"basicServiceCode": "UX"})
 
 
 class TestPostNordCustomsInvoice(unittest.TestCase):
