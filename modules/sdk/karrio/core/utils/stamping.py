@@ -11,12 +11,17 @@ printout, so the document type to stamp under is not always the category the
 document arrived with. ``classify_customs_composition`` reads the section
 markers the carrier plugin declares in ``document_sections`` and names the
 registry document type (``cn22`` or ``label_cn22``) and, for PDF, the page
-carrying the declaration; the consumer passes that type to ``stamp_document``::
+carrying the declaration; the consumer passes both to ``stamp_document``, which
+applies the seed's placement on that page (ZPL classifies with no page)::
 
     result = lib.classify_customs_composition(document, carrier="acme")
     if result.doc_type:
         document = lib.stamp_document(
-            document, image=signature, carrier="acme", doc_type=result.doc_type
+            document,
+            image=signature,
+            carrier="acme",
+            doc_type=result.doc_type,
+            page=result.page,
         )
 """
 
@@ -899,6 +904,7 @@ def stamp_document(
     date: str = None,
     graphic_name: str = None,
     keyword: str = None,
+    page: int = None,
 ) -> models.ShippingDocument:
     """Composite a base64 PNG onto a returned carrier document.
 
@@ -925,6 +931,14 @@ def stamp_document(
     composited preceding the signature within the placement, at the
     placement's rotation.
 
+    An optional one-based ``page`` applies a registry-resolved PDF placement on
+    that page instead of the seed's own, so a seed measured on one page stamps
+    the page a classification names; an out-of-range page raises. It applies
+    only to registry resolution: combined with a fully anchored placement,
+    which already names its page, it raises as a second, contradictory
+    anchor, and against ZPL, which has no pages, it raises rather than being
+    silently ignored.
+
     The utility composites pixels only: it stores nothing and makes no
     assertion about the legal validity or signature semantics of the result.
     """
@@ -946,6 +960,12 @@ def stamp_document(
             "format; a stamp keyword can only locate a field in a ZPL document"
         )
 
+    if page is not None and document_format != "PDF":
+        raise ValueError(
+            f"A stamp page is unsupported for the '{document_format}' format; "
+            "only a PDF document has pages to select"
+        )
+
     fully_anchored = (
         placement is not None and placement.x is not None and placement.y is not None
     )
@@ -954,6 +974,12 @@ def stamp_document(
         raise ValueError(
             "A stamp keyword cannot be combined with a fully anchored "
             "placement (both x and y set); supply one anchor, not two"
+        )
+
+    if fully_anchored and page is not None:
+        raise ValueError(
+            "A stamp page cannot be combined with a fully anchored placement "
+            "(both x and y set); set the page on the placement instead"
         )
 
     if fully_anchored:
@@ -1003,6 +1029,8 @@ def stamp_document(
                 "No stamp placement was supplied and no registry seed "
                 f"resolves for key '{key}'"
             )
+        if page is not None:
+            resolved = attr.evolve(resolved, page=page)
 
     request = StampRequest(
         image=image,
