@@ -43,6 +43,7 @@ BRANCHES=(
   feat-postnord-cn22-stamping
   feat-postnord-customs-invoice
   fix-postnord-eu-vat-territories
+  feat-postnord-eori-vat-fallback
   dev-nix-flake
   docs-openspec
 )
