@@ -366,7 +366,9 @@ class TestPostNordShipment(unittest.TestCase):
     def test_create_shipment_customs_registration_numbers_empty_reject(self):
         # Option-state truthiness: empty-string or None options count as
         # absent, and a CN22 without EORI, VOEC, or IOSS is rejected before
-        # submission, as PostNord rejects it (SACUS-BR-24062502).
+        # submission, as PostNord rejects it (SACUS-BR-24062502). The
+        # shipper carries no state_tax_id either, so the address fallback
+        # is exhausted and the error names it.
         for label, options in [
             ("empty", {"eori_number": "", "voec_number": None}),
             ("absent", {}),
@@ -397,7 +399,8 @@ class TestPostNordShipment(unittest.TestCase):
                     {
                         "customs.options": (
                             "a CN22 declaration requires at least one of "
-                            "eori_number, voec_number, or ioss_number"
+                            "eori_number, voec_number, or ioss_number, "
+                            "or a shipper state_tax_id to use as the EORI"
                         )
                     },
                 )
