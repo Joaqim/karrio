@@ -2,7 +2,7 @@
 
 ## 1. Worktree setup
 
-- [ ] 1.1 Create `.worktrees/feat-postnord-eori-vat-fallback` with an explicit start point at the latest postnord connector branch tip per the `BRANCHES` list in `assemble-develop.sh` (never from generated `develop` directly), and register the branch in `BRANCHES` on `docs-openspec` per the fork workflow; verify `develop-status.sh --fetch` lists the new branch and `rebuild-develop.sh` succeeds.
+- [x] 1.1 Create `.worktrees/feat-postnord-eori-vat-fallback` with an explicit start point at the latest postnord connector branch tip per the `BRANCHES` list in `assemble-develop.sh` (never from generated `develop` directly), and register the branch in `BRANCHES` on `docs-openspec` per the fork workflow; verify `develop-status.sh --fetch` lists the new branch and `rebuild-develop.sh` succeeds.
 
 ## 2. EORI resolution helper and CN22 branch
 
