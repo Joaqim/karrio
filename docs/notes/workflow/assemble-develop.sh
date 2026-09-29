@@ -30,6 +30,7 @@ BRANCHES=(
   fix-fedex-state-code-countries
   fix-state-code-normalization
   fix-dashboard-carrier-options
+  fix-dashboard-address-template-fields
   chore-sdk-pypdf
   feat-tracker-locale
   feat-shipment-advisors
