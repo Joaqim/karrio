@@ -725,6 +725,26 @@ class TestPostNordShipment(unittest.TestCase):
             )
             self.assertListEqual(lib.to_dict(parsed_response), ParsedErrorResponse)
 
+    def test_parse_missing_content_error_response(self):
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = MissingContentErrorResponse
+            parsed_response = (
+                karrio.Shipment.create(self.ShipmentRequest).from_(gateway).parse()
+            )
+            self.assertListEqual(
+                lib.to_dict(parsed_response), ParsedMissingContentErrorResponse
+            )
+
+    def test_parse_error_response_without_explanation_text(self):
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = NoExplanationErrorResponse
+            parsed_response = (
+                karrio.Shipment.create(self.ShipmentRequest).from_(gateway).parse()
+            )
+            self.assertListEqual(
+                lib.to_dict(parsed_response), ParsedNoExplanationErrorResponse
+            )
+
     def test_parse_partial_failure_response(self):
         # A mixed 200/201 booking: one parcel is allocated ids + label, another
         # fails inline. The successful shipment details must be preserved and the
@@ -3270,10 +3290,11 @@ ParsedErrorResponse = [
             "code": "APPLICATION_ID",
             "message": "applicationId (2458) is not a type of integer",
             "details": {
+                "summary": "Invalid indata object EdiInstruction",
                 "references": {
                     "CustomerOriginValidationError.type": "MANDATORY_FIELDS_MISSING",
                     "CustomerOriginValidationError.subType": "APPLICATION_ID",
-                }
+                },
             },
         },
         {
@@ -3282,12 +3303,82 @@ ParsedErrorResponse = [
             "code": "ITEM_IDENTIFICATION",
             "message": "itemIdentification is a required field",
             "details": {
+                "summary": "Invalid indata object EdiInstruction",
                 "references": {
                     "CustomerOriginValidationError.type": "MANDATORY_FIELDS_MISSING",
                     "CustomerOriginValidationError.subType": "ITEM_IDENTIFICATION",
-                }
+                },
             },
         },
+    ],
+]
+
+# Captured from a live SE to CA booking on service 34 whose CN22 line had
+# no content.
+MissingContentErrorResponse = """{
+  "message": "Invalid indata object EdiInstruction",
+  "compositeFault": {
+    "faults": [
+      {
+        "explanationText": "content is a required field",
+        "faultReferences": [
+          {"key": "CustomerOriginValidationError.type", "value": "MANDATORY_FIELDS_MISSING"},
+          {"key": "CustomerOriginValidationError.subType", "value": "CONTENT"}
+        ]
+      }
+    ]
+  }
+}"""
+
+ParsedMissingContentErrorResponse = [
+    None,
+    [
+        {
+            "carrier_id": "postnord",
+            "carrier_name": "postnord",
+            "code": "CONTENT",
+            "message": (
+                "content is a required field "
+                "(set customs.commodities[].title or description)"
+            ),
+            "details": {
+                "summary": "Invalid indata object EdiInstruction",
+                "references": {
+                    "CustomerOriginValidationError.type": "MANDATORY_FIELDS_MISSING",
+                    "CustomerOriginValidationError.subType": "CONTENT",
+                },
+            },
+        }
+    ],
+]
+
+NoExplanationErrorResponse = """{
+  "message": "Invalid indata object EdiInstruction",
+  "compositeFault": {
+    "faults": [
+      {
+        "faultReferences": [
+          {"key": "CustomerOriginValidationError.subType", "value": "ITEM_IDENTIFICATION"}
+        ]
+      }
+    ]
+  }
+}"""
+
+ParsedNoExplanationErrorResponse = [
+    None,
+    [
+        {
+            "carrier_id": "postnord",
+            "carrier_name": "postnord",
+            "code": "ITEM_IDENTIFICATION",
+            "message": "Invalid indata object EdiInstruction",
+            "details": {
+                "references": {
+                    "CustomerOriginValidationError.subType": "ITEM_IDENTIFICATION",
+                },
+            },
+        }
     ],
 ]
 
