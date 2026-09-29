@@ -9,7 +9,7 @@ What was done: ran `/opsx:ff` end to end; research subagent swept the postnord c
 
 What was learned: `ComputedAddress.tax_id` folds `federal_tax_id or state_tax_id`, so today a state-only shipper's value already reaches the invoice `vatNo` (`shipment/create.py:627`, core `units.py:1604`); no karrio connector sources EORI from an address field, making this change the first (dpd's option-then-address `vatNumber` is the nearest precedent); the user decided strict `federal_tax_id` for seller `vatNo` and the `state_tax_id` EORI fallback on both the CN22 and invoice branches plus the guard.
 
-What remains: implementation landed 2026-09-29 on `feat-postnord-eori-vat-fallback` (commits `3ffa686ce`..`1eb3f35ff`, full postnord suite 230 OK with 5 new tests), and all 8 tasks in the change's `tasks.md` are ticked; the fresh-context review gate and `openspec archive` are pending, with archive applying the spec delta to the main `postnord/customs-declaration` corpus.
+What remains: implementation landed 2026-09-29 on `feat-postnord-eori-vat-fallback` (commits `3ffa686ce`..`1eb3f35ff`, full postnord suite 230 OK with 5 new tests), the fresh-context review passed (APPROVED, no blockers), and the change is archived as `2026-09-29-postnord-eori-vat-fallback` with the main `postnord/customs-declaration` spec updated (52 scenarios). Only pushes remain (user's call), plus two optional review follow-ups: an invoice-branch precedence test in isolation, and a direct test that the D22 placement error fires even when `state_tax_id` would satisfy the registration rule.
 
 Downstream impact: the `fix-postnord-customs-line-content` change modifies the same requirement "Customs data is declared at booking time" and the same `shipment/create.py` sites; it is complete but unarchived, so whichever change archives second must rebase its MODIFIED block on the other's archived text, and whichever branch lands second in the develop assembly may need a small rebase. Sequence the two archives rather than running them concurrently.
 
@@ -21,10 +21,10 @@ The `tax_id` fold was a moderate divergence from the presumed clean federal/stat
 ## Confidence
 
 The change sits at implementation confidence: the full postnord suite passes from the feature worktree (230 OK, 5 new tests) with the worktree pinned ahead of the main checkout on `PYTHONPATH`, and the production diff matches the design decisions point for point.
-The fresh-context review gate has not run yet; it is the next promotion step before archive.
+The fresh-context review gate passed 2026-09-29 with verdict APPROVED, no blockers, and two non-blocking nits recorded as optional follow-ups.
 
 ## Next session
 
-Recommended entry: fresh-context review of `feat-postnord-eori-vat-fallback` against the change artifacts and `PRDs/PRD_POSTNORD_INTEGRATION.md` (the repo's review gate), then `/opsx:archive` sequenced against `fix-postnord-customs-line-content`.
-Push state: `origin/develop` last matched everything at `bf66a14a6`; since then docs-openspec collected the `BRANCHES`-order swap, checkpoint refreshes, and task ticks, the feature branch collected the seven implementation commits (`3ffa686ce`..`1eb3f35ff`), and `develop` was rebuilt locally to `c5c83c3e2` — none of it pushed, and pushing (including the dev-deploying develop force-with-lease) is the user's call.
+Recommended entry: pushes only, when the user calls for them (feature branch, docs-openspec, and the dev-deploying develop force-with-lease); `fix-postnord-customs-line-content` still needs its own archive, and its MODIFIED requirement block must be rebased onto the text archived here, since both changes modify the requirement "Customs data is declared at booking time".
+Push state: `origin/develop` last matched everything at `bf66a14a6`; since then docs-openspec collected the `BRANCHES`-order swap, checkpoint refreshes, and task ticks, the feature branch collected the seven implementation commits (`3ffa686ce`..`1eb3f35ff`), and `develop` was rebuilt locally to `c5c83c3e2` before the archive and again after it — none of it pushed, and pushing (including the dev-deploying develop force-with-lease) is the user's call.
 Run `develop-status.sh --fetch` for the current tip before acting.
