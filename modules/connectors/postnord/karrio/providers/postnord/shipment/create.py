@@ -431,7 +431,7 @@ def _customs_declaration(
     customs: models.Customs,
     options: units.CustomsOptions,
     parcel_weight: typing.Optional[float],
-    country_of_origin: str,
+    shipper: units.ComputedAddress,
 ) -> postnord_req.CustomsDeclarationCN22Type:
     """Map unified customs data onto the booking's CN22 declaration branch.
 
@@ -442,13 +442,15 @@ def _customs_declaration(
     (``CN22CategoryType.lookup``), with unknown values passing through
     verbatim.
     Registration numbers are per-request passthrough from ``customs.options``
-    converted with the provider ``CustomsOption`` enum; a declaration with
-    none of them is rejected locally, matching PostNord's SACUS-BR-24062502.
+    converted with the provider ``CustomsOption`` enum, with the EORI
+    falling back to the shipper's ``state_tax_id``
+    (``resolve_eori_number``); a declaration with none of them and no
+    fallback is rejected locally, matching PostNord's SACUS-BR-24062502.
     """
     provider_units.enforce_customs_declaration_lines(
         len(customs.commodities), field="customs.commodities"
     )
-    provider_units.enforce_cn22_registration_numbers(options)
+    provider_units.enforce_cn22_registration_numbers(options, shipper)
     provider_units.enforce_customs_line_content(customs.commodities)
 
     total_gross_weight = _total_gross_weight(parcel_weight, customs.commodities)
@@ -462,7 +464,7 @@ def _customs_declaration(
         EORIorPersonalIdNumber=options.eori_number.state or None,
         voec=options.voec_number.state or None,
         ioss=options.ioss_number.state or None,
-        countryOfOrigin=country_of_origin,
+        countryOfOrigin=shipper.country_code,
         categoryOfItem=lib.identity(
             postnord_req.CategoryOfItemType(categoryType=[category])
             if category
@@ -763,7 +765,7 @@ def shipment_request(
             payload.customs,
             options=customs_options,
             parcel_weight=packages.weight.KG,
-            country_of_origin=shipper.country_code,
+            shipper=shipper,
         )
         if has_customs and customs_structure == provider_units.CustomsStructure.cn22
         else None
