@@ -445,9 +445,7 @@ class TestPostNordShipment(unittest.TestCase):
         declaration = lib.to_dict(request.serialize())["shipment"][0][
             "customsDeclarationCN22"
         ]
-        self.assertEqual(
-            declaration["EORIorPersonalIdNumber"], "SE556703677001"
-        )
+        self.assertEqual(declaration["EORIorPersonalIdNumber"], "SE556703677001")
 
     def test_create_shipment_customs_eori_option_precedence_over_state_tax_id(self):
         # Both sources present: the customs option wins over the address
