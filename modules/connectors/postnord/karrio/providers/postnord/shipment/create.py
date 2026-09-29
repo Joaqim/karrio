@@ -491,10 +491,12 @@ def _customs_invoice_errors(
 ) -> typing.Dict[str, str]:
     """Collect the customs invoice fields the booking swagger requires.
 
-    Seller ``vatNo``, ``invoice.invoiceNo``, seller and buyer
-    ``contacts.name``/``phoneNo``, and per-line ``hsTariffNumber`` and
-    ``countryOfOrigin`` are required by booking.swagger.json and cannot be
-    derived when absent from the unified payload.
+    Seller ``vatNo`` (strictly the shipper's federal tax identifier; the
+    state identifier is reserved for EORI resolution), ``invoice.invoiceNo``,
+    seller and buyer ``contacts.name``/``phoneNo``, and per-line
+    ``hsTariffNumber`` and ``countryOfOrigin`` are required by
+    booking.swagger.json and cannot be derived when absent from the unified
+    payload.
     """
     required = "is required for a PostNord customs invoice"
     party_errors = {
@@ -519,7 +521,7 @@ def _customs_invoice_errors(
     return {
         **(
             {"shipper.federal_tax_id": f"shipper VAT number {required}"}
-            if not shipper.tax_id
+            if not shipper.federal_tax_id
             else {}
         ),
         **(
@@ -630,7 +632,7 @@ def _customs_invoice(
                 if settings.customer_number
                 else None
             ),
-            vatNo=shipper.tax_id,
+            vatNo=shipper.federal_tax_id,
             eoriNo=provider_units.resolve_eori_number(options, shipper),
         ),
         buyer=_invoice_party(recipient, vatNo=recipient.tax_id),
