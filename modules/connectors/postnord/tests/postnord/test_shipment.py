@@ -526,6 +526,36 @@ class TestPostNordShipment(unittest.TestCase):
             },
         )
 
+    def test_create_shipment_customs_registration_misplaced_not_rescued_by_state_tax_id(self):
+        # The placement guard fires before the CN22 branch resolves the
+        # EORI, so a shipper state_tax_id does not rescue a registration
+        # number sent under shipment-level options.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            shipment, messages = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(
+                        **{
+                            **CustomsStateTaxIdShipmentPayload,
+                            "options": {"eori_number": "SE556000123401"},
+                        }
+                    )
+                )
+                .from_(gateway)
+                .parse()
+            )
+            mock.assert_not_called()
+        self.assertIsNone(shipment)
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0].code, "SHIPPING_SDK_FIELD_ERROR")
+        self.assertEqual(
+            messages[0].details,
+            {
+                "options.eori_number": (
+                    "customs registration number; send it under customs.options"
+                ),
+            },
+        )
+
     def test_create_shipment_customs_registration_numbers_misplaced_empty_pass(self):
         # The guard is truthy-only: empty values send nothing under either
         # placement, so the booking is identical to one without the keys.
