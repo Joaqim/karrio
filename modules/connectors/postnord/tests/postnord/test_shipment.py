@@ -2388,6 +2388,19 @@ class TestPostNordCustomsInvoice(unittest.TestCase):
         invoice = self._invoice(CustomsInvoiceStateTaxIdShipmentPayload)
         self.assertEqual(invoice["seller"]["eoriNo"], "SE556703677001")
 
+    def test_create_shipment_customs_invoice_eori_option_precedence_over_state_tax_id(self):
+        # Both sources present: the customs option wins over the address
+        # fallback, as on the CN22 branch.
+        payload = {
+            **CustomsInvoiceStateTaxIdShipmentPayload,
+            "customs": {
+                **CustomsInvoiceStateTaxIdShipmentPayload["customs"],
+                "options": {"eori_number": "SE556000123401"},
+            },
+        }
+        invoice = self._invoice(payload)
+        self.assertEqual(invoice["seller"]["eoriNo"], "SE556000123401")
+
     def test_create_shipment_customs_invoice_line_totals_over_quantity(self):
         invoice = self._invoice(
             {
