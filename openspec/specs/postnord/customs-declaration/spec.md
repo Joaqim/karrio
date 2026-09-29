@@ -33,12 +33,17 @@ Parcel products are all PostNord services that are neither letter services nor I
 #### Scenario: Customs invoice is built from unified data
 
 - **WHEN** a customs invoice is sent
-- **THEN** it names the shipper as seller (with the shipper tax identifier as VAT number, the PostNord customer number as party identification, and the EORI when present) and the recipient as buyer, carries the invoice number from `customs.invoice` (or the shipment reference when absent) and the date from `customs.invoice_date` as PostNord's invoice shipping date, lists the commodities as its detailed description with quantity, value, currency, net and gross weight, HS code, and country of origin, and states the invoice total and total gross weight derived from the commodities
+- **THEN** it names the shipper as seller (with the shipper's federal tax identifier as VAT number, the PostNord customer number as party identification, and the EORI resolved from `customs.options.eori_number` falling back to the shipper's state tax identifier when present) and the recipient as buyer, carries the invoice number from `customs.invoice` (or the shipment reference when absent) and the date from `customs.invoice_date` as PostNord's invoice shipping date, lists the commodities as its detailed description with quantity, value, currency, net and gross weight, HS code, and country of origin, and states the invoice total and total gross weight derived from the commodities
 
 #### Scenario: Seller VAT number is required
 
-- **WHEN** a customs invoice would be sent and the shipper carries no tax identifier
+- **WHEN** a customs invoice would be sent and the shipper carries no federal tax identifier
 - **THEN** the operation fails with a field error naming the shipper VAT number and no request is sent to PostNord
+
+#### Scenario: State tax identifier alone does not satisfy the VAT requirement
+
+- **WHEN** a customs invoice would be sent and the shipper carries a state tax identifier but no federal tax identifier
+- **THEN** the operation fails with a field error naming the shipper VAT number and no request is sent to PostNord, because the state tax identifier is reserved for EORI resolution and is not sent as a VAT number
 
 #### Scenario: Customs invoice required party and line fields fail fast
 
@@ -70,14 +75,34 @@ Parcel products are all PostNord services that are neither letter services nor I
 - **WHEN** the customs payload carries `options.eori_number`, `options.voec_number`, or `options.ioss_number`
 - **THEN** the booking's declaration carries them on the corresponding registration fields of the selected customs structure
 
+#### Scenario: CN22 EORI falls back to the shipper state tax identifier
+
+- **WHEN** a CN22 declaration is sent whose customs payload carries no `options.eori_number` and whose shipper carries a `state_tax_id`
+- **THEN** the CN22's EORI registration field carries the shipper's state tax identifier
+
+#### Scenario: Customs invoice EORI falls back to the shipper state tax identifier
+
+- **WHEN** a customs invoice is sent whose customs payload carries no `options.eori_number` and whose shipper carries a `state_tax_id`
+- **THEN** the invoice seller's EORI field carries the shipper's state tax identifier
+
+#### Scenario: Customs option EORI takes precedence over the address fallback
+
+- **WHEN** both `customs.options.eori_number` and the shipper's `state_tax_id` are present
+- **THEN** the declaration's EORI registration field carries the customs option value
+
 #### Scenario: CN22 without any registration number fails fast
 
-- **WHEN** a CN22 declaration would be sent and the customs payload carries none of `options.eori_number`, `options.voec_number`, or `options.ioss_number`
-- **THEN** the operation fails with a field error naming the registration numbers and no request is sent to PostNord, matching PostNord's rejection `SACUS-BR-24062502` ("Customs CN22/CN23 should have either EORI, VOEC, IOSS")
+- **WHEN** a CN22 declaration would be sent whose customs payload carries none of `options.eori_number`, `options.voec_number`, or `options.ioss_number` and whose shipper carries no `state_tax_id`
+- **THEN** the operation fails with a field error naming the registration numbers and the shipper state tax identifier fallback and no request is sent to PostNord, matching PostNord's rejection `SACUS-BR-24062502` ("Customs CN22/CN23 should have either EORI, VOEC, IOSS")
+
+#### Scenario: CN22 registration guard is satisfied by the shipper state tax identifier
+
+- **WHEN** a CN22 declaration would be sent whose customs payload carries no registration number option and whose shipper carries a `state_tax_id`
+- **THEN** no registration field error is raised and the booking request is sent
 
 #### Scenario: Customs invoice without registration numbers is sent as-is
 
-- **WHEN** a customs invoice is sent and the customs payload carries no registration number
+- **WHEN** a customs invoice is sent and the customs payload carries no registration number option and the shipper carries no `state_tax_id`
 - **THEN** the customs invoice is sent as-is for PostNord to judge, until a sandbox verification establishes whether PostNord applies the same registration rule to customs invoices
 
 #### Scenario: Bookings without customs data are unchanged
