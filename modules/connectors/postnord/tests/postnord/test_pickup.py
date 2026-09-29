@@ -207,7 +207,7 @@ ParsedErrorResponse = [
             "carrier_name": "postnord",
             "code": "PNCS-409",
             "message": "No pickup slot available",
-            "details": {},
+            "details": {"summary": "Unable to book pickup"},
         }
     ],
 ]
