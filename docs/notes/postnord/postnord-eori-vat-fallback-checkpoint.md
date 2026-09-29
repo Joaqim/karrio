@@ -11,7 +11,7 @@ What was learned: `ComputedAddress.tax_id` folds `federal_tax_id or state_tax_id
 
 What remains: implementation, all 8 tasks in the change's `tasks.md` are open; run `/opsx:apply` against the feature worktree; `openspec archive` is deliberately deferred until tasks complete, because archive applies the spec delta to the main `postnord/customs-declaration` corpus.
 
-Downstream impact: the parallel change `postnord-customs-line-content-fix` (active, branch `fix-postnord-customs-line-content`, dirty and unregistered in BRANCHES at checkpoint time) modifies the same requirement "Customs data is declared at booking time"; whichever change archives second must rebase its MODIFIED block on the other's archived text, so sequence the two archives rather than running them concurrently.
+Downstream impact: the `fix-postnord-customs-line-content` change modifies the same requirement "Customs data is declared at booking time" and the same `shipment/create.py` sites; it is complete but unarchived, so whichever change archives second must rebase its MODIFIED block on the other's archived text, and whichever branch lands second in the develop assembly may need a small rebase. Sequence the two archives rather than running them concurrently.
 
 ## Surprises
 
@@ -27,4 +27,5 @@ Task 4.2's full postnord suite run is the first promotion gate, and the fork's w
 
 Recommended entry: `/opsx:apply` on `postnord-eori-vat-fallback` from `.worktrees/feat-postnord-eori-vat-fallback`; task 1.1 (worktree, registration, rebuild verification) is already done and only needs its checkbox ticked after verification.
 Alternative entry: watch for the two parallel changes to land first, then apply with a current base.
-No pushes were made this session; `develop` (+22/-19 vs origin) and `docs-openspec` (ahead 3) are local-only and pushing remains the user's call.
+Every ref was pushed at close-out verification (`origin/develop` at `bf66a14a6`, all branches equal to their origin counterparts); the `BRANCHES`-ordering tidy afterwards regenerated `develop` locally, and pushing the regenerated develop — the dev-deploying push — remains the user's call.
+Run `develop-status.sh --fetch` for the current tip before acting.
