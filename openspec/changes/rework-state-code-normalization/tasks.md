@@ -21,9 +21,9 @@
 ## 4. Integration checks
 
 - [x] 4.1 Run the SDK suite, the FedEx and DHL Express connector suites, and `karrio.server.core.tests` and `karrio.server.manager.tests` through `server-tests-overlay.sh`, and verify all pass with `git diff upstream/main...HEAD -- modules/core` empty
-- [ ] 4.2 Push `fix-state-code-normalization` with `--force-with-lease`, rewrite PR #1141's title to `fix(fedex): send state names as subdivision codes` and its body in the Fix PR format (Bug, Root Cause, Fix, Tests) stating the dependency on #1143 and the removal of the server-side rewrite, and verify with `gh pr view 1141 -R karrioapi/karrio`
+- [x] 4.2 Push `fix-state-code-normalization` with `--force-with-lease`, rewrite PR #1141's title to `fix(fedex): send state names as subdivision codes` and its body in the Fix PR format (Bug, Root Cause, Fix, Tests) stating the dependency on #1143 and the removal of the server-side rewrite, and verify with `gh pr view 1141 -R karrioapi/karrio`
 
 ## 5. Fork develop
 
-- [ ] 5.1 On docs-openspec, move `fix-fedex-state-code-countries` before `fix-state-code-normalization` in `BRANCHES` of `docs/notes/workflow/assemble-develop.sh`, update the branch listing in `develop-assembly.md` if it states the order, commit, and verify `assemble-develop.sh` produces `develop-next` without conflicts
-- [ ] 5.2 Verify on `develop-next` that creating an address with `country_code` `SE` and `state_code` "Västra Götaland" through the manager API returns the state unchanged, then hand the develop push to the user
+- [x] 5.1 On docs-openspec, move `fix-fedex-state-code-countries` before `fix-state-code-normalization` in `BRANCHES` of `docs/notes/workflow/assemble-develop.sh`, update the branch listing in `develop-assembly.md` if it states the order, commit, and verify `assemble-develop.sh` produces `develop-next` without conflicts
+- [x] 5.2 Verify on `develop-next` that creating an address with `country_code` `SE` and `state_code` "Västra Götaland" through the manager API returns the state unchanged, then hand the develop push to the user
