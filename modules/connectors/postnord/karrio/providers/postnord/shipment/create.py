@@ -461,7 +461,7 @@ def _customs_declaration(
     )
 
     return postnord_req.CustomsDeclarationCN22Type(
-        EORIorPersonalIdNumber=options.eori_number.state or None,
+        EORIorPersonalIdNumber=provider_units.resolve_eori_number(options, shipper),
         voec=options.voec_number.state or None,
         ioss=options.ioss_number.state or None,
         countryOfOrigin=shipper.country_code,

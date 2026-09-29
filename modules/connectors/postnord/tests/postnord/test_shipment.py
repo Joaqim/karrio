@@ -436,6 +436,37 @@ class TestPostNordShipment(unittest.TestCase):
                 }
                 self.assertEqual(declaration, {**expected, element: "REG123"})
 
+    def test_create_shipment_customs_eori_falls_back_to_shipper_state_tax_id(self):
+        # No eori_number option: the shipper's state_tax_id resolves as the
+        # CN22 EORI, so address-carried identifiers still reach PostNord.
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**CustomsStateTaxIdShipmentPayload)
+        )
+        declaration = lib.to_dict(request.serialize())["shipment"][0][
+            "customsDeclarationCN22"
+        ]
+        self.assertEqual(
+            declaration["EORIorPersonalIdNumber"], "SE556703677001"
+        )
+
+    def test_create_shipment_customs_eori_option_precedence_over_state_tax_id(self):
+        # Both sources present: the customs option wins over the address
+        # fallback.
+        payload = {
+            **CustomsStateTaxIdShipmentPayload,
+            "customs": {
+                **CustomsStateTaxIdShipmentPayload["customs"],
+                "options": {"eori_number": "SE556000123401"},
+            },
+        }
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        declaration = lib.to_dict(request.serialize())["shipment"][0][
+            "customsDeclarationCN22"
+        ]
+        self.assertEqual(declaration["EORIorPersonalIdNumber"], "SE556000123401")
+
     def test_create_shipment_customs_registration_numbers_misplaced_reject(self):
         # Registration keys under shipment-level options are dropped by the
         # typed-options helper without any signal; the booking rejects the
@@ -2996,6 +3027,17 @@ CustomsRegistrationShipmentRequest = {
             },
         }
     ],
+}
+
+# CN22 booking whose identifiers live on the shipper address: no
+# registration-number options, so the state_tax_id resolves as the EORI.
+CustomsStateTaxIdShipmentPayload = {
+    **CustomsShipmentPayload,
+    "shipper": {**ShipmentPayload["shipper"], "state_tax_id": "SE556703677001"},
+    "customs": {
+        **CustomsShipmentPayload["customs"],
+        "options": {},
+    },
 }
 
 
