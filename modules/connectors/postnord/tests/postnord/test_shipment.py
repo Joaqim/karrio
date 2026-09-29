@@ -2240,6 +2240,29 @@ class TestPostNordCustomsInvoice(unittest.TestCase):
             },
         )
 
+    def test_create_shipment_customs_invoice_state_tax_id_is_not_a_vat_number(self):
+        # The state tax identifier is reserved for EORI resolution: a
+        # state-only shipper fails the VAT requirement with a field error
+        # instead of having its EORI sent as the seller VAT number.
+        payload = {
+            **CustomsInvoiceStateTaxIdShipmentPayload,
+            "shipper": {
+                key: value
+                for key, value in CustomsInvoiceStateTaxIdShipmentPayload[
+                    "shipper"
+                ].items()
+                if key != "federal_tax_id"
+            },
+        }
+        self.assertEqual(
+            self._field_errors(payload),
+            {
+                "shipper.federal_tax_id": (
+                    "shipper VAT number is required for a PostNord customs invoice"
+                )
+            },
+        )
+
     def test_create_shipment_customs_invoice_without_party_contacts(self):
         # Contact name falls back to the company name, so only a party with
         # neither person nor company name lacks one.
