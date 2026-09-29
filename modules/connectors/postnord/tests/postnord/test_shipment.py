@@ -467,6 +467,30 @@ class TestPostNordShipment(unittest.TestCase):
         ]
         self.assertEqual(declaration["EORIorPersonalIdNumber"], "SE556000123401")
 
+    def test_create_shipment_customs_registration_guard_state_tax_id_books(self):
+        # End to end: no registration-number options, but the shipper's
+        # state_tax_id satisfies the CN22 guard, so the booking is sent with
+        # no field error and the request carries the state value as the EORI.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = CombinedBookingResponse
+            details, messages = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(**CustomsStateTaxIdShipmentPayload)
+                )
+                .from_(gateway)
+                .parse()
+            )
+            mock.assert_called_once()
+            booking_request = json.loads(mock.call_args[1]["data"])
+        self.assertIsNotNone(details)
+        self.assertEqual(messages, [])
+        self.assertEqual(
+            booking_request["shipment"][0]["customsDeclarationCN22"][
+                "EORIorPersonalIdNumber"
+            ],
+            "SE556703677001",
+        )
+
     def test_create_shipment_customs_registration_numbers_misplaced_reject(self):
         # Registration keys under shipment-level options are dropped by the
         # typed-options helper without any signal; the booking rejects the
