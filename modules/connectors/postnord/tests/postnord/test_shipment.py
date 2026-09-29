@@ -2337,6 +2337,12 @@ class TestPostNordCustomsInvoice(unittest.TestCase):
         self.assertEqual(invoice["voec"], "1234567")
         self.assertEqual(invoice["ioss"], "IM1234567890")
 
+    def test_create_shipment_customs_invoice_eori_falls_back_to_state_tax_id(self):
+        # No eori_number option: the seller eoriNo carries the shipper's
+        # state_tax_id, resolved by the same helper as the CN22 branch.
+        invoice = self._invoice(CustomsInvoiceStateTaxIdShipmentPayload)
+        self.assertEqual(invoice["seller"]["eoriNo"], "SE556703677001")
+
     def test_create_shipment_customs_invoice_line_totals_over_quantity(self):
         invoice = self._invoice(
             {
@@ -3244,6 +3250,21 @@ CustomsInvoiceShipmentRequest = {
             },
         }
     ],
+}
+
+# Customs invoice booking whose EORI lives on the shipper address: no
+# registration-number options, so the state_tax_id resolves as the seller
+# eoriNo. The federal identifier stays for the seller vatNo.
+CustomsInvoiceStateTaxIdShipmentPayload = {
+    **CustomsInvoiceShipmentPayload,
+    "shipper": {
+        **CustomsInvoiceShipmentPayload["shipper"],
+        "state_tax_id": "SE556703677001",
+    },
+    "customs": {
+        **CustomsInvoiceShipmentPayload["customs"],
+        "options": {},
+    },
 }
 
 ShipmentCancelRequest = {
