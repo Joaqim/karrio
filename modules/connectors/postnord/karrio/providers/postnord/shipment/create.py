@@ -598,8 +598,10 @@ def _customs_invoice(
     ``commercial_invoice`` selects COMMERCIAL or PROFORMA literally. Line
     values and weights are totals over the quantity; the invoice total and
     total net weight sum the lines, while the total gross weight is the
-    parcel weight, which includes packaging. Registration numbers are passed through without the CN22
-    completeness rule, which the sandbox did not apply to customs invoices.
+    parcel weight, which includes packaging. Registration numbers pass
+    through without the CN22 completeness rule, which the sandbox did not
+    apply to customs invoices; the EORI resolves through the shared
+    option-then-address helper (``resolve_eori_number``).
     """
     provider_units.enforce_customs_line_content(customs.commodities)
     errors = _customs_invoice_errors(shipper, recipient, customs, invoice_number)
@@ -629,7 +631,7 @@ def _customs_invoice(
                 else None
             ),
             vatNo=shipper.tax_id,
-            eoriNo=options.eori_number.state or None,
+            eoriNo=provider_units.resolve_eori_number(options, shipper),
         ),
         buyer=_invoice_party(recipient, vatNo=recipient.tax_id),
         invoice=postnord_req.InvoiceType(
