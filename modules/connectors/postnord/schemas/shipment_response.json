@@ -56,6 +56,12 @@
                     "param": "field",
                     "value": "value"
                   }
+                ],
+                "faultReferences": [
+                  {
+                    "key": "CustomerOriginValidationError.subType",
+                    "value": "CONTENT"
+                  }
                 ]
               }
             ]
@@ -74,6 +80,12 @@
               {
                 "param": "field",
                 "value": "value"
+              }
+            ],
+            "faultReferences": [
+              {
+                "key": "CustomerOriginValidationError.subType",
+                "value": "CONTENT"
               }
             ]
           }
@@ -116,6 +128,12 @@
                     {
                       "param": "field",
                       "value": "value"
+                    }
+                  ],
+                  "faultReferences": [
+                    {
+                      "key": "CustomerOriginValidationError.subType",
+                      "value": "CONTENT"
                     }
                   ]
                 }
