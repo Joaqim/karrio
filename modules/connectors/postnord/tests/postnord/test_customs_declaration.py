@@ -401,6 +401,6 @@ ParsedRejection = [
         "carrier_name": "postnord",
         "code": "CNC-001",
         "message": "EDI must have been sent earlier",
-        "details": {},
+        "details": {"summary": "The request could not be processed"},
     }
 ]
