@@ -37,3 +37,21 @@ class TestMessageSerializer(TestCase):
             ],
         )
         self.assertTrue(serializer.is_valid(), serializer.errors)
+
+    def test_omits_missing_optional_fields_from_representation(self):
+        data = Message(
+            {
+                "carrier_id": "postnord",
+                "carrier_name": "postnord",
+                "message": "Label created",
+            }
+        ).data
+
+        self.assertDictEqual(
+            dict(data),
+            {
+                "carrier_id": "postnord",
+                "carrier_name": "postnord",
+                "message": "Label created",
+            },
+        )
