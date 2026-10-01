@@ -366,7 +366,9 @@ class TestPostNordShipment(unittest.TestCase):
     def test_create_shipment_customs_registration_numbers_empty_reject(self):
         # Option-state truthiness: empty-string or None options count as
         # absent, and a CN22 without EORI, VOEC, or IOSS is rejected before
-        # submission, as PostNord rejects it (SACUS-BR-24062502).
+        # submission, as PostNord rejects it (SACUS-BR-24062502). The
+        # shipper carries no state_tax_id either, so the address fallback
+        # is exhausted and the error names it.
         for label, options in [
             ("empty", {"eori_number": "", "voec_number": None}),
             ("absent", {}),
@@ -397,7 +399,8 @@ class TestPostNordShipment(unittest.TestCase):
                     {
                         "customs.options": (
                             "a CN22 declaration requires at least one of "
-                            "eori_number, voec_number, or ioss_number"
+                            "eori_number, voec_number, or ioss_number, "
+                            "or a shipper state_tax_id to use as the EORI"
                         )
                     },
                 )
@@ -433,6 +436,59 @@ class TestPostNordShipment(unittest.TestCase):
                 }
                 self.assertEqual(declaration, {**expected, element: "REG123"})
 
+    def test_create_shipment_customs_eori_falls_back_to_shipper_state_tax_id(self):
+        # No eori_number option: the shipper's state_tax_id resolves as the
+        # CN22 EORI, so address-carried identifiers still reach PostNord.
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**CustomsStateTaxIdShipmentPayload)
+        )
+        declaration = lib.to_dict(request.serialize())["shipment"][0][
+            "customsDeclarationCN22"
+        ]
+        self.assertEqual(declaration["EORIorPersonalIdNumber"], "SE556703677001")
+
+    def test_create_shipment_customs_eori_option_precedence_over_state_tax_id(self):
+        # Both sources present: the customs option wins over the address
+        # fallback.
+        payload = {
+            **CustomsStateTaxIdShipmentPayload,
+            "customs": {
+                **CustomsStateTaxIdShipmentPayload["customs"],
+                "options": {"eori_number": "SE556000123401"},
+            },
+        }
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        declaration = lib.to_dict(request.serialize())["shipment"][0][
+            "customsDeclarationCN22"
+        ]
+        self.assertEqual(declaration["EORIorPersonalIdNumber"], "SE556000123401")
+
+    def test_create_shipment_customs_registration_guard_state_tax_id_books(self):
+        # End to end: no registration-number options, but the shipper's
+        # state_tax_id satisfies the CN22 guard, so the booking is sent with
+        # no field error and the request carries the state value as the EORI.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = CombinedBookingResponse
+            details, messages = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(**CustomsStateTaxIdShipmentPayload)
+                )
+                .from_(gateway)
+                .parse()
+            )
+            mock.assert_called_once()
+            booking_request = json.loads(mock.call_args[1]["data"])
+        self.assertIsNotNone(details)
+        self.assertEqual(messages, [])
+        self.assertEqual(
+            booking_request["shipment"][0]["customsDeclarationCN22"][
+                "EORIorPersonalIdNumber"
+            ],
+            "SE556703677001",
+        )
+
     def test_create_shipment_customs_registration_numbers_misplaced_reject(self):
         # Registration keys under shipment-level options are dropped by the
         # typed-options helper without any signal; the booking rejects the
@@ -465,6 +521,36 @@ class TestPostNordShipment(unittest.TestCase):
                     "customs registration number; send it under customs.options"
                 ),
                 "options.voec_number": (
+                    "customs registration number; send it under customs.options"
+                ),
+            },
+        )
+
+    def test_create_shipment_customs_registration_misplaced_not_rescued_by_state_tax_id(self):
+        # The placement guard fires before the CN22 branch resolves the
+        # EORI, so a shipper state_tax_id does not rescue a registration
+        # number sent under shipment-level options.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            shipment, messages = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(
+                        **{
+                            **CustomsStateTaxIdShipmentPayload,
+                            "options": {"eori_number": "SE556000123401"},
+                        }
+                    )
+                )
+                .from_(gateway)
+                .parse()
+            )
+            mock.assert_not_called()
+        self.assertIsNone(shipment)
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0].code, "SHIPPING_SDK_FIELD_ERROR")
+        self.assertEqual(
+            messages[0].details,
+            {
+                "options.eori_number": (
                     "customs registration number; send it under customs.options"
                 ),
             },
@@ -2206,6 +2292,29 @@ class TestPostNordCustomsInvoice(unittest.TestCase):
             },
         )
 
+    def test_create_shipment_customs_invoice_state_tax_id_is_not_a_vat_number(self):
+        # The state tax identifier is reserved for EORI resolution: a
+        # state-only shipper fails the VAT requirement with a field error
+        # instead of having its EORI sent as the seller VAT number.
+        payload = {
+            **CustomsInvoiceStateTaxIdShipmentPayload,
+            "shipper": {
+                key: value
+                for key, value in CustomsInvoiceStateTaxIdShipmentPayload[
+                    "shipper"
+                ].items()
+                if key != "federal_tax_id"
+            },
+        }
+        self.assertEqual(
+            self._field_errors(payload),
+            {
+                "shipper.federal_tax_id": (
+                    "shipper VAT number is required for a PostNord customs invoice"
+                )
+            },
+        )
+
     def test_create_shipment_customs_invoice_without_party_contacts(self):
         # Contact name falls back to the company name, so only a party with
         # neither person nor company name lacks one.
@@ -2302,6 +2411,25 @@ class TestPostNordCustomsInvoice(unittest.TestCase):
         self.assertEqual(invoice["seller"]["eoriNo"], "SE556000123401")
         self.assertEqual(invoice["voec"], "1234567")
         self.assertEqual(invoice["ioss"], "IM1234567890")
+
+    def test_create_shipment_customs_invoice_eori_falls_back_to_state_tax_id(self):
+        # No eori_number option: the seller eoriNo carries the shipper's
+        # state_tax_id, resolved by the same helper as the CN22 branch.
+        invoice = self._invoice(CustomsInvoiceStateTaxIdShipmentPayload)
+        self.assertEqual(invoice["seller"]["eoriNo"], "SE556703677001")
+
+    def test_create_shipment_customs_invoice_eori_option_precedence_over_state_tax_id(self):
+        # Both sources present: the customs option wins over the address
+        # fallback, as on the CN22 branch.
+        payload = {
+            **CustomsInvoiceStateTaxIdShipmentPayload,
+            "customs": {
+                **CustomsInvoiceStateTaxIdShipmentPayload["customs"],
+                "options": {"eori_number": "SE556000123401"},
+            },
+        }
+        invoice = self._invoice(payload)
+        self.assertEqual(invoice["seller"]["eoriNo"], "SE556000123401")
 
     def test_create_shipment_customs_invoice_line_totals_over_quantity(self):
         invoice = self._invoice(
@@ -2995,6 +3123,17 @@ CustomsRegistrationShipmentRequest = {
     ],
 }
 
+# CN22 booking whose identifiers live on the shipper address: no
+# registration-number options, so the state_tax_id resolves as the EORI.
+CustomsStateTaxIdShipmentPayload = {
+    **CustomsShipmentPayload,
+    "shipper": {**ShipmentPayload["shipper"], "state_tax_id": "SE556703677001"},
+    "customs": {
+        **CustomsShipmentPayload["customs"],
+        "options": {},
+    },
+}
+
 
 def _customs_payload(lines: int) -> dict:
     return {
@@ -3199,6 +3338,21 @@ CustomsInvoiceShipmentRequest = {
             },
         }
     ],
+}
+
+# Customs invoice booking whose EORI lives on the shipper address: no
+# registration-number options, so the state_tax_id resolves as the seller
+# eoriNo. The federal identifier stays for the seller vatNo.
+CustomsInvoiceStateTaxIdShipmentPayload = {
+    **CustomsInvoiceShipmentPayload,
+    "shipper": {
+        **CustomsInvoiceShipmentPayload["shipper"],
+        "state_tax_id": "SE556703677001",
+    },
+    "customs": {
+        **CustomsInvoiceShipmentPayload["customs"],
+        "options": {},
+    },
 }
 
 ShipmentCancelRequest = {
