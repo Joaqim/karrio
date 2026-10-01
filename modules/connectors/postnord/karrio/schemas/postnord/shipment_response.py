@@ -4,6 +4,12 @@ import typing
 
 
 @attr.s(auto_attribs=True)
+class FaultReferenceType:
+    key: typing.Optional[str] = None
+    value: typing.Optional[str] = None
+
+
+@attr.s(auto_attribs=True)
 class AttributeType:
     param: typing.Optional[str] = None
     value: typing.Optional[str] = None
@@ -14,6 +20,7 @@ class FaultType:
     explanationText: typing.Optional[str] = None
     faultCode: typing.Optional[str] = None
     paramValues: typing.Optional[typing.List[AttributeType]] = jstruct.JList[AttributeType]
+    faultReferences: typing.Optional[typing.List[FaultReferenceType]] = jstruct.JList[FaultReferenceType]
 
 
 @attr.s(auto_attribs=True)
