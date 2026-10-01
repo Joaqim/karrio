@@ -1,0 +1,175 @@
+{
+  "openapi": "3.0.4",
+  "info": {
+    "title": "Terminal API",
+    "version": "2.10.0"
+  },
+  "servers": [
+    {
+      "url": "https://test-api.freight-logistics.dhl.com/terminalapi/v1/"
+    }
+  ],
+  "paths": {
+    "/terminal": {
+      "get": {
+        "tags": [
+          "Terminal"
+        ],
+        "responses": {
+          "200": {
+            "description": "Get all Terminals",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetAllTerminalsResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetAllTerminalsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetAllTerminalsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/terminal/{id}": {
+      "get": {
+        "tags": [
+          "Terminal"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Get a terminal",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetTerminalResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetTerminalResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetTerminalResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Address": {
+        "type": "object",
+        "properties": {
+          "street": {
+            "type": "string"
+          },
+          "cityName": {
+            "type": "string"
+          },
+          "postalCode": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "GetAllTerminalsResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "terminals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Terminal"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "GetTerminalResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "terminal": {
+            "$ref": "#/components/schemas/Terminal"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Terminal": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "code2": {
+            "type": "string"
+          },
+          "palletDepotNo": {
+            "type": "string"
+          },
+          "lineHaul": {
+            "type": "string"
+          },
+          "address": {
+            "$ref": "#/components/schemas/Address"
+          },
+          "phone": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "Client key": {
+        "type": "apiKey",
+        "description": "Please insert your client key",
+        "name": "client-key",
+        "in": "header"
+      }
+    }
+  },
+  "security": [
+    {
+      "Client key": [
+        "client-key"
+      ]
+    }
+  ],
+  "tags": [
+    {
+      "name": "Terminal"
+    }
+  ]
+}

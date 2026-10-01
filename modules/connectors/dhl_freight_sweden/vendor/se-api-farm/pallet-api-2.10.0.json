@@ -1,0 +1,343 @@
+{
+  "openapi": "3.0.4",
+  "info": {
+    "title": "Pallet API",
+    "version": "2.10.0"
+  },
+  "servers": [
+    {
+      "url": "https://test-api.freight-logistics.dhl.com/palletapi/v1/"
+    }
+  ],
+  "paths": {
+    "/pallet/balance/{customerId}": {
+      "get": {
+        "tags": [
+          "Pallet"
+        ],
+        "parameters": [
+          {
+            "name": "customerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Get pallet balance",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetPalletBalanceResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetPalletBalanceResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetPalletBalanceResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallet/balance/{customerId}/{palletType}": {
+      "get": {
+        "tags": [
+          "Pallet"
+        ],
+        "parameters": [
+          {
+            "name": "customerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "palletType",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Get pallet balance",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetPalletBalanceResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetPalletBalanceResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetPalletBalanceResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallet/transactions/{customerId}/{palletType}/{maxNoOfRows}": {
+      "get": {
+        "tags": [
+          "Pallet"
+        ],
+        "parameters": [
+          {
+            "name": "customerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "palletType",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "maxNoOfRows",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Get a Pallet",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetPalletTransactionsResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetPalletTransactionsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetPalletTransactionsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallet/transactions/{customerId}/{maxNoOfRows}": {
+      "get": {
+        "tags": [
+          "Pallet"
+        ],
+        "parameters": [
+          {
+            "name": "customerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "maxNoOfRows",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Get a Pallet",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetPalletTransactionsResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetPalletTransactionsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetPalletTransactionsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallet/palletdepot/{terminalId}": {
+      "get": {
+        "tags": [
+          "Pallet"
+        ],
+        "parameters": [
+          {
+            "name": "terminalId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Get pallet depot info for the terminalId",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetPalletBalanceResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetPalletBalanceResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetPalletBalanceResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "GetPalletBalanceResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "palletBalance": {
+            "$ref": "#/components/schemas/PalletBalance"
+          }
+        },
+        "additionalProperties": false
+      },
+      "GetPalletTransactionsResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "palletTransactions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PalletTransaction"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "PalletBalance": {
+        "type": "object",
+        "properties": {
+          "palletType": {
+            "type": "string"
+          },
+          "palletName": {
+            "type": "string"
+          },
+          "balance": {
+            "type": "string"
+          },
+          "previousBalance": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PalletTransaction": {
+        "type": "object",
+        "properties": {
+          "palletType": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "voucher": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "in": {
+            "type": "string"
+          },
+          "out": {
+            "type": "string"
+          },
+          "balance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "Client key": {
+        "type": "apiKey",
+        "description": "Please insert your client key",
+        "name": "client-key",
+        "in": "header"
+      }
+    }
+  },
+  "security": [
+    {
+      "Client key": [
+        "client-key"
+      ]
+    }
+  ],
+  "tags": [
+    {
+      "name": "Pallet"
+    }
+  ]
+}

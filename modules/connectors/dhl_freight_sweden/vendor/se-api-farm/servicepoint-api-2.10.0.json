@@ -1,0 +1,446 @@
+{
+  "openapi": "3.0.4",
+  "info": {
+    "title": "Servicepoint API",
+    "version": "2.10.0"
+  },
+  "servers": [
+    {
+      "url": "https://test-api.freight-logistics.dhl.com/servicepointlocatorapi/v1/"
+    }
+  ],
+  "paths": {
+    "/servicepoint/findnearestservicepoints": {
+      "post": {
+        "tags": [
+          "ServicePoint"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/NearestServicePointRequest"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NearestServicePointRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NearestServicePointRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/NearestServicePointRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Returns nearest servicepoints that supports ",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NearestServicePointResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NearestServicePointResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NearestServicePointResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/servicepoint/getservicepointdetails/{servicePointId}": {
+      "get": {
+        "tags": [
+          "ServicePoint"
+        ],
+        "parameters": [
+          {
+            "name": "servicePointId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Get servicepoint details",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServicePointDetailResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServicePointDetailResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServicePointDetailResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Address": {
+        "type": "object",
+        "properties": {
+          "street": {
+            "type": "string"
+          },
+          "streetNumber": {
+            "type": "string"
+          },
+          "additionalAddressInfo": {
+            "type": "string"
+          },
+          "cityName": {
+            "type": "string"
+          },
+          "postalCode": {
+            "type": "string"
+          },
+          "countryCode": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DistanceUnit": {
+        "enum": [
+          "m",
+          "km"
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "LocationType": {
+        "enum": [
+          "servicepoint",
+          "locker",
+          "postoffice",
+          "postbank"
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "NearestServicePointRequest": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "$ref": "#/components/schemas/Address"
+          },
+          "featureCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "bitCatCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "maxNumberOfItems": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "clickAndCollectId": {
+            "type": "string"
+          },
+          "locationTypes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LocationType"
+            }
+          },
+          "serviceTypes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceType"
+            }
+          },
+          "distance": {
+            "type": "number",
+            "format": "double"
+          },
+          "distanceUnit": {
+            "$ref": "#/components/schemas/DistanceUnit"
+          },
+          "piece": {
+            "$ref": "#/components/schemas/Piece"
+          }
+        },
+        "additionalProperties": false
+      },
+      "NearestServicePointResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "errorMessage": {
+            "type": "string"
+          },
+          "doorStepDeliveryAvailable": {
+            "type": "boolean"
+          },
+          "doorStepDelivery": {
+            "$ref": "#/components/schemas/Party"
+          },
+          "servicePoints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServicePointReference"
+            }
+          },
+          "residentialAddressing": {
+            "type": "boolean"
+          },
+          "homedeliveryParcel": {
+            "type": "boolean"
+          },
+          "lofi": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Party": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "servicePointId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "shopName": {
+            "type": "string"
+          },
+          "address": {
+            "$ref": "#/components/schemas/Address"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "featureCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "locationType": {
+            "$ref": "#/components/schemas/LocationType"
+          },
+          "serviceTypes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceType"
+            }
+          },
+          "latitude": {
+            "type": "number",
+            "format": "double"
+          },
+          "longitude": {
+            "type": "number",
+            "format": "double"
+          },
+          "clickAndCollectId": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Piece": {
+        "type": "object",
+        "properties": {
+          "width": {
+            "type": "number",
+            "format": "double"
+          },
+          "height": {
+            "type": "number",
+            "format": "double"
+          },
+          "length": {
+            "type": "number",
+            "format": "double"
+          },
+          "weight": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ServicePointDetailResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "errorMessage": {
+            "type": "string"
+          },
+          "servicePoint": {
+            "$ref": "#/components/schemas/Party"
+          },
+          "doorStepDeliveryAvailable": {
+            "type": "boolean"
+          },
+          "residentialAddressing": {
+            "type": "boolean"
+          },
+          "lofi": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ServicePointReference": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "servicePointId": {
+            "type": "string"
+          },
+          "street": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "shopName": {
+            "type": "string"
+          },
+          "cityName": {
+            "type": "string"
+          },
+          "postalCode": {
+            "type": "string"
+          },
+          "countryCode": {
+            "type": "string"
+          },
+          "distance": {
+            "type": "number",
+            "format": "double"
+          },
+          "routeDistance": {
+            "type": "number",
+            "format": "double"
+          },
+          "distanceUnit": {
+            "$ref": "#/components/schemas/DistanceUnit"
+          },
+          "featureCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "locationType": {
+            "$ref": "#/components/schemas/LocationType"
+          },
+          "serviceTypes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceType"
+            }
+          },
+          "latitude": {
+            "type": "number",
+            "format": "double"
+          },
+          "longitude": {
+            "type": "number",
+            "format": "double"
+          },
+          "clickAndCollectId": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ServiceType": {
+        "enum": [
+          "parcel_pick_up",
+          "parcel_drop_off",
+          "parcel_pick_up_all",
+          "express_pick_up",
+          "express_drop_off",
+          "cash_on_delivery",
+          "letter_service",
+          "postbank",
+          "cash_service",
+          "franking",
+          "packaging_material",
+          "postident",
+          "age_verification",
+          "handicapped_access",
+          "parking",
+          "parcel_pick_up_registered",
+          "parcel_pick_up_unregistered",
+          "parcel_drop_off_unregistered",
+          "express_drop_off_prelabeled"
+        ],
+        "type": "integer",
+        "format": "int32"
+      }
+    },
+    "securitySchemes": {
+      "Client key": {
+        "type": "apiKey",
+        "description": "Please insert your client key",
+        "name": "client-key",
+        "in": "header"
+      }
+    }
+  },
+  "security": [
+    {
+      "Client key": [
+        "client-key"
+      ]
+    }
+  ],
+  "tags": [
+    {
+      "name": "ServicePoint"
+    }
+  ]
+}

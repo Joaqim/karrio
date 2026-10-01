@@ -1,0 +1,953 @@
+{
+  "openapi": "3.0.4",
+  "info": {
+    "title": "PriceQuote API",
+    "version": "2.10.0"
+  },
+  "servers": [
+    {
+      "url": "https://test-api.freight-logistics.dhl.com/pricequoteapi/v1/"
+    }
+  ],
+  "paths": {
+    "/pricequote/quoteforgrossprice": {
+      "post": {
+        "tags": [
+          "PriceQuote"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuoteGrossPriceModel"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuoteGrossPriceModel"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuoteGrossPriceModel"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuoteGrossPriceModel"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "List of prices for products",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PriceQuoteResult"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PriceQuoteResult"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PriceQuoteResult"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pricequote/quoteforprice": {
+      "post": {
+        "tags": [
+          "PriceQuote"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuoteModel"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuoteModel"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuoteModel"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuoteModel"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "List of prices for products",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PriceQuoteResult"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PriceQuoteResult"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PriceQuoteResult"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AdditionalService": {
+        "type": "object",
+        "properties": {
+          "dangerousGoods": {
+            "type": "boolean"
+          },
+          "priorityServiceG7": {
+            "type": "boolean"
+          },
+          "priorityServiceG10": {
+            "type": "boolean"
+          },
+          "priorityServiceG12": {
+            "type": "boolean"
+          },
+          "priorityServiceP10": {
+            "type": "boolean"
+          },
+          "priorityServiceP12": {
+            "type": "boolean"
+          },
+          "carryingHelpToRoomOfChoice": {
+            "type": "boolean"
+          },
+          "carryingHelpPickUp": {
+            "type": "boolean"
+          },
+          "cashOnDelivery": {
+            "$ref": "#/components/schemas/COD"
+          },
+          "thermoWarm": {
+            "$ref": "#/components/schemas/Thermo"
+          },
+          "thermoCold": {
+            "$ref": "#/components/schemas/Thermo"
+          },
+          "insurance": {
+            "$ref": "#/components/schemas/Insurance"
+          },
+          "dangerousGoodsLimitedQuantity": {
+            "type": "boolean"
+          },
+          "deliveryWithoutProofOfDelivery": {
+            "type": "boolean"
+          },
+          "collectionAtTerminal": {
+            "type": "boolean"
+          },
+          "notification": {
+            "type": "boolean"
+          },
+          "notificationByLetter": {
+            "type": "boolean"
+          },
+          "preAdviceByDriver": {
+            "type": "boolean"
+          },
+          "indoorDelivery": {
+            "type": "boolean"
+          },
+          "greenFreight": {
+            "type": "boolean"
+          },
+          "tailLiftLoading": {
+            "type": "boolean"
+          },
+          "tailLiftUnloading": {
+            "type": "boolean"
+          },
+          "twoManDelivery": {
+            "type": "boolean"
+          },
+          "packagingRemoval": {
+            "type": "boolean"
+          },
+          "deliveryMonitorings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeliveryMonitoring"
+            }
+          },
+          "repetitiveOptions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RepetitiveOption"
+            }
+          },
+          "eveningDeliveryZoneA": {
+            "type": "boolean"
+          },
+          "eveningDeliveryZoneB": {
+            "type": "boolean"
+          },
+          "eveningDeliveryZoneC": {
+            "type": "boolean"
+          },
+          "eveningDeliveryZoneD": {
+            "type": "boolean"
+          },
+          "eveningDeliveryZoneE": {
+            "type": "boolean"
+          },
+          "weekendDelivery": {
+            "type": "boolean"
+          },
+          "customsHandling": {
+            "$ref": "#/components/schemas/CustomsHandling"
+          },
+          "sortAndQuantity": {
+            "$ref": "#/components/schemas/SortAndQuantity"
+          },
+          "fixedDeliveryDate": {
+            "$ref": "#/components/schemas/FixedDeliveryDateOptions"
+          },
+          "hardcopyProofOfDelivery": {
+            "$ref": "#/components/schemas/HardcopyProofOfDeliveryOptions"
+          },
+          "timeDefiniteLoading": {
+            "$ref": "#/components/schemas/TimeDefiniteLoadingOptions"
+          },
+          "timeDefiniteUnloading": {
+            "$ref": "#/components/schemas/TimeDefiniteUnloadingOptions"
+          },
+          "preAdvicePickup": {
+            "type": "boolean"
+          },
+          "deliveryAtConstructionSite": {
+            "type": "boolean"
+          },
+          "deliveryWithIdControl": {
+            "type": "boolean"
+          },
+          "deliveryWithoutIdControl": {
+            "type": "boolean"
+          },
+          "doorstepDelivery": {
+            "$ref": "#/components/schemas/DoorstepDeliveryOptions"
+          },
+          "onlineAppointmentBooking": {
+            "$ref": "#/components/schemas/OnlineAppointmentBookingOptions"
+          },
+          "personalDelivery": {
+            "type": "boolean"
+          },
+          "truck": {
+            "type": "boolean"
+          },
+          "deliveryMonitoringArrivedAtDhlTerminal": {
+            "$ref": "#/components/schemas/DeliveryMonitoringOptions"
+          },
+          "deliveryMonitoringCollectedByReciever": {
+            "$ref": "#/components/schemas/DeliveryMonitoringOptions"
+          },
+          "deliveryMonitoringDelivered": {
+            "$ref": "#/components/schemas/DeliveryMonitoringOptions"
+          },
+          "deliveryMonitoringNotCollectedByReciever": {
+            "$ref": "#/components/schemas/DeliveryMonitoringOptions"
+          },
+          "deliveryMonitoringOutForDelivery": {
+            "$ref": "#/components/schemas/DeliveryMonitoringOptions"
+          },
+          "deliveryMonitoringPickup": {
+            "$ref": "#/components/schemas/DeliveryMonitoringOptions"
+          },
+          "removalOfReplacedGoods": {
+            "$ref": "#/components/schemas/RemovalOfReplacedGoodsOptions"
+          },
+          "installation": {
+            "$ref": "#/components/schemas/InstallationOptions"
+          },
+          "installationAdvanced": {
+            "$ref": "#/components/schemas/InstallationAdvancedOptions"
+          },
+          "m20": {
+            "$ref": "#/components/schemas/M20Options"
+          },
+          "m40": {
+            "$ref": "#/components/schemas/M40Options"
+          },
+          "m60": {
+            "$ref": "#/components/schemas/M60Options"
+          },
+          "customsCustomersOwnDeclaration": {
+            "$ref": "#/components/schemas/CustomsOptions"
+          },
+          "customsHandlingFullService": {
+            "type": "boolean"
+          },
+          "customsHandlingStandard": {
+            "type": "boolean"
+          },
+          "customsJointDeclaration": {
+            "$ref": "#/components/schemas/CustomsOptions"
+          },
+          "preAdvice": {
+            "type": "boolean"
+          },
+          "after12Delivery": {
+            "type": "boolean"
+          },
+          "timeSlotBookingPickup": {
+            "type": "boolean"
+          },
+          "timeSlotBookingDelivery": {
+            "type": "boolean"
+          },
+          "preAdviceByDriverPickup": {
+            "$ref": "#/components/schemas/PreAdviceByDriverPickupOptions"
+          },
+          "dropOffByConsignor": {
+            "type": "boolean"
+          },
+          "sideLoadingPickup": {
+            "type": "boolean"
+          },
+          "sideUnloadingDelivery": {
+            "type": "boolean"
+          },
+          "highValueShipment": {
+            "$ref": "#/components/schemas/HighValueShipmentOptions"
+          },
+          "temperatureControlled": {
+            "$ref": "#/components/schemas/TemperatureControlledOptions"
+          },
+          "indoorDeliverySpecial": {
+            "type": "boolean"
+          },
+          "driverPreAdviceDelivery": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "COD": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "currency": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CustomsHandling": {
+        "enum": [
+          "Full",
+          "Standard",
+          "Own",
+          "Joint"
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "CustomsOptions": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "DeliveryMonitoring": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "$ref": "#/components/schemas/MonitoringType"
+          },
+          "emailAddress": {
+            "type": "string"
+          },
+          "smsPhoneNumber": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryMonitoringOptions": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "DoorstepDeliveryOptions": {
+        "type": "object",
+        "properties": {
+          "accessCode": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Eid": {
+        "type": "object",
+        "properties": {
+          "userName": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "FixedDeliveryDateOptions": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "HardcopyProofOfDeliveryOptions": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "HighValueShipmentOptions": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "number",
+            "format": "double"
+          },
+          "currency": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ImportExport": {
+        "enum": [
+          "E",
+          "I",
+          "D",
+          "ED"
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "InstallationAdvancedOptions": {
+        "type": "object",
+        "properties": {
+          "quantity": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "InstallationOptions": {
+        "type": "object",
+        "properties": {
+          "quantity": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Insurance": {
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "M20Options": {
+        "type": "object",
+        "properties": {
+          "quantity": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "M40Options": {
+        "type": "object",
+        "properties": {
+          "quantity": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "M60Options": {
+        "type": "object",
+        "properties": {
+          "quantity": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MonitoringType": {
+        "enum": [
+          "Pickup",
+          "ArrivedAtDHLTerm",
+          "OutForDelivery",
+          "Delivered",
+          "CollectedByReceiver",
+          "NotCollectedByReceiver"
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "OnlineAppointmentBookingOptions": {
+        "type": "object",
+        "properties": {
+          "responseText": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "OwnSurCharge": {
+        "type": "object",
+        "properties": {
+          "percentage": {
+            "type": "number",
+            "format": "double"
+          },
+          "value": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Party": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/PartyType"
+          },
+          "address": {
+            "$ref": "#/components/schemas/PartyAddress"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PartyAddress": {
+        "type": "object",
+        "properties": {
+          "street": {
+            "type": "string"
+          },
+          "streetNumber": {
+            "type": "string"
+          },
+          "cityName": {
+            "type": "string"
+          },
+          "postalCode": {
+            "type": "string"
+          },
+          "countryCode": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PartyType": {
+        "enum": [
+          "Consignor",
+          "Consignee",
+          "FreightPayer",
+          "AccessPoint",
+          "Buyer",
+          "Delivery",
+          "Pickup"
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "Piece": {
+        "type": "object",
+        "properties": {
+          "numberOfPieces": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "weight": {
+            "type": "number",
+            "format": "double"
+          },
+          "volume": {
+            "type": "number",
+            "format": "double"
+          },
+          "loadingMeters": {
+            "type": "number",
+            "format": "double"
+          },
+          "palletPlaces": {
+            "type": "number",
+            "format": "double"
+          },
+          "width": {
+            "type": "number",
+            "format": "double"
+          },
+          "height": {
+            "type": "number",
+            "format": "double"
+          },
+          "length": {
+            "type": "number",
+            "format": "double"
+          },
+          "stackable": {
+            "type": "boolean"
+          },
+          "packageType": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PreAdviceByDriverPickupOptions": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PriceQuoteResult": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "descriptionEng": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "QuoteGrossPriceModel": {
+        "type": "object",
+        "properties": {
+          "shipment": {
+            "$ref": "#/components/schemas/ShipmentModel"
+          },
+          "ownSurCharge": {
+            "$ref": "#/components/schemas/OwnSurCharge"
+          }
+        },
+        "additionalProperties": false
+      },
+      "QuoteModel": {
+        "type": "object",
+        "properties": {
+          "eid": {
+            "$ref": "#/components/schemas/Eid"
+          },
+          "shipment": {
+            "$ref": "#/components/schemas/ShipmentModel"
+          },
+          "ownSurCharge": {
+            "$ref": "#/components/schemas/OwnSurCharge"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RemovalOfReplacedGoodsOptions": {
+        "type": "object",
+        "properties": {
+          "quantity": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RepetitiveOption": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "$ref": "#/components/schemas/RepetitiveOptionType"
+          },
+          "numberOfRepetitions": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RepetitiveOptionType": {
+        "enum": [
+          "RemovalOfReplacedGoods",
+          "Installation",
+          "InstallationAdvanced",
+          "M20",
+          "M40",
+          "M60"
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "ShipmentModel": {
+        "type": "object",
+        "properties": {
+          "dhlProductCode": {
+            "enum": [
+              "DHLPaket",
+              "DHLServicePointB2C",
+              "DHLServicePointC2B",
+              "DHLParcelConnect",
+              "DHLPaketExport",
+              "DHLEuroConnect",
+              "DHLEuroline",
+              "DHLPall",
+              "DHLStycke",
+              "DHLParti",
+              "DHLEuroConnectPlus",
+              "DHLEurapid",
+              "DHLHomeDelivery",
+              "DHLHomeDeliveryReturn",
+              "DHLHomeDeliveryT3",
+              "DHLHomeDeliveryReturnT3"
+            ],
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalNumberOfPieces": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalWeight": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalVolume": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalLoadingMeters": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalPalletPlaces": {
+            "type": "number",
+            "format": "double"
+          },
+          "numberOfEURPallets": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "numberOfFullPallets": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "numberOfHalfPallets": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "goodsValue": {
+            "type": "string"
+          },
+          "payerCode": {
+            "type": "string"
+          },
+          "importExport": {
+            "$ref": "#/components/schemas/ImportExport"
+          },
+          "piece": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Piece"
+            }
+          },
+          "parties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Party"
+            }
+          },
+          "additionalServices": {
+            "$ref": "#/components/schemas/AdditionalService"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SortAndQuantity": {
+        "type": "object",
+        "properties": {
+          "sort": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TemperatureControlledOptions": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "$ref": "#/components/schemas/ThermoType"
+          },
+          "min": {
+            "type": "number",
+            "format": "double"
+          },
+          "max": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Thermo": {
+        "type": "object",
+        "properties": {
+          "minTemperature": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxTemperature": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ThermoType": {
+        "enum": [
+          "Custom",
+          "Cold",
+          "Ambient"
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "TimeDefiniteLoadingOptions": {
+        "type": "object",
+        "properties": {
+          "dateTime": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TimeDefiniteUnloadingOptions": {
+        "type": "object",
+        "properties": {
+          "dateTime": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "Client key": {
+        "type": "apiKey",
+        "description": "Please insert your client key",
+        "name": "client-key",
+        "in": "header"
+      }
+    }
+  },
+  "security": [
+    {
+      "Client key": [
+        "client-key"
+      ]
+    }
+  ],
+  "tags": [
+    {
+      "name": "PriceQuote"
+    }
+  ]
+}

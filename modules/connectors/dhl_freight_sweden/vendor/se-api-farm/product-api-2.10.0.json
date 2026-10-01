@@ -1,0 +1,1808 @@
+{
+  "openapi": "3.0.4",
+  "info": {
+    "title": "Product API",
+    "version": "2.10.0"
+  },
+  "servers": [
+    {
+      "url": "https://test-api.freight-logistics.dhl.com/productapi/v1/"
+    }
+  ],
+  "paths": {
+    "/chargeableweight/calculationresults": {
+      "post": {
+        "tags": [
+          "ChargeableWeight"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/Query"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Query"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Query"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/Query"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "List of chargeable weight calculation results",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CalculationResult"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CalculationResult"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CalculationResult"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Errormessage and list of potential validation messages",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/packagetypes": {
+      "get": {
+        "tags": [
+          "PackageType"
+        ],
+        "responses": {
+          "200": {
+            "description": "List of all package types",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PackageTypeResponse"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PackageTypeResponse"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PackageTypeResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/packagetypes/{productCode}": {
+      "get": {
+        "tags": [
+          "PackageType"
+        ],
+        "parameters": [
+          {
+            "name": "productCode",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "toCountryCode",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fromCountryCode",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of all package types",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PackageTypeForProductResponse"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PackageTypeForProductResponse"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PackageTypeForProductResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ping": {
+      "get": {
+        "tags": [
+          "Ping"
+        ],
+        "responses": {
+          "200": {
+            "description": "Ping"
+          }
+        }
+      }
+    },
+    "/products": {
+      "get": {
+        "tags": [
+          "Product"
+        ],
+        "responses": {
+          "200": {
+            "description": "List of all active products",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Product"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Product"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Product"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/products/{productCode}": {
+      "get": {
+        "tags": [
+          "Product"
+        ],
+        "parameters": [
+          {
+            "name": "productCode",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fromCountryCode",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "toCountryCode",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product with given product code",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Product"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Product"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Product"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/productmatches": {
+      "post": {
+        "tags": [
+          "Product"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/MatchCriteria"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MatchCriteria"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MatchCriteria"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/MatchCriteria"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Find best product matching provided query. Query property parties (array) must contain at least two objects. One of type 'Consignee' and one of type 'Consignor'",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProductMatchResult"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProductMatchResult"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProductMatchResult"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/subcategories": {
+      "get": {
+        "tags": [
+          "SubCategory"
+        ],
+        "responses": {
+          "200": {
+            "description": "List of all sub categories",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SubCategoryResponse"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SubCategoryResponse"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SubCategoryResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AdditionalService": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ModifiableReferenceItem"
+          }
+        ],
+        "properties": {
+          "type": {
+            "$ref": "#/components/schemas/AdditionalServiceType"
+          },
+          "code": {
+            "$ref": "#/components/schemas/AdditionalServiceType"
+          },
+          "codeAsString": {
+            "type": "string",
+            "writeOnly": true
+          },
+          "name": {
+            "type": "string"
+          },
+          "information": {
+            "type": "string"
+          },
+          "codeMappings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CodeMapping"
+            }
+          },
+          "translations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Translation"
+            }
+          },
+          "customs": {
+            "type": "boolean"
+          },
+          "productAdditionalServiceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "isHidden": {
+            "type": "boolean"
+          },
+          "customUsageRules": {
+            "type": "string"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "hidden": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AdditionalServiceType": {
+        "enum": [
+          "bookIn",
+          "bookInWithInfo",
+          "carryingHelpPickup",
+          "carryingHelpToRoomOfChoice",
+          "cashOnDelivery",
+          "climateNeutral",
+          "collectionAtTerminal",
+          "customsCustomersOwnDeclaration",
+          "customsHandlingFullService",
+          "customsHandlingStandard",
+          "customsJointDeclaration",
+          "dangerousGoods",
+          "dangerousGoodsDomestic",
+          "dangerousGoodsLimitedQuantity",
+          "deliveryAtConstructionSite",
+          "deliveryMonitoringArrivedAtDhlTerminal",
+          "deliveryMonitoringCollectedByReciever",
+          "deliveryMonitoringDelivered",
+          "deliveryMonitoringNotCollectedByReciever",
+          "deliveryMonitoringOutForDelivery",
+          "deliveryMonitoringPickup",
+          "deliveryWithIdControl",
+          "deliveryWithoutIdControl",
+          "deliveryWithoutProofOfDelivery",
+          "doorstepDelivery",
+          "emptyPalletPickup",
+          "eurPalletExchange",
+          "eveningDeliveryZoneA",
+          "eveningDeliveryZoneB",
+          "eveningDeliveryZoneC",
+          "eveningDeliveryZoneD",
+          "eveningDeliveryZoneE",
+          "fixedDeliveryDate",
+          "freightSubsidy",
+          "greenFreight",
+          "hardcopyProofOfDelivery",
+          "indoorDelivery",
+          "installation",
+          "installationAdvanced",
+          "insurance",
+          "highValueShipment",
+          "m20",
+          "m40",
+          "m60",
+          "nonStackable",
+          "notification",
+          "notificationECE",
+          "notificationByLetter",
+          "onlineAppointmentBooking",
+          "packagingRemoval",
+          "preAdvice",
+          "preAdviceByDriver",
+          "driverPreAdviceDelivery",
+          "priorityServiceG7",
+          "priorityServiceG10",
+          "priorityServiceG12",
+          "removalOfReplacedGoods",
+          "sortAndQuantity",
+          "tailLiftLoading",
+          "tailLiftUnloading",
+          "thermoCold",
+          "thermoFreeze",
+          "thermoWarm",
+          "timeDefiniteLoading",
+          "timeDefiniteUnloading",
+          "truck",
+          "twoManHandling",
+          "voecSupplyVAT",
+          "weekendDelivery",
+          "dropOffByConsignor",
+          "priorityServiceP10",
+          "priorityServiceP12",
+          "preAdviceNorway",
+          "personalDelivery",
+          "preAdvicePickup",
+          "after12Delivery",
+          "timeSlotBookingPickup",
+          "timeSlotBookingDelivery",
+          "availablePickupTime",
+          "availableDeliveryTime",
+          "sideLoadingPickup",
+          "sideUnloadingDelivery",
+          "preAdviceByDriverPickup",
+          "temperatureControlled",
+          "indoorDeliverySpecial"
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "Address": {
+        "type": "object",
+        "properties": {
+          "postalCode": {
+            "type": "string"
+          },
+          "countryCode": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AddressMatchCriteria": {
+        "required": [
+          "countryCode",
+          "postalCode"
+        ],
+        "type": "object",
+        "properties": {
+          "postalCode": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "countryCode": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "BadRequestError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IValidationError"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "CalculationResult": {
+        "type": "object",
+        "properties": {
+          "shipmentLevelCalculationResult": {
+            "$ref": "#/components/schemas/WeightResult"
+          },
+          "pieceLevelCalculationResult": {
+            "$ref": "#/components/schemas/WeightResultForPieces"
+          },
+          "chargeableWeight": {
+            "type": "number",
+            "format": "double"
+          },
+          "chargeableVolume": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CodeMapping": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ModifiableReferenceItem"
+          }
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Country": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ModifiableReferenceItem"
+          }
+        ],
+        "properties": {
+          "englishName": {
+            "type": "string"
+          },
+          "countryCode": {
+            "type": "string"
+          },
+          "customs": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DangerousGoodsExclusionException": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DangerousGoodsExclusionWithExceptions": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "class": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "allowed": {
+            "type": "boolean"
+          },
+          "exceptions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DangerousGoodsExclusionException"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryType": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ModifiableReferenceItem"
+          }
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Exclusion": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ModifiableReferenceItem"
+          }
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "FromCountry": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ModifiableReferenceItem"
+          }
+        ],
+        "properties": {
+          "country": {
+            "$ref": "#/components/schemas/Country"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "fax": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "IValidationError": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "readOnly": true
+          },
+          "errorCode": {
+            "type": "integer",
+            "format": "int32",
+            "readOnly": true
+          },
+          "message": {
+            "type": "string",
+            "readOnly": true
+          },
+          "incompatibleFields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ImportExportEnum": {
+        "enum": [
+          "E",
+          "I"
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "LoadingProcedure": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ModifiableReferenceItem"
+          }
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MarketAvailability": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ReferenceItem"
+          }
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MatchCriteria": {
+        "type": "object",
+        "properties": {
+          "parties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PartyMatchCriteria"
+            }
+          },
+          "pieces": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PieceMatchCriteria"
+            }
+          },
+          "totalVolume": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalNumberOfPieces": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalLoadingMeters": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalLoadingMetres": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalPalletPlaces": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalWeight": {
+            "type": "number",
+            "format": "double"
+          },
+          "marketAvailability": {
+            "type": "string"
+          },
+          "importExport": {
+            "$ref": "#/components/schemas/ImportExportEnum"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ModifiableReferenceItem": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ReferenceItem"
+          }
+        ],
+        "additionalProperties": false
+      },
+      "PackageType": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ModifiableReferenceItem"
+          }
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PackageTypeForProductResponse": {
+        "type": "object",
+        "properties": {
+          "product": {
+            "$ref": "#/components/schemas/ProductInfo"
+          },
+          "packageTypes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PackageTypeResponse"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "PackageTypeResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Party": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "$ref": "#/components/schemas/PartyType"
+          },
+          "address": {
+            "$ref": "#/components/schemas/Address"
+          },
+          "subType": {
+            "$ref": "#/components/schemas/PartySubType"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PartyMatchCriteria": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "$ref": "#/components/schemas/PartyType"
+          },
+          "subType": {
+            "$ref": "#/components/schemas/PartySubType"
+          },
+          "address": {
+            "$ref": "#/components/schemas/AddressMatchCriteria"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PartySubType": {
+        "enum": [
+          "ParcelShop",
+          "ParcelStation",
+          "Servicepoint",
+          "Locker",
+          "Postoffice",
+          "Postbank"
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "PartyType": {
+        "enum": [
+          "AccessPoint",
+          "Buyer",
+          "Consignor",
+          "Consignee",
+          "Delivery",
+          "FreightPayer",
+          "Pickup"
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "PayerCode": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ModifiableReferenceItem"
+          }
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "customs": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Piece": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ModifiableReferenceItem"
+          }
+        ],
+        "properties": {
+          "actualWeightMin": {
+            "type": "number",
+            "format": "double"
+          },
+          "actualWeightMax": {
+            "type": "number",
+            "format": "double"
+          },
+          "chargeableWeightMin": {
+            "type": "number",
+            "format": "double"
+          },
+          "chargeableWeightMax": {
+            "type": "number",
+            "format": "double"
+          },
+          "lengthMin": {
+            "type": "number",
+            "format": "double"
+          },
+          "lengthMax": {
+            "type": "number",
+            "format": "double"
+          },
+          "widthMin": {
+            "type": "number",
+            "format": "double"
+          },
+          "widthMax": {
+            "type": "number",
+            "format": "double"
+          },
+          "heightMin": {
+            "type": "number",
+            "format": "double"
+          },
+          "heightMax": {
+            "type": "number",
+            "format": "double"
+          },
+          "circumferenceMin": {
+            "type": "number",
+            "format": "double"
+          },
+          "circumferenceMax": {
+            "type": "number",
+            "format": "double"
+          },
+          "volumeMin": {
+            "type": "number",
+            "format": "double"
+          },
+          "volumeMax": {
+            "type": "number",
+            "format": "double"
+          },
+          "forceNoneStackableHeight": {
+            "type": "number",
+            "format": "double"
+          },
+          "noneStackableCWFromVolumeHeight": {
+            "type": "number",
+            "format": "double"
+          },
+          "tailLiftMaxItemWeight": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PieceMatchCriteria": {
+        "type": "object",
+        "properties": {
+          "packageType": {
+            "type": "string"
+          },
+          "numberOfPieces": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "weight": {
+            "type": "number",
+            "format": "double"
+          },
+          "length": {
+            "type": "number",
+            "format": "double"
+          },
+          "width": {
+            "type": "number",
+            "format": "double"
+          },
+          "height": {
+            "type": "number",
+            "format": "double"
+          },
+          "volume": {
+            "type": "number",
+            "format": "double"
+          },
+          "circumference": {
+            "type": "number",
+            "format": "double",
+            "readOnly": true
+          },
+          "loadingMeters": {
+            "type": "number",
+            "format": "double"
+          },
+          "loadingMetres": {
+            "type": "number",
+            "format": "double"
+          },
+          "palletPlaces": {
+            "type": "number",
+            "format": "double"
+          },
+          "stackable": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PieceQuery": {
+        "type": "object",
+        "properties": {
+          "numberOfPieces": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "weight": {
+            "type": "number",
+            "format": "double"
+          },
+          "volume": {
+            "type": "number",
+            "format": "double"
+          },
+          "loadingMeters": {
+            "type": "number",
+            "format": "double"
+          },
+          "palletPlaces": {
+            "type": "number",
+            "format": "double"
+          },
+          "width": {
+            "type": "number",
+            "format": "double"
+          },
+          "height": {
+            "type": "number",
+            "format": "double"
+          },
+          "length": {
+            "type": "number",
+            "format": "double"
+          },
+          "stackable": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PieceResult": {
+        "type": "object",
+        "properties": {
+          "numberOfPieces": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "weight": {
+            "type": "number",
+            "format": "double"
+          },
+          "volume": {
+            "type": "number",
+            "format": "double"
+          },
+          "loadingMeters": {
+            "type": "number",
+            "format": "double"
+          },
+          "palletPlaces": {
+            "type": "number",
+            "format": "double"
+          },
+          "width": {
+            "type": "number",
+            "format": "double"
+          },
+          "height": {
+            "type": "number",
+            "format": "double"
+          },
+          "length": {
+            "type": "number",
+            "format": "double"
+          },
+          "stackable": {
+            "type": "boolean"
+          },
+          "chargeableWeight": {
+            "type": "number",
+            "format": "double"
+          },
+          "cubicMetreVolumetricWeight": {
+            "type": "number",
+            "format": "double"
+          },
+          "loadingMetreVolumetricWeight": {
+            "type": "number",
+            "format": "double"
+          },
+          "longGoodsVolumetricWeight": {
+            "type": "number",
+            "format": "double",
+            "readOnly": true
+          },
+          "palletPlaceVolumetricWeight": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Product": {
+        "type": "object",
+        "properties": {
+          "isDefault": {
+            "type": "boolean"
+          },
+          "isDomestic": {
+            "type": "boolean"
+          },
+          "hidden": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "shortName": {
+            "type": "string"
+          },
+          "activationStartDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "activationEndDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "customRules": {
+            "type": "string"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "stackable": {
+            "type": "boolean"
+          },
+          "transportationMode": {
+            "$ref": "#/components/schemas/TransportationMode"
+          },
+          "subCategories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SubCategory"
+            }
+          },
+          "fromCountries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FromCountry"
+            }
+          },
+          "toCountries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToCountry"
+            }
+          },
+          "marketAvailability": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MarketAvailability"
+            }
+          },
+          "packageTypes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PackageType"
+            }
+          },
+          "shipmentNatures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShipmentNature"
+            }
+          },
+          "exclusions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Exclusion"
+            }
+          },
+          "dangerousGoodsExclusions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DangerousGoodsExclusionWithExceptions"
+            }
+          },
+          "highValueLimit": {
+            "type": "number",
+            "format": "double"
+          },
+          "payerCodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PayerCode"
+            }
+          },
+          "additionalServices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdditionalService"
+            }
+          },
+          "trailerTypes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrailerType"
+            }
+          },
+          "loadingProcedures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LoadingProcedure"
+            }
+          },
+          "shipment": {
+            "$ref": "#/components/schemas/Shipment"
+          },
+          "piece": {
+            "$ref": "#/components/schemas/Piece"
+          },
+          "rulesForCountryAndDeliveryTypes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RulesPerDeliveryType"
+            }
+          },
+          "regions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Region"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProductInfo": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProductMatchResult": {
+        "type": "object",
+        "properties": {
+          "product": {
+            "$ref": "#/components/schemas/Product"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Query": {
+        "type": "object",
+        "properties": {
+          "importExport": {
+            "$ref": "#/components/schemas/ImportExportEnum"
+          },
+          "productCode": {
+            "type": "string"
+          },
+          "pieces": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PieceQuery"
+            }
+          },
+          "volume": {
+            "type": "number",
+            "format": "double"
+          },
+          "weight": {
+            "type": "number",
+            "format": "double"
+          },
+          "loadingMeters": {
+            "type": "number",
+            "format": "double"
+          },
+          "palletPlaces": {
+            "type": "number",
+            "format": "double"
+          },
+          "parties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Party"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReferenceItem": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "Region": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ReferenceItem"
+          }
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RulesPerDeliveryType": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ModifiableReferenceItem"
+          }
+        ],
+        "properties": {
+          "shipment": {
+            "$ref": "#/components/schemas/Shipment"
+          },
+          "piece": {
+            "$ref": "#/components/schemas/Piece"
+          },
+          "country": {
+            "$ref": "#/components/schemas/Country"
+          },
+          "deliveryType": {
+            "$ref": "#/components/schemas/DeliveryType"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Shipment": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ModifiableReferenceItem"
+          }
+        ],
+        "properties": {
+          "actualWeightMin": {
+            "type": "number",
+            "format": "double"
+          },
+          "actualWeightMax": {
+            "type": "number",
+            "format": "double"
+          },
+          "chargeableWeightMin": {
+            "type": "number",
+            "format": "double"
+          },
+          "chargeableWeightMax": {
+            "type": "number",
+            "format": "double"
+          },
+          "volumeMin": {
+            "type": "number",
+            "format": "double"
+          },
+          "volumeMax": {
+            "type": "number",
+            "format": "double"
+          },
+          "numberOfPiecesMin": {
+            "type": "number",
+            "format": "double"
+          },
+          "numberOfPiecesMax": {
+            "type": "number",
+            "format": "double"
+          },
+          "loadingMetreMin": {
+            "type": "number",
+            "format": "double"
+          },
+          "loadingMetreMax": {
+            "type": "number",
+            "format": "double"
+          },
+          "palletPlaceMin": {
+            "type": "number",
+            "format": "double"
+          },
+          "palletPlaceMax": {
+            "type": "number",
+            "format": "double"
+          },
+          "volumetricCubicWeight": {
+            "type": "number",
+            "format": "double"
+          },
+          "volumetricLoadingWeight": {
+            "type": "number",
+            "format": "double"
+          },
+          "volumetricPalletWeight": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ShipmentNature": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ModifiableReferenceItem"
+          }
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SubCategory": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ModifiableReferenceItem"
+          }
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SubCategoryResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ToCountry": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ModifiableReferenceItem"
+          }
+        ],
+        "properties": {
+          "country": {
+            "$ref": "#/components/schemas/Country"
+          },
+          "postalCodeExcludes": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TrailerType": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ModifiableReferenceItem"
+          }
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Translation": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ModifiableReferenceItem"
+          }
+        ],
+        "properties": {
+          "languageCode": {
+            "maxLength": 10,
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "information": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TransportationMode": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ReferenceItem"
+          }
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "VolumetricUnit": {
+        "enum": [
+          "CubicMetre",
+          "LoadingMetre",
+          "PalletPlace"
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "WeightResult": {
+        "type": "object",
+        "properties": {
+          "actualWeight": {
+            "type": "number",
+            "format": "double"
+          },
+          "cubicMetreVolumetricWeight": {
+            "type": "number",
+            "format": "double"
+          },
+          "loadingMetreVolumetricWeight": {
+            "type": "number",
+            "format": "double"
+          },
+          "longGoodsVolumetricWeight": {
+            "type": "number",
+            "format": "double",
+            "readOnly": true
+          },
+          "palletPlaceVolumetricWeight": {
+            "type": "number",
+            "format": "double"
+          },
+          "chargeableWeight": {
+            "type": "number",
+            "format": "double"
+          },
+          "sumWeight": {
+            "type": "number",
+            "format": "double"
+          },
+          "sumVolume": {
+            "type": "number",
+            "format": "double"
+          },
+          "sumLoadingMeters": {
+            "type": "number",
+            "format": "double"
+          },
+          "sumPalletPlaces": {
+            "type": "number",
+            "format": "double"
+          },
+          "sumNumberOfPieces": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "WeightResultForPieces": {
+        "type": "object",
+        "properties": {
+          "actualWeight": {
+            "type": "number",
+            "format": "double"
+          },
+          "cubicMetreVolumetricWeight": {
+            "type": "number",
+            "format": "double"
+          },
+          "loadingMetreVolumetricWeight": {
+            "type": "number",
+            "format": "double"
+          },
+          "longGoodsVolumetricWeight": {
+            "type": "number",
+            "format": "double",
+            "readOnly": true
+          },
+          "palletPlaceVolumetricWeight": {
+            "type": "number",
+            "format": "double"
+          },
+          "chargeableWeight": {
+            "type": "number",
+            "format": "double"
+          },
+          "sumWeight": {
+            "type": "number",
+            "format": "double"
+          },
+          "sumVolume": {
+            "type": "number",
+            "format": "double"
+          },
+          "sumLoadingMeters": {
+            "type": "number",
+            "format": "double"
+          },
+          "sumPalletPlaces": {
+            "type": "number",
+            "format": "double"
+          },
+          "sumNumberOfPieces": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pieces": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PieceResult"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "Client key": {
+        "type": "apiKey",
+        "description": "Please insert your client key",
+        "name": "client-key",
+        "in": "header"
+      }
+    }
+  },
+  "security": [
+    {
+      "Client key": [
+        "client-key"
+      ]
+    }
+  ],
+  "tags": [
+    {
+      "name": "ChargeableWeight"
+    },
+    {
+      "name": "PackageType"
+    },
+    {
+      "name": "Ping"
+    },
+    {
+      "name": "Product"
+    },
+    {
+      "name": "SubCategory"
+    }
+  ]
+}

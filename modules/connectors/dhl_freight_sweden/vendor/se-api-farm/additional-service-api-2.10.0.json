@@ -1,0 +1,1002 @@
+{
+  "openapi": "3.0.4",
+  "info": {
+    "title": "Additional Service API",
+    "version": "2.10.0"
+  },
+  "servers": [
+    {
+      "url": "https://test-api.freight-logistics.dhl.com/additionalserviceapi/v1/"
+    }
+  ],
+  "paths": {
+    "/additionalservices": {
+      "get": {
+        "tags": [
+          "AdditionalService"
+        ],
+        "responses": {
+          "200": {
+            "description": "List of additional service",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AdditionalServiceDTO"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AdditionalServiceDTO"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AdditionalServiceDTO"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/products/{productCode}/additionalservices": {
+      "get": {
+        "tags": [
+          "AdditionalService"
+        ],
+        "parameters": [
+          {
+            "name": "productCode",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fromCountryCode",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": ""
+            }
+          },
+          {
+            "name": "toCountryCode",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": ""
+            }
+          },
+          {
+            "name": "payerCode",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": ""
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of additional service for product",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AdditionalServiceDTO"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AdditionalServiceDTO"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AdditionalServiceDTO"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/additionalservices/validationresults": {
+      "post": {
+        "tags": [
+          "AdditionalService"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimpleAdditionalServicesDTO"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimpleAdditionalServicesDTO"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimpleAdditionalServicesDTO"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimpleAdditionalServicesDTO"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "List of additional service validation results",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ValidationResult"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ValidationResult"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ValidationResult"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/products/{productCode}/additionalservices/validationresults": {
+      "post": {
+        "tags": [
+          "AdditionalService"
+        ],
+        "parameters": [
+          {
+            "name": "productCode",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fromCountryCode",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": ""
+            }
+          },
+          {
+            "name": "toCountryCode",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": ""
+            }
+          },
+          {
+            "name": "payerCode",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": ""
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimpleAdditionalServicesDTO"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimpleAdditionalServicesDTO"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimpleAdditionalServicesDTO"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimpleAdditionalServicesDTO"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "List of additional service validation results",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ValidationResult"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ValidationResult"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ValidationResult"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ping": {
+      "get": {
+        "tags": [
+          "Ping"
+        ],
+        "responses": {
+          "200": {
+            "description": "Ping"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AdditionalServiceDTO": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/AdditionalServiceType"
+          },
+          "name": {
+            "type": "string"
+          },
+          "information": {
+            "type": "string"
+          },
+          "codeMappings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CodeMapping"
+            }
+          },
+          "translations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Translation"
+            }
+          },
+          "optionsJsonSchema": {
+            "type": "string"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "isHidden": {
+            "type": "boolean"
+          },
+          "customUsageRules": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AdditionalServiceType": {
+        "enum": [
+          "bookIn",
+          "bookInWithInfo",
+          "carryingHelpPickup",
+          "carryingHelpToRoomOfChoice",
+          "cashOnDelivery",
+          "climateNeutral",
+          "collectionAtTerminal",
+          "customsCustomersOwnDeclaration",
+          "customsHandlingFullService",
+          "customsHandlingStandard",
+          "customsJointDeclaration",
+          "dangerousGoods",
+          "dangerousGoodsDomestic",
+          "dangerousGoodsLimitedQuantity",
+          "deliveryAtConstructionSite",
+          "deliveryMonitoringArrivedAtDhlTerminal",
+          "deliveryMonitoringCollectedByReciever",
+          "deliveryMonitoringDelivered",
+          "deliveryMonitoringNotCollectedByReciever",
+          "deliveryMonitoringOutForDelivery",
+          "deliveryMonitoringPickup",
+          "deliveryWithIdControl",
+          "deliveryWithoutIdControl",
+          "deliveryWithoutProofOfDelivery",
+          "doorstepDelivery",
+          "emptyPalletPickup",
+          "eurPalletExchange",
+          "eveningDeliveryZoneA",
+          "eveningDeliveryZoneB",
+          "eveningDeliveryZoneC",
+          "eveningDeliveryZoneD",
+          "eveningDeliveryZoneE",
+          "fixedDeliveryDate",
+          "freightSubsidy",
+          "greenFreight",
+          "hardcopyProofOfDelivery",
+          "indoorDelivery",
+          "installation",
+          "installationAdvanced",
+          "insurance",
+          "highValueShipment",
+          "m20",
+          "m40",
+          "m60",
+          "nonStackable",
+          "notification",
+          "notificationECE",
+          "notificationByLetter",
+          "onlineAppointmentBooking",
+          "packagingRemoval",
+          "preAdvice",
+          "preAdviceByDriver",
+          "driverPreAdviceDelivery",
+          "priorityServiceG7",
+          "priorityServiceG10",
+          "priorityServiceG12",
+          "removalOfReplacedGoods",
+          "sortAndQuantity",
+          "tailLiftLoading",
+          "tailLiftUnloading",
+          "thermoCold",
+          "thermoFreeze",
+          "thermoWarm",
+          "timeDefiniteLoading",
+          "timeDefiniteUnloading",
+          "truck",
+          "twoManHandling",
+          "voecSupplyVAT",
+          "weekendDelivery",
+          "dropOffByConsignor",
+          "priorityServiceP10",
+          "priorityServiceP12",
+          "preAdviceNorway",
+          "personalDelivery",
+          "preAdvicePickup",
+          "after12Delivery",
+          "timeSlotBookingPickup",
+          "timeSlotBookingDelivery",
+          "availablePickupTime",
+          "availableDeliveryTime",
+          "sideLoadingPickup",
+          "sideUnloadingDelivery",
+          "preAdviceByDriverPickup",
+          "temperatureControlled",
+          "indoorDeliverySpecial"
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "CodeMapping": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ModifiableReferenceItem"
+          }
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Country": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ModifiableReferenceItem"
+          }
+        ],
+        "properties": {
+          "englishName": {
+            "type": "string"
+          },
+          "countryCode": {
+            "type": "string"
+          },
+          "customs": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeliveryType": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ModifiableReferenceItem"
+          }
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ModifiableReferenceItem": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ReferenceItem"
+          }
+        ],
+        "additionalProperties": false
+      },
+      "Piece": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ModifiableReferenceItem"
+          }
+        ],
+        "properties": {
+          "actualWeightMin": {
+            "type": "number",
+            "format": "double"
+          },
+          "actualWeightMax": {
+            "type": "number",
+            "format": "double"
+          },
+          "chargeableWeightMin": {
+            "type": "number",
+            "format": "double"
+          },
+          "chargeableWeightMax": {
+            "type": "number",
+            "format": "double"
+          },
+          "lengthMin": {
+            "type": "number",
+            "format": "double"
+          },
+          "lengthMax": {
+            "type": "number",
+            "format": "double"
+          },
+          "widthMin": {
+            "type": "number",
+            "format": "double"
+          },
+          "widthMax": {
+            "type": "number",
+            "format": "double"
+          },
+          "heightMin": {
+            "type": "number",
+            "format": "double"
+          },
+          "heightMax": {
+            "type": "number",
+            "format": "double"
+          },
+          "circumferenceMin": {
+            "type": "number",
+            "format": "double"
+          },
+          "circumferenceMax": {
+            "type": "number",
+            "format": "double"
+          },
+          "volumeMin": {
+            "type": "number",
+            "format": "double"
+          },
+          "volumeMax": {
+            "type": "number",
+            "format": "double"
+          },
+          "forceNoneStackableHeight": {
+            "type": "number",
+            "format": "double"
+          },
+          "noneStackableCWFromVolumeHeight": {
+            "type": "number",
+            "format": "double"
+          },
+          "tailLiftMaxItemWeight": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReferenceItem": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "Shipment": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ModifiableReferenceItem"
+          }
+        ],
+        "properties": {
+          "actualWeightMin": {
+            "type": "number",
+            "format": "double"
+          },
+          "actualWeightMax": {
+            "type": "number",
+            "format": "double"
+          },
+          "chargeableWeightMin": {
+            "type": "number",
+            "format": "double"
+          },
+          "chargeableWeightMax": {
+            "type": "number",
+            "format": "double"
+          },
+          "volumeMin": {
+            "type": "number",
+            "format": "double"
+          },
+          "volumeMax": {
+            "type": "number",
+            "format": "double"
+          },
+          "numberOfPiecesMin": {
+            "type": "number",
+            "format": "double"
+          },
+          "numberOfPiecesMax": {
+            "type": "number",
+            "format": "double"
+          },
+          "loadingMetreMin": {
+            "type": "number",
+            "format": "double"
+          },
+          "loadingMetreMax": {
+            "type": "number",
+            "format": "double"
+          },
+          "palletPlaceMin": {
+            "type": "number",
+            "format": "double"
+          },
+          "palletPlaceMax": {
+            "type": "number",
+            "format": "double"
+          },
+          "volumetricCubicWeight": {
+            "type": "number",
+            "format": "double"
+          },
+          "volumetricLoadingWeight": {
+            "type": "number",
+            "format": "double"
+          },
+          "volumetricPalletWeight": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SimpleAdditionalServicesDTO": {
+        "type": "object",
+        "properties": {
+          "bookIn": {
+            "type": "boolean"
+          },
+          "carryingHelpPickup": {
+            "type": "boolean"
+          },
+          "carryingHelpToRoomOfChoice": {
+            "type": "boolean"
+          },
+          "cashOnDelivery": {
+            "type": "boolean"
+          },
+          "collectionAtTerminal": {
+            "type": "boolean"
+          },
+          "customsCustomersOwnDeclaration": {
+            "type": "boolean"
+          },
+          "customsHandlingFullService": {
+            "type": "boolean"
+          },
+          "customsHandlingStandard": {
+            "type": "boolean"
+          },
+          "customsJointDeclaration": {
+            "type": "boolean"
+          },
+          "dangerousGoods": {
+            "type": "boolean"
+          },
+          "dangerousGoodsDomestic": {
+            "type": "boolean"
+          },
+          "dangerousGoodsLimitedQuantity": {
+            "type": "boolean"
+          },
+          "deliveryAtConstructionSite": {
+            "type": "boolean"
+          },
+          "deliveryMonitoringArrivedAtDhlTerminal": {
+            "type": "boolean"
+          },
+          "deliveryMonitoringCollectedByReciever": {
+            "type": "boolean"
+          },
+          "deliveryMonitoringDelivered": {
+            "type": "boolean"
+          },
+          "deliveryMonitoringNotCollectedByReciever": {
+            "type": "boolean"
+          },
+          "deliveryMonitoringOutForDelivery": {
+            "type": "boolean"
+          },
+          "deliveryMonitoringPickup": {
+            "type": "boolean"
+          },
+          "deliveryWithIdControl": {
+            "type": "boolean"
+          },
+          "deliveryWithoutIdControl": {
+            "type": "boolean"
+          },
+          "deliveryWithoutProofOfDelivery": {
+            "type": "boolean"
+          },
+          "doorstepDelivery": {
+            "type": "boolean"
+          },
+          "emptyPalletPickup": {
+            "type": "boolean"
+          },
+          "eurPalletExchange": {
+            "type": "boolean"
+          },
+          "eveningDeliveryZoneA": {
+            "type": "boolean"
+          },
+          "eveningDeliveryZoneB": {
+            "type": "boolean"
+          },
+          "eveningDeliveryZoneC": {
+            "type": "boolean"
+          },
+          "eveningDeliveryZoneD": {
+            "type": "boolean"
+          },
+          "eveningDeliveryZoneE": {
+            "type": "boolean"
+          },
+          "freightSubsidy": {
+            "type": "boolean"
+          },
+          "greenFreight": {
+            "type": "boolean"
+          },
+          "hardcopyProofOfDelivery": {
+            "type": "boolean"
+          },
+          "indoorDelivery": {
+            "type": "boolean"
+          },
+          "installation": {
+            "type": "boolean"
+          },
+          "installationAdvanced": {
+            "type": "boolean"
+          },
+          "insurance": {
+            "type": "boolean"
+          },
+          "highValueShipment": {
+            "type": "boolean"
+          },
+          "m20": {
+            "type": "boolean"
+          },
+          "m40": {
+            "type": "boolean"
+          },
+          "m60": {
+            "type": "boolean"
+          },
+          "nonStackable": {
+            "type": "boolean"
+          },
+          "notification": {
+            "type": "boolean"
+          },
+          "notificationECE": {
+            "type": "boolean"
+          },
+          "notificationByLetter": {
+            "type": "boolean"
+          },
+          "onlineAppointmentBooking": {
+            "type": "boolean"
+          },
+          "packagingRemoval": {
+            "type": "boolean"
+          },
+          "preAdvice": {
+            "type": "boolean"
+          },
+          "preAdviceByDriver": {
+            "type": "boolean"
+          },
+          "driverPreAdviceDelivery": {
+            "type": "boolean"
+          },
+          "preAdviceNorway": {
+            "type": "boolean"
+          },
+          "priorityServiceG7": {
+            "type": "boolean"
+          },
+          "priorityServiceG10": {
+            "type": "boolean"
+          },
+          "priorityServiceG12": {
+            "type": "boolean"
+          },
+          "removalOfReplacedGoods": {
+            "type": "boolean"
+          },
+          "sortAndQuantity": {
+            "type": "boolean"
+          },
+          "tailLiftLoading": {
+            "type": "boolean"
+          },
+          "tailLiftUnloading": {
+            "type": "boolean"
+          },
+          "thermoCold": {
+            "type": "boolean"
+          },
+          "thermoWarm": {
+            "type": "boolean"
+          },
+          "timeDefiniteLoading": {
+            "type": "boolean"
+          },
+          "timeDefiniteUnloading": {
+            "type": "boolean"
+          },
+          "truck": {
+            "type": "boolean"
+          },
+          "twoManHandling": {
+            "type": "boolean"
+          },
+          "voecSupplyVAT": {
+            "type": "boolean"
+          },
+          "weekendDelivery": {
+            "type": "boolean"
+          },
+          "fixedDeliveryDate": {
+            "type": "boolean"
+          },
+          "thermoFreeze": {
+            "type": "boolean"
+          },
+          "climateNeutral": {
+            "type": "boolean"
+          },
+          "bookInWithInfo": {
+            "type": "boolean"
+          },
+          "priorityServiceP10": {
+            "type": "boolean"
+          },
+          "priorityServiceP12": {
+            "type": "boolean"
+          },
+          "dropOffByConsignor": {
+            "type": "boolean"
+          },
+          "personalDelivery": {
+            "type": "boolean"
+          },
+          "preAdvicePickup": {
+            "type": "boolean"
+          },
+          "after12Delivery": {
+            "type": "boolean"
+          },
+          "timeSlotBookingPickup": {
+            "type": "boolean"
+          },
+          "timeSlotBookingDelivery": {
+            "type": "boolean"
+          },
+          "availablePickupTime": {
+            "type": "boolean"
+          },
+          "availableDeliveryTime": {
+            "type": "boolean"
+          },
+          "sideLoadingPickup": {
+            "type": "boolean"
+          },
+          "sideUnloadingDelivery": {
+            "type": "boolean"
+          },
+          "preAdviceByDriverPickup": {
+            "type": "boolean"
+          },
+          "temperatureControlled": {
+            "type": "boolean"
+          },
+          "indoorDeliverySpecial": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Translation": {
+        "type": "object",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ModifiableReferenceItem"
+          }
+        ],
+        "properties": {
+          "languageCode": {
+            "maxLength": 10,
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "information": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ValidationError": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "errorCode": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "hasMessage": {
+            "type": "boolean",
+            "readOnly": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ValidationResult": {
+        "type": "object",
+        "properties": {
+          "additionalService": {
+            "$ref": "#/components/schemas/AdditionalServiceType"
+          },
+          "valid": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "validationErrors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "VolumetricUnit": {
+        "enum": [
+          "CubicMetre",
+          "LoadingMetre",
+          "PalletPlace"
+        ],
+        "type": "integer",
+        "format": "int32"
+      }
+    },
+    "securitySchemes": {
+      "Client key": {
+        "type": "apiKey",
+        "description": "Please insert your client key",
+        "name": "client-key",
+        "in": "header"
+      }
+    }
+  },
+  "security": [
+    {
+      "Client key": [
+        "client-key"
+      ]
+    }
+  ],
+  "tags": [
+    {
+      "name": "AdditionalService"
+    },
+    {
+      "name": "Ping"
+    }
+  ]
+}

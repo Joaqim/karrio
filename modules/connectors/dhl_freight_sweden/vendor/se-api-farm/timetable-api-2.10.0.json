@@ -1,0 +1,206 @@
+{
+  "openapi": "3.0.4",
+  "info": {
+    "title": "TimeTable Api",
+    "version": "2.10.0"
+  },
+  "servers": [
+    {
+      "url": "https://test-api.freight-logistics.dhl.com/timetableapi/v1/"
+    }
+  ],
+  "paths": {
+    "/timetable/gettimetable": {
+      "post": {
+        "tags": [
+          "TimeTable"
+        ],
+        "parameters": [
+          {
+            "name": "productcode",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/TimeTableSearchModel"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TimeTableSearchModel"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TimeTableSearchModel"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/TimeTableSearchModel"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "List of products with pickup date and delivery date",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TimeTableData"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TimeTableData"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TimeTableData"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "TimeTableData": {
+        "type": "object",
+        "properties": {
+          "product": {
+            "type": "string"
+          },
+          "productCode": {
+            "type": "string"
+          },
+          "pickupDateString": {
+            "type": "string"
+          },
+          "deliveryDateString": {
+            "type": "string"
+          },
+          "options": {
+            "type": "string"
+          },
+          "priorityServiceG7": {
+            "type": "boolean"
+          },
+          "priorityServiceG10": {
+            "type": "boolean"
+          },
+          "priorityServiceG12": {
+            "type": "boolean"
+          },
+          "priorityServiceP10": {
+            "type": "boolean"
+          },
+          "priorityServiceP12": {
+            "type": "boolean"
+          },
+          "sameDayPickup12": {
+            "type": "boolean"
+          },
+          "sameDayPickup15": {
+            "type": "boolean"
+          },
+          "pickupDate": {
+            "type": "string"
+          },
+          "deliveryDate": {
+            "type": "string"
+          },
+          "fixedDeliveryDates": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "TimeTableSearchModel": {
+        "type": "object",
+        "properties": {
+          "cityName": {
+            "type": "string"
+          },
+          "postalCode": {
+            "type": "string"
+          },
+          "countryCode": {
+            "type": "string"
+          },
+          "street": {
+            "type": "string"
+          },
+          "streetNumber": {
+            "type": "string"
+          },
+          "deliveryCityName": {
+            "type": "string"
+          },
+          "deliveryPostalCode": {
+            "type": "string"
+          },
+          "deliveryCountryCode": {
+            "type": "string"
+          },
+          "deliveryStreet": {
+            "type": "string"
+          },
+          "deliveryStreetNumber": {
+            "type": "string"
+          },
+          "earliestSent": {
+            "type": "boolean"
+          },
+          "dateTime": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "Client key": {
+        "type": "apiKey",
+        "description": "Please insert your client key",
+        "name": "client-key",
+        "in": "header"
+      }
+    }
+  },
+  "security": [
+    {
+      "Client key": [
+        "client-key"
+      ]
+    }
+  ],
+  "tags": [
+    {
+      "name": "TimeTable"
+    }
+  ]
+}

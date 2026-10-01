@@ -1,0 +1,208 @@
+{
+  "openapi": "3.0.4",
+  "info": {
+    "title": "EId API",
+    "version": "2.10.0"
+  },
+  "servers": [
+    {
+      "url": "https://test-api.freight-logistics.dhl.com/eidapi/v1/"
+    }
+  ],
+  "paths": {
+    "/eid/validate": {
+      "post": {
+        "tags": [
+          "Eid"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidationModel"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidationModel"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidationModel"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidationModel"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/eid/accounts": {
+      "post": {
+        "tags": [
+          "Eid"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetAccountsModel"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetAccountsModel"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetAccountsModel"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetAccountsModel"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "List of agreements for user",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/QuotableAccountDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/QuotableAccountDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/QuotableAccountDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/eid/ping": {
+      "get": {
+        "tags": [
+          "Eid"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "EidUserRightsEnum": {
+        "enum": [
+          "QuotePrice",
+          "GetShipmentOnHold",
+          "GetShipmentPassthru"
+        ],
+        "type": "integer",
+        "format": "int32"
+      },
+      "GetAccountsModel": {
+        "type": "object",
+        "properties": {
+          "userName": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "requestedUserRight": {
+            "$ref": "#/components/schemas/EidUserRightsEnum"
+          }
+        },
+        "additionalProperties": false
+      },
+      "QuotableAccountDto": {
+        "type": "object",
+        "properties": {
+          "agreementNo": {
+            "type": "string"
+          },
+          "productCode": {
+            "type": "string"
+          },
+          "productDescription": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ValidationModel": {
+        "type": "object",
+        "properties": {
+          "userName": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "accountNo": {
+            "type": "string"
+          },
+          "product": {
+            "type": "string"
+          },
+          "requestedUserRight": {
+            "$ref": "#/components/schemas/EidUserRightsEnum"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "Client key": {
+        "type": "apiKey",
+        "description": "Please insert your client key",
+        "name": "client-key",
+        "in": "header"
+      }
+    }
+  },
+  "security": [
+    {
+      "Client key": [
+        "client-key"
+      ]
+    }
+  ],
+  "tags": [
+    {
+      "name": "Eid"
+    }
+  ]
+}
