@@ -190,9 +190,10 @@ payload = {
         # "shipper_instructions" -> pickupInstruction,
         # "recipient_instructions" -> deliveryInstruction
     },
-    # international lanes also need customs (commodities, incoterm); the payer
-    # code resolves from dhl_freight_sweden_payer_code, else customs.incoterm,
-    # else the consignor-pays default "1"
+    # lanes leaving the EU VAT area need customs (commodities, incoterm);
+    # within it customs data is dropped with a customs_omitted_intra_eu
+    # warning. The payer code resolves from dhl_freight_sweden_payer_code,
+    # else customs.incoterm, else the consignor-pays default "1"
 }
 
 details, messages = (
