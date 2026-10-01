@@ -32,6 +32,7 @@ BRANCHES=(
   fix-dashboard-carrier-options
   fix-dashboard-address-template-fields
   chore-sdk-pypdf
+  chore-submodule-update-none
   feat-tracker-locale
   feat-shipment-advisors
   feat-dhl-freight-se-connector
@@ -43,8 +44,8 @@ BRANCHES=(
   feat-postnord-cn22-stamping
   feat-postnord-customs-invoice
   fix-postnord-eu-vat-territories
-  feat-postnord-eori-vat-fallback
   fix-postnord-customs-line-content
+  feat-postnord-eori-vat-fallback
   dev-nix-flake
   docs-openspec
 )
