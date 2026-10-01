@@ -4,6 +4,17 @@ import typing
 
 
 @attr.s(auto_attribs=True)
+class CustomsCustomersOwnDeclarationType:
+    customsId: typing.Optional[str] = None
+    customsClearanceInstruction: typing.Optional[str] = None
+
+
+@attr.s(auto_attribs=True)
+class CustomsJointDeclarationType:
+    sfid: typing.Optional[str] = None
+
+
+@attr.s(auto_attribs=True)
 class DoorstepDeliveryType:
     accessCode: typing.Optional[int] = None
 
@@ -15,12 +26,22 @@ class InsuranceType:
 
 
 @attr.s(auto_attribs=True)
+class VoecSupplyVATType:
+    vatId: typing.Optional[str] = None
+
+
+@attr.s(auto_attribs=True)
 class AdditionalServicesType:
     notification: typing.Optional[bool] = None
     preAdvice: typing.Optional[bool] = None
     tailLiftUnloading: typing.Optional[bool] = None
     doorstepDelivery: typing.Optional[DoorstepDeliveryType] = jstruct.JStruct[DoorstepDeliveryType]
     insurance: typing.Optional[InsuranceType] = jstruct.JStruct[InsuranceType]
+    customsHandlingStandard: typing.Optional[bool] = None
+    customsHandlingFullService: typing.Optional[bool] = None
+    customsCustomersOwnDeclaration: typing.Optional[CustomsCustomersOwnDeclarationType] = jstruct.JStruct[CustomsCustomersOwnDeclarationType]
+    customsJointDeclaration: typing.Optional[CustomsJointDeclarationType] = jstruct.JStruct[CustomsJointDeclarationType]
+    voecSupplyVAT: typing.Optional[VoecSupplyVATType] = jstruct.JStruct[VoecSupplyVATType]
 
 
 @attr.s(auto_attribs=True)

@@ -10,6 +10,7 @@ Both requests carry the ``client-key`` header. Product codes serialize as
 strings on the wire (e.g. "102", "SPI").
 """
 
+import datetime
 import typing
 import unittest
 from unittest.mock import patch
@@ -112,15 +113,117 @@ class TestDHLFreightShipment(unittest.TestCase):
         self.assertEqual(hs_item, "7615101090")
         self.assertIsInstance(hs_item, str)
 
-    def test_create_shipment_request_customs_domestic_omits_export_movement(self):
+    def test_create_shipment_request_customs_domestic_omits_customs(self):
         request = gateway.mapper.create_shipment_request(
             models.ShipmentRequest(**ShipmentPayload102Customs)
         )
         serialized = lib.to_dict(request.serialize())
 
-        document = serialized["customsInformation"]["customsDocuments"][0]
-        self.assertEqual(document["type"], "CommercialInvoice")
-        self.assertNotIn("transportMovement", document)
+        self.assertNotIn("customsInformation", serialized)
+
+    def test_create_shipment_request_customs_by_eu_vat_area(self):
+        cases = [
+            ("PL", "00-001", False),
+            ("GR", "10552", False),
+            ("FI", "22100", True),
+            ("FI", "00100", False),
+            ("ES", "38001", True),
+            ("ES", "28001", False),
+            ("NO", "0154", True),
+        ]
+
+        for country_code, postal_code, keeps_customs in cases:
+            with self.subTest(country_code=country_code, postal_code=postal_code):
+                payload = {
+                    **ShipmentPayload202Customs,
+                    "recipient": {
+                        **_recipient_se,
+                        "country_code": country_code,
+                        "postal_code": postal_code,
+                    },
+                }
+                request = gateway.mapper.create_shipment_request(
+                    models.ShipmentRequest(**payload)
+                )
+                serialized = lib.to_dict(request.serialize())
+
+                if keeps_customs:
+                    document = serialized["customsInformation"]["customsDocuments"][0]
+                    self.assertEqual(document["transportMovement"], "Export")
+                else:
+                    self.assertNotIn("customsInformation", serialized)
+
+    def test_shipment_intra_eu_customs_omitted_with_warning(self):
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            mock.side_effect = [BookingResponse102, PrintResponse]
+            details, messages = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(**ShipmentPayload202CustomsPL)
+                )
+                .from_(gateway)
+                .parse()
+            )
+
+        booking = lib.to_dict(mock.call_args_list[0].kwargs["data"])
+        self.assertNotIn("customsInformation", booking)
+        self.assertIsNotNone(details)
+        self.assertEqual(lib.to_dict(messages), [IntraEUCustomsWarning])
+
+    def test_shipment_intra_eu_drops_customs_services_without_failing(self):
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            mock.side_effect = [BookingResponse102, PrintResponse]
+            details, messages = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(
+                        **{
+                            **ShipmentPayload202CustomsPL,
+                            "customs": {**Customs, "options": {"voec_number": "VOEC2012345"}},
+                            "options": {
+                                "dhl_freight_sweden_customs_handling_standard": True,
+                                "dhl_freight_sweden_customs_own_declaration": True,
+                            },
+                        }
+                    )
+                )
+                .from_(gateway)
+                .parse()
+            )
+
+        booking = lib.to_dict(mock.call_args_list[0].kwargs["data"])
+        self.assertNotIn("customsInformation", booking)
+        self.assertFalse(set(booking.get("additionalServices") or {}) & CustomsServiceKeys)
+        self.assertIsNotNone(details)
+        self.assertEqual(lib.to_dict(messages), [IntraEUCustomsServicesWarning])
+
+    def test_shipment_intra_eu_customs_options_only_warns(self):
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            mock.side_effect = [BookingResponse102, PrintResponse]
+            _, messages = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(
+                        **_with_options(
+                            ShipmentPayload102,
+                            {"dhl_freight_sweden_customs_handling_full_service": True},
+                        )
+                    )
+                )
+                .from_(gateway)
+                .parse()
+            )
+
+        self.assertEqual([message.code for message in messages], ["customs_omitted_intra_eu"])
+        self.assertIn("customsHandlingFullService", messages[0].message)
+
+    def test_shipment_without_customs_has_no_intra_eu_warning(self):
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            mock.side_effect = [BookingResponse102, PrintResponse]
+            _, messages = (
+                karrio.Shipment.create(models.ShipmentRequest(**ShipmentPayload102))
+                .from_(gateway)
+                .parse()
+            )
+
+        self.assertEqual(messages, [])
 
     def test_create_shipment_request_without_customs_omits_section(self):
         request = gateway.mapper.create_shipment_request(
@@ -140,11 +243,258 @@ class TestDHLFreightShipment(unittest.TestCase):
 
         document = serialized["customsInformation"]["customsDocuments"][0]
         self.assertEqual(document["type"], "ProformaInvoice")
-        self.assertNotIn("id", document)
+        self.assertEqual(document["id"], "ORDER-2026-042")
         self.assertEqual(
             serialized["customsInformation"]["customsCommodities"][0]["procedureCode"],
             "1042",
         )
+
+    def test_create_shipment_request_customs_document_to_norway(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload109CustomsNO)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        self.assertEqual(
+            serialized["customsInformation"]["customsDocuments"],
+            [CustomsDocumentNO],
+        )
+
+    def test_create_shipment_request_customs_without_eori_omits_eori(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload202Customs)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        document = serialized["customsInformation"]["customsDocuments"][0]
+        self.assertNotIn("eori", document)
+
+    def test_create_shipment_request_invoice_without_commercial_flag_is_proforma(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload202InvoiceNotCommercial)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        document = serialized["customsInformation"]["customsDocuments"][0]
+        self.assertEqual(document["type"], "ProformaInvoice")
+        self.assertEqual(document["id"], "INV-2026-001")
+
+    def test_create_shipment_request_merchandise_without_flag_is_proforma(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload202MerchandiseNoFlag)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        document = serialized["customsInformation"]["customsDocuments"][0]
+        self.assertEqual(document["type"], "ProformaInvoice")
+
+    def test_create_shipment_request_transport_movement_from_shipper_country(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload202CustomsWithinNO)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        document = serialized["customsInformation"]["customsDocuments"][0]
+        self.assertNotIn("transportMovement", document)
+
+    def test_create_shipment_request_customs_without_service_option(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload109CustomsNO)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        self.assertFalse(
+            set(serialized.get("additionalServices") or {}) & CustomsServiceKeys
+        )
+
+    def test_create_shipment_request_customs_services(self):
+        cases = [
+            (
+                {"dhl_freight_sweden_customs_handling_standard": True},
+                {"customsHandlingStandard": True},
+            ),
+            (
+                {"dhl_freight_sweden_customs_handling_full_service": True},
+                {"customsHandlingFullService": True},
+            ),
+            (
+                {
+                    "dhl_freight_sweden_customs_own_declaration": True,
+                    "dhl_freight_sweden_customs_own_declaration_id": "26SE000000000000A1",
+                },
+                {"customsCustomersOwnDeclaration": {"customsId": "26SE000000000000A1"}},
+            ),
+            (
+                {
+                    "dhl_freight_sweden_customs_joint_declaration": True,
+                    "dhl_freight_sweden_customs_joint_declaration_id": "SFID-0001",
+                },
+                {"customsJointDeclaration": {"sfid": "SFID-0001"}},
+            ),
+        ]
+
+        for options, expected in cases:
+            with self.subTest(options=options):
+                request = gateway.mapper.create_shipment_request(
+                    models.ShipmentRequest(
+                        **{**ShipmentPayload109CustomsNO, "options": options}
+                    )
+                )
+                serialized = lib.to_dict(request.serialize())
+
+                self.assertEqual(serialized["additionalServices"], expected)
+
+    def test_create_shipment_request_customs_services_unset_flags(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(
+                **{
+                    **ShipmentPayload109CustomsNO,
+                    "options": {
+                        "dhl_freight_sweden_customs_handling_standard": False,
+                        "dhl_freight_sweden_customs_handling_full_service": False,
+                        "dhl_freight_sweden_customs_own_declaration": False,
+                        "dhl_freight_sweden_customs_joint_declaration": False,
+                    },
+                }
+            )
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        self.assertFalse(
+            set(serialized.get("additionalServices") or {}) & CustomsServiceKeys
+        )
+
+    def test_create_shipment_request_voec_number_selects_voec_service(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload109CustomsVOEC)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        self.assertEqual(
+            serialized["additionalServices"],
+            {"voecSupplyVAT": {"vatId": "VOEC2012345"}},
+        )
+
+    def test_create_shipment_request_customs_net_weight_in_kilograms(self):
+        cases = [("LB", 11.025, 5.0), ("OZ", 35.274, 1.0), ("KG", 2.5, 2.5)]
+
+        for weight_unit, weight, expected in cases:
+            with self.subTest(weight_unit=weight_unit):
+                request = gateway.mapper.create_shipment_request(
+                    models.ShipmentRequest(
+                        **_with_commodity_weight(
+                            ShipmentPayload202Customs, weight, weight_unit
+                        )
+                    )
+                )
+                serialized = lib.to_dict(request.serialize())
+
+                commodity = serialized["customsInformation"]["customsCommodities"][0]
+                self.assertEqual(commodity["netWeight"], expected)
+
+    def test_create_shipment_request_customs_commodity_line_totals(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload109CustomsQuantity)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        commodity = serialized["customsInformation"]["customsCommodities"][0]
+        self.assertEqual(commodity["customsValue"], 60.0)
+        self.assertEqual(commodity["netWeight"], 0.76)
+        self.assertEqual(commodity["numberOfUnits"], 2)
+
+    def test_create_shipment_request_customs_invoice_falls_back_to_reference(self):
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**ShipmentPayload109CustomsNoInvoice)
+        )
+        serialized = lib.to_dict(request.serialize())
+
+        document = serialized["customsInformation"]["customsDocuments"][0]
+        self.assertEqual(document["id"], "ORDER-2026-042")
+        self.assertEqual(document["invoiceDate"], "2026-09-30")
+        self.assertEqual(serialized["shippingDate"], "2026-09-30")
+
+    def test_create_shipment_request_customs_invoice_date_chain(self):
+        no_shipping_date = {
+            key: value
+            for key, value in ShipmentPayload109CustomsNoInvoice.items()
+            if key != "options"
+        }
+        cases = [
+            (
+                "explicit",
+                {
+                    **ShipmentPayload109CustomsNoInvoice,
+                    "customs": {
+                        **ShipmentPayload109CustomsNoInvoice["customs"],
+                        "invoice_date": "2026-09-08",
+                    },
+                },
+                "2026-09-08",
+            ),
+            ("shipping date", ShipmentPayload109CustomsNoInvoice, "2026-09-30"),
+            ("booking date", no_shipping_date, "2026-09-25"),
+        ]
+
+        for label, payload, expected in cases:
+            with self.subTest(label), patch(
+                "karrio.providers.dhl_freight_sweden.shipment.create.datetime"
+            ) as clock:
+                clock.date.today.return_value = datetime.date(2026, 9, 25)
+                request = gateway.mapper.create_shipment_request(
+                    models.ShipmentRequest(**payload)
+                )
+                serialized = lib.to_dict(request.serialize())
+
+                document = serialized["customsInformation"]["customsDocuments"][0]
+                self.assertEqual(document["invoiceDate"], expected)
+
+    def test_shipment_customs_without_invoice_or_reference_surfaces_field_error(self):
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            details, messages = (
+                karrio.Shipment.create(
+                    models.ShipmentRequest(
+                        **{
+                            key: value
+                            for key, value in ShipmentPayload109CustomsNoInvoice.items()
+                            if key != "reference"
+                        }
+                    )
+                )
+                .from_(gateway)
+                .parse()
+            )
+
+        mock.assert_not_called()
+        self.assertIsNone(details)
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0].code, "SHIPPING_SDK_FIELD_ERROR")
+        self.assertEqual(set(messages[0].details), {"customs.invoice"})
+        self.assertIn("invoice number", messages[0].message)
+
+    def test_create_shipment_request_customs_commodity_without_quantity(self):
+        payload = {
+            **ShipmentPayload109CustomsQuantity,
+            "customs": {
+                **ShipmentPayload109CustomsQuantity["customs"],
+                "commodities": [
+                    {
+                        **ShipmentPayload109CustomsQuantity["customs"]["commodities"][0],
+                        "quantity": None,
+                    }
+                ],
+            },
+        }
+        shipment = models.ShipmentRequest(**payload)
+        self.assertIsNone(shipment.customs.commodities[0].quantity)
+
+        request = gateway.mapper.create_shipment_request(shipment)
+        serialized = lib.to_dict(request.serialize())
+
+        commodity = serialized["customsInformation"]["customsCommodities"][0]
+        self.assertEqual(commodity["customsValue"], 30.0)
+        self.assertEqual(commodity["netWeight"], 0.38)
+        self.assertEqual(commodity["numberOfUnits"], 1)
 
     def test_create_shipment_request_payer_from_customs_incoterm(self):
         request = gateway.mapper.create_shipment_request(
@@ -205,6 +555,91 @@ class TestDHLFreightShipment(unittest.TestCase):
         self.assertIn("customs.commodities.value_currency", messages[0].details)
         self.assertIn("EUR", messages[0].message)
         self.assertIn("SEK", messages[0].message)
+
+    def test_shipment_customs_service_missing_identifier_surfaces_field_error(self):
+        cases = [
+            (
+                ShipmentPayload109StandardWithoutEORI,
+                "customs.options.eori_number",
+                "EORI",
+            ),
+            (
+                _with_options(
+                    ShipmentPayload109CustomsNO,
+                    {"dhl_freight_sweden_customs_own_declaration": True},
+                ),
+                "dhl_freight_sweden_customs_own_declaration_id",
+                "customs identifier",
+            ),
+            (
+                _with_options(
+                    ShipmentPayload109CustomsNO,
+                    {
+                        "dhl_freight_sweden_customs_own_declaration": True,
+                        "dhl_freight_sweden_customs_own_declaration_id": " ",
+                    },
+                ),
+                "dhl_freight_sweden_customs_own_declaration_id",
+                "customs identifier",
+            ),
+            (
+                _with_options(
+                    ShipmentPayload109CustomsNO,
+                    {"dhl_freight_sweden_customs_joint_declaration": True},
+                ),
+                "dhl_freight_sweden_customs_joint_declaration_id",
+                "SFID",
+            ),
+            (
+                _with_options(
+                    ShipmentPayload109CustomsNO,
+                    {
+                        "dhl_freight_sweden_customs_joint_declaration": True,
+                        "dhl_freight_sweden_customs_joint_declaration_id": " ",
+                    },
+                ),
+                "dhl_freight_sweden_customs_joint_declaration_id",
+                "SFID",
+            ),
+        ]
+
+        for payload, field, label in cases:
+            with self.subTest(field=field, options=payload["options"]):
+                with patch(
+                    "karrio.mappers.dhl_freight_sweden.proxy.lib.request"
+                ) as mock:
+                    details, messages = (
+                        karrio.Shipment.create(models.ShipmentRequest(**payload))
+                        .from_(gateway)
+                        .parse()
+                    )
+
+                mock.assert_not_called()
+                self.assertIsNone(details)
+                self.assertEqual(len(messages), 1)
+                self.assertEqual(messages[0].code, "SHIPPING_SDK_FIELD_ERROR")
+                self.assertEqual(set(messages[0].details), {field})
+                self.assertIn(label, messages[0].message)
+
+    def test_shipment_customs_identifier_without_selector_selects_no_service(self):
+        with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request") as mock:
+            mock.side_effect = [BookingResponse102, PrintResponse]
+            karrio.Shipment.create(
+                models.ShipmentRequest(
+                    **_with_options(
+                        ShipmentPayload109CustomsNO,
+                        {
+                            "dhl_freight_sweden_customs_own_declaration_id": "26SE000000000000A1",
+                            "dhl_freight_sweden_customs_joint_declaration_id": "SFID-0001",
+                        },
+                    )
+                )
+            ).from_(gateway)
+
+        booking = lib.to_dict(mock.call_args_list[0].kwargs["data"])
+        self.assertFalse(
+            set(booking.get("additionalServices") or {}) & CustomsServiceKeys
+        )
 
     def test_shipment_service_point_missing_details_surfaces_field_error(self):
         with patch("karrio.mappers.dhl_freight_sweden.proxy.lib.request"):
@@ -669,6 +1104,20 @@ _recipient_dk = {
     "country_code": "DK",
 }
 
+_recipient_no = {
+    **_recipient_se,
+    "city": "Oslo",
+    "postal_code": "0154",
+    "country_code": "NO",
+}
+
+_recipient_pl = {
+    **_recipient_se,
+    "city": "Warszawa",
+    "postal_code": "00-001",
+    "country_code": "PL",
+}
+
 # Pre-flight trigger scope: product 118 (the only product with a documented
 # per-product route flag) to Swedish consignees with a postal code.
 _recipient_kiruna = {
@@ -691,6 +1140,29 @@ _parcel = {
     "dimension_unit": "CM",
     "reference_number": "REF-001",
 }
+
+
+def _with_options(payload: dict, options: dict) -> dict:
+    return {**payload, "options": options}
+
+
+def _with_commodity_weight(payload: dict, weight: float, weight_unit: str) -> dict:
+    customs = payload["customs"]
+    return {
+        **payload,
+        "customs": {
+            **customs,
+            "commodities": [
+                {
+                    **commodity,
+                    "weight": weight,
+                    "weight_unit": weight_unit,
+                    "quantity": 1,
+                }
+                for commodity in customs["commodities"]
+            ],
+        },
+    }
 
 
 def _payload(service: str, recipient: dict, options: typing.Optional[dict] = None) -> dict:
@@ -801,8 +1273,42 @@ Customs = {
 }
 
 ShipmentPayload202Customs = {
-    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_de),
+    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_no),
     "customs": Customs,
+}
+
+ShipmentPayload202CustomsPL = {
+    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_pl),
+    "customs": Customs,
+}
+
+IntraEUCustomsWarning = {
+    "carrier_name": "dhl_freight_sweden",
+    "carrier_id": "dhl_freight_sweden",
+    "code": "customs_omitted_intra_eu",
+    "level": "warning",
+    "message": (
+        "Customs data was not sent: the shipment from SE to PL stays "
+        "within the EU VAT area"
+    ),
+    "details": {"shipper_country_code": "SE", "recipient_country_code": "PL"},
+}
+
+IntraEUCustomsServicesWarning = {
+    **IntraEUCustomsWarning,
+    "message": (
+        "Customs data was not sent: the shipment from SE to PL stays "
+        "within the EU VAT area; dropped customs services: "
+        "customsHandlingStandard, customsCustomersOwnDeclaration, voecSupplyVAT"
+    ),
+    "details": {
+        **IntraEUCustomsWarning["details"],
+        "dropped_services": [
+            "customsHandlingStandard",
+            "customsCustomersOwnDeclaration",
+            "voecSupplyVAT",
+        ],
+    },
 }
 
 ShipmentPayload102Customs = {
@@ -811,11 +1317,115 @@ ShipmentPayload102Customs = {
 }
 
 ShipmentPayload202Proforma = {
-    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_de),
+    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_no),
+    "reference": "ORDER-2026-042",
     "customs": {
         "commodities": Customs["commodities"],
         "incoterm": "DAP",
     },
+}
+
+_shipper_no = {
+    **_shipper,
+    "city": "Bergen",
+    "postal_code": "5003",
+    "country_code": "NO",
+}
+
+CustomsNO = {
+    **Customs,
+    "duty": {"paid_by": "sender", "currency": "SEK", "declared_value": 2500.0},
+    "commodities": [
+        {**Customs["commodities"][0], "value_amount": 2500.0, "value_currency": "SEK"}
+    ],
+    "options": {"eori_number": "SE5560000001"},
+}
+
+ShipmentPayload109CustomsNO = {
+    **_payload("dhl_freight_sweden_parcel_connect_b2c", _recipient_no),
+    "customs": CustomsNO,
+}
+
+CustomsDocumentNO = {
+    "id": "INV-2026-001",
+    "type": "CommercialInvoice",
+    "transportMovement": "Export",
+    "invoiceDate": "2026-09-08",
+    "invoiceCurrency": "SEK",
+    "invoiceAmount": 2500.0,
+    "eori": "SE5560000001",
+}
+
+ShipmentPayload109CustomsQuantity = {
+    **ShipmentPayload109CustomsNO,
+    "customs": {
+        **CustomsNO,
+        "duty": {"paid_by": "sender", "currency": "EUR", "declared_value": 60.0},
+        "commodities": [
+            {
+                **Customs["commodities"][0],
+                "quantity": 2,
+                "value_amount": 30.0,
+                "value_currency": "EUR",
+                "weight": 0.38,
+                "weight_unit": "KG",
+            }
+        ],
+    },
+}
+
+ShipmentPayload109CustomsNoInvoice = {
+    **_payload(
+        "dhl_freight_sweden_parcel_connect_b2c",
+        _recipient_no,
+        {"shipment_date": "2026-09-30"},
+    ),
+    "reference": "ORDER-2026-042",
+    "customs": {
+        key: value
+        for key, value in CustomsNO.items()
+        if key not in ("invoice", "invoice_date")
+    },
+}
+
+ShipmentPayload109CustomsVOEC = {
+    **ShipmentPayload109CustomsNO,
+    "customs": {
+        **CustomsNO,
+        "options": {**CustomsNO["options"], "voec_number": "VOEC2012345"},
+    },
+}
+
+ShipmentPayload109StandardWithoutEORI = {
+    **ShipmentPayload109CustomsNO,
+    "customs": {**CustomsNO, "options": {}},
+    "options": {"dhl_freight_sweden_customs_handling_standard": True},
+}
+
+CustomsServiceKeys = {
+    "customsHandlingStandard",
+    "customsHandlingFullService",
+    "customsCustomersOwnDeclaration",
+    "customsJointDeclaration",
+    "voecSupplyVAT",
+}
+
+ShipmentPayload202InvoiceNotCommercial = {
+    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_no),
+    "customs": {**Customs, "commercial_invoice": False},
+}
+
+ShipmentPayload202MerchandiseNoFlag = {
+    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_no),
+    "customs": {
+        key: value for key, value in Customs.items() if key != "commercial_invoice"
+    },
+}
+
+ShipmentPayload202CustomsWithinNO = {
+    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_no),
+    "shipper": _shipper_no,
+    "customs": Customs,
 }
 
 ShipmentPayloadWithReference = {
@@ -842,7 +1452,7 @@ _gap_currency_commodity = {
 }
 
 ShipmentPayload202GapCurrency = {
-    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_de),
+    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_no),
     "customs": {
         "commodities": [
             _gap_currency_commodity,
@@ -853,12 +1463,13 @@ ShipmentPayload202GapCurrency = {
             },
         ],
         "incoterm": "DAP",
+        "invoice": "INV-2026-001",
         "duty": {"paid_by": "sender", "currency": "EUR", "declared_value": 1250.0},
     },
 }
 
 ShipmentPayload202MixedCurrency = {
-    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_de),
+    **_payload("dhl_freight_sweden_road_freight_standard", _recipient_no),
     "customs": {
         "commodities": [
             Customs["commodities"][0],
@@ -888,11 +1499,11 @@ CustomsInformation = {
         {
             "countryCodeOfOrigin": "SE",
             "customsValueCurrency": "EUR",
-            "customsValue": 1200.0,
+            "customsValue": 4800.0,
             "hsItemId": "7615101090",
             "commodityDescription": "Aluminium brackets",
             "procedureCode": "1042",
-            "netWeight": 2.5,
+            "netWeight": 10.0,
             "numberOfUnits": 4,
         }
     ],

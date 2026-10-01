@@ -139,6 +139,11 @@ create_shipment(request)
 | `parcels[]` | `pieces[]` | kg / cm, `numberOfPieces=1` per parcel; per-product minimum dimensions apply at DHL |
 | `reference` | `references[]{qualifier: "CU"}` | consignor reference, 3-character qualifier |
 | `options.dhl_freight_sweden_payer_code` | `payerCode.code` | domestic `1`/`3`/`4`, international Incoterms or Combiterm |
+| `options.dhl_freight_sweden_customs_handling_standard`, `customs_handling_full_service` | `additionalServices.customsHandlingStandard` / `customsHandlingFullService` | fee-bearing, sent as `true` only when selected; standard handling requires `customs.options.eori_number` |
+| `options.dhl_freight_sweden_customs_own_declaration` with `customs_own_declaration_id` | `additionalServices.customsCustomersOwnDeclaration.customsId` | fee-bearing, sent only when selected; the identifier is the MRN and is required |
+| `options.dhl_freight_sweden_customs_joint_declaration` with `customs_joint_declaration_id` | `additionalServices.customsJointDeclaration.sfid` | fee-bearing, sent only when selected; the identifier is the SFID and is required |
+| `customs.options.voec_number` | `additionalServices.voecSupplyVAT.vatId` | sent whenever set |
+| `customs.options.eori_number` | `customsInformation.customsDocuments[0].eori` | sent on the customs document when set |
 | `options.dhl_freight_sweden_label_page_type` | `pageOptions.pageType` | also a `label_page_type` connection config |
 | `options.shipper_instructions` / `recipient_instructions` | `pickupInstruction` / `deliveryInstruction` | D12 |
 | `options.dhl_freight_sweden_service_point[_type,_name,_street,_city,_postal_code,_country_code]` | `parties[AccessPoint]` | D10 |
@@ -186,6 +191,9 @@ The address fields map one-to-one onto the service-point booking options.
 | Route lookup network error, timeout, or 5xx | Warning, booking proceeds (D21) |
 | Route 4xx `ErrorResult` (e.g. 16010 post code not found) | Definitive negative: `warn` annotates, `enforce` blocks |
 | Shipper country differs from `account_country_code` (SE) | The unified SDK rejects rating and booking with `SHIPPING_SDK_ORIGIN_NOT_SERVICED_ERROR` before the connector runs; the connector-local lookups are not gated |
+| Customs service selected without its identifier (EORI, MRN or SFID) | Field error naming every missing identifier, no carrier call; not checked when the customs services are dropped within the EU VAT area |
+| Customs document without `customs.invoice` | The shipment `reference` becomes the document id; with neither, a field error on `customs.invoice`, no carrier call |
+| Customs document without `customs.invoice_date` | `invoiceDate` falls back to the `shipment_date` option, then the current date, because DHL records a missing date as 0001-01-01 |
 
 ---
 
