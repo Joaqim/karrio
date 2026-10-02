@@ -196,7 +196,7 @@ ParsedTrackingResponse = [
                 },
                 {
                     "date": "2026-06-25",
-                    "time": "15:42 PM",
+                    "time": "03:42 PM",
                     "code": "C20",
                     "description": "The shipment item has been delivered",
                     "location": "Hemleverans, Stockholm 11455, SE",
