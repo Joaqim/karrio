@@ -17,6 +17,12 @@
 # Author and committer dates of the merge commits are pinned to the newest
 # committer date among base and the input branches, so identical inputs and
 # identity yield identical commit ids.
+#
+# Tags under refs/tags/pin/ record fork commits that downstream lockfiles
+# depend on. Before assembling, every pin tag must peel to a commit present
+# in the repository, or the script exits 2. After assembling, pins the new
+# target does not contain are listed: once the target replaces develop, those
+# commits are reachable only through their tags.
 set -euo pipefail
 
 repo=$(git rev-parse --show-toplevel)
@@ -76,6 +82,11 @@ for ref in "$base" "${BRANCHES[@]}"; do
   g rev-parse --verify -q "$ref^{commit}" >/dev/null || { echo "missing ref: $ref" >&2; exit 2; }
 done
 
+mapfile -t pins < <(g for-each-ref --format='%(refname)' 'refs/tags/pin/')
+for pin in "${pins[@]}"; do
+  g cat-file -e "$pin^{commit}" 2>/dev/null || { echo "unresolvable pin: ${pin#refs/tags/}" >&2; exit 2; }
+done
+
 if g rev-parse --verify -q "refs/heads/$target" >/dev/null; then
   if ((!force)); then
     echo "branch $target exists; pass -f to recreate it" >&2
@@ -108,6 +119,12 @@ for b in "${BRANCHES[@]}"; do
     gw diff --name-only --diff-filter=U >&2
     gw merge --abort
     exit 1
+  fi
+done
+
+for pin in "${pins[@]}"; do
+  if ! gw merge-base --is-ancestor "$pin^{commit}" HEAD; then
+    echo "pin    ${pin#refs/tags/} ($(g rev-parse --short "$pin^{commit}")) not contained; reachable only through the tag"
   fi
 done
 

@@ -62,6 +62,18 @@ The scripts live in `docs/notes/workflow/` on `develop` and `docs-openspec`; fro
 
 Remove the branch from `BRANCHES`, rebase any branches that depend on it onto `upstream/main`, and regenerate.
 
+## Pinned commits
+
+Downstream projects pin this fork by commit sha, and each regeneration of `develop` can leave a pinned commit outside every branch.
+A tag under `pin/`, named `pin/<consumer>/<date>`, keeps such a commit reachable; `pin/frappe-karrio/2026-10-02` holds the `7bb7f0f79` pin of frappe_karrio.
+Create one annotated tag per new downstream pin, push only that tag, and keep the consumer's lockfile on the sha rather than the tag name.
+Protect them with the `pin-tags` tag ruleset on `Joaqim/karrio`, which blocks updating or deleting `pin/*` tags.
+
+`assemble-develop.sh` exits 2 if a `pin/*` tag does not peel to a commit in the repository.
+Run `git fetch --tags origin` first, since the check sees only local tags.
+After assembling, it prints a `pin` line for each pinned commit the new target does not contain; such a commit then stays reachable only through its tag, which is expected and needs no action while the tag exists.
+Delete a pin tag only after every consumer has moved off its commit.
+
 ## Git hazard
 
 The global git config sets `submodule.recurse=true`, and the `community` submodule is not initialised in `.worktrees/`.
