@@ -39,6 +39,7 @@ BRANCHES=(
   fix-dashboard-address-template-fields
   chore-sdk-pypdf
   chore-submodule-update-none
+  fix-flocaltime-ampm
   feat-tracker-locale
   feat-shipment-advisors
   feat-dhl-freight-se-connector
