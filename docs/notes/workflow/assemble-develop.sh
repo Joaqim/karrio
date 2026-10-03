@@ -42,9 +42,6 @@ BRANCHES=(
   fix-flocaltime-ampm
   feat-tracker-locale
   feat-shipment-advisors
-  feat-dhl-freight-se-connector
-  feat-dhl-freight-se-customs
-  fix-dhl-freight-se-eu-vat-territories
   docs-vendored-carrier-specs
   feat-document-stamping
   feat-postnord-connector
