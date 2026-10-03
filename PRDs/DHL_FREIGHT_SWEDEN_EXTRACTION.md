@@ -275,11 +275,13 @@ discovered, 20-member ShippingService enum intact. Local checkout:
 
 | Task | Files | Status | Effort |
 |------|-------|--------|--------|
-| Remove dhl family from `BRANCHES` | `docs/notes/workflow/assemble-develop.sh` | Pending | M |
-| Consume external package in source build (docker path only) | `source.requirements.txt`, `bin/build-server-image-from-source` | Pending | M |
-| Deployment adoption (plan repo) | `~/projects/plan/npins`, `~/projects/plan/modules/clan/services/karrio/flake-module.nix` | Pending | S |
-| Nix dev shell integration | `dev-nix-flake:nix/dev-shell.nix` | Pending | S |
-| Repoint conventions cross-checks | `~/projects/nordic_conventions` | Pending | S |
+| Remove dhl family from `BRANCHES` | `docs/notes/workflow/assemble-develop.sh` | Completed 2026-10-03 | M |
+| Park family branches as deprecated | `deprecated-{feat,feat,fix}-dhl-freight-se-*` | Completed 2026-10-03 | S |
+| Drop dhl vendored specs from develop | `docs-vendored-carrier-specs` | Completed 2026-10-03 | S |
+| Consume external package in source build (docker path only) | `source.requirements.txt`, `bin/build-server-image-from-source` | Resolved: family branches carried the manifest lines; removal drops them — docker-source builds simply exclude the connector | S |
+| Deployment adoption (plan repo) | `~/projects/plan/npins`, `~/projects/plan/modules/clan/services/karrio/flake-module.nix` | Completed 2026-10-03, deployed dormant | S |
+| Nix dev shell integration | `dev-nix-flake:nix/dev-shell.nix` | Pending (connector dev now happens in the standalone repo's own venv) | S |
+| Repoint conventions cross-checks | `~/projects/nordic_conventions` | Pending (dhl cross-checks skip in the fork dev shell post-removal; repoint to the standalone repo later) | S |
 
 **Deployment consumption design (prime, nix/clan):** the karrio flake-module
 already consumes external plugins by bind-mount (`extraPlugins` →
