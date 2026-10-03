@@ -5,7 +5,7 @@
 | Project | Karrio fork |
 | Version | 1.0 |
 | Date | 2026-10-03 |
-| Status | In Progress |
+| Status | Completed |
 | Owner | Joaqim Planstedt |
 | Type | Architecture |
 | Reference | [PRD_DHL_FREIGHT_SWEDEN_INTEGRATION.md](./PRD_DHL_FREIGHT_SWEDEN_INTEGRATION.md) |
@@ -231,45 +231,71 @@ PROVIDERS/MAPPERS + PLUGIN_METADATA ──► constance flag ──► /v1/refer
 
 ## Implementation Plan
 
-### Phase 1: Export (subagent Task, running)
+### Phase 1: Export (subagent Task)
 
 | Task | Files | Status | Effort |
 |------|-------|--------|--------|
-| Single-branch clone at family tip | `~/projects/karrio-dhl-freight-sweden` | In Progress | S |
-| `git filter-repo --subdirectory-filter modules/connectors/dhl_freight_sweden` | same | In Progress | S |
+| Single-branch clone at family tip | `~/projects/karrio-dhl-freight-sweden` | Completed | S |
+| `git filter-repo --subdirectory-filter modules/connectors/dhl_freight_sweden` | same | Completed | S |
 
 ### Phase 2: Assembly
 
 | Task | Files | Status | Effort |
 |------|-------|--------|--------|
-| LICENSE LGPL-3.0 (from monorepo root) | `LICENSE` | Pending | S |
-| README extension (install, registration, development) | `README.md` | Pending | S |
-| Vendored specs import from develop tree | `vendor/` (13 files) | Pending | S |
-| .gitignore, requirements-dev.txt | both | Pending | S |
+| LICENSE LGPL-3.0 (from monorepo root) | `LICENSE` | Completed | S |
+| README extension (install, registration, development) | `README.md` | Completed | S |
+| Vendored specs import from develop tree | `vendor/` (13 files) | Completed | S |
+| .gitignore, requirements-dev.txt | both | Completed | S |
 
 ### Phase 3: Verification
 
 | Task | Files | Status | Effort |
 |------|-------|--------|--------|
-| venv + editable installs, entry-point assertion | — | Pending | S |
-| Full unittest suite from repo root | `tests/` | Pending | S |
+| venv + editable installs, entry-point assertion | — | Completed | S |
+| Full unittest suite from repo root | `tests/` | Completed | S |
 
 ### Phase 4: Publish (user-approved, gated on Phase 3 green)
 
 | Task | Files | Status | Effort |
 |------|-------|--------|--------|
-| `gh repo create PrimePack-AB/karrio-dhl-freight-sweden --public` + push | — | Pending | S |
+| `gh repo create PrimePack-AB/karrio-dhl-freight-sweden --public` + push | — | Completed | S |
+
+### Completion (2026-10-03)
+
+Published: https://github.com/PrimePack-AB/karrio-dhl-freight-sweden
+(public, default branch `main`, remote tip `5b8ee024ea15` == local).
+34 commits = 27 exported + 7 assembly (vendor specs, LICENSE as plain
+LGPL-3.0 with PrimePack AB attribution header, README, requirements-dev,
+gitignore, package metadata → PrimePack AB). Standalone verification:
+96/96 unittest green in a fresh venv, entry point `dhl_freight_sweden`
+discovered, 20-member ShippingService enum intact. Local checkout:
+`~/projects/karrio-dhl-freight-sweden` (remote `origin` configured).
 
 ### Deferred: Fork Switchover (separate PRD/change)
 
 | Task | Files | Status | Effort |
 |------|-------|--------|--------|
 | Remove dhl family from `BRANCHES` | `docs/notes/workflow/assemble-develop.sh` | Pending | M |
-| Consume external package in source build | `source.requirements.txt`, `bin/build-server-image-from-source` | Pending | M |
-| Nix shell / deployment integration | `dev-nix-flake:nix/dev-shell.nix`, clan config | Pending | M |
+| Consume external package in source build (docker path only) | `source.requirements.txt`, `bin/build-server-image-from-source` | Pending | M |
+| Deployment adoption (plan repo) | `~/projects/plan/npins`, `~/projects/plan/modules/clan/services/karrio/flake-module.nix` | Pending | S |
+| Nix dev shell integration | `dev-nix-flake:nix/dev-shell.nix` | Pending | S |
 | Repoint conventions cross-checks | `~/projects/nordic_conventions` | Pending | S |
 
-**Dependencies:** Publish blocked on Phase 3 evidence. Switchover blocked on
+**Deployment consumption design (prime, nix/clan):** the karrio flake-module
+already consumes external plugins by bind-mount (`extraPlugins` →
+`/var/lib/karrio-plugins`, `KARRIO_PLUGINS` scan) — the same path
+`nordic_conventions` rides. Adoption is an npins pin for
+`PrimePack-AB/karrio-dhl-freight-sweden` plus an `extraPlugins` entry; the
+extracted repo satisfies the scanner's child shape
+(`karrio/plugins/dhl_freight_sweden/` at source root) unchanged. Ordering is
+safe: karrio's 4-tier reference merge ranks pip-installed entry points above
+the directory scan, so while the fork ships the in-tree copy the mount is
+dormant; the mount takes over, same plugin id, when switchover removes the
+in-tree copy. The docker `file://` path constraint applies only to
+`bin/build-server-image-from-source`, not to this deployment.
+
+**Dependencies:** Publish blocked on Phase 3 evidence. Deployment adoption can
+follow publish immediately (dormant until switchover). Switchover blocked on
 deployment proof of the external package.
 
 ---
