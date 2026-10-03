@@ -6,6 +6,11 @@ import karrio.core.models as models
 import karrio.providers.postnord.utils as provider_utils
 
 
+FAULT_HINTS: typing.Dict[str, str] = {
+    "CONTENT": "set customs.commodities[].title or description",
+}
+
+
 def parse_error_response(
     response: typing.Union[dict, typing.List[dict]],
     settings: provider_utils.Settings,
@@ -69,11 +74,15 @@ def parse_error_response(
             carrier_name=settings.carrier_name,
             code=lib.identity(fault.get("faultCode") or _sub_type(fault)),
             message=lib.identity(
-                fault.get("explanationText") or body.get("message")
+                _hinted(fault.get("explanationText"), _sub_type(fault))
+                or body.get("message")
             ),
             details=lib.to_dict(
                 {
                     **kwargs,
+                    "summary": lib.identity(
+                        body.get("message") if fault.get("explanationText") else None
+                    ),
                     "params": {
                         param.get("param"): param.get("value")
                         for param in (fault.get("paramValues") or [])
@@ -152,6 +161,14 @@ def _sub_type(fault: dict) -> typing.Optional[str]:
         ),
         None,
     )
+
+
+def _hinted(
+    explanation: typing.Optional[str], sub_type: typing.Optional[str]
+) -> typing.Optional[str]:
+    """Append the unified field to correct for fault subtypes with a known hint."""
+    hint = FAULT_HINTS.get(sub_type or "")
+    return f"{explanation} ({hint})" if explanation and hint else explanation
 
 
 def _has_fault(error_response: dict) -> bool:

@@ -725,6 +725,26 @@ class TestPostNordShipment(unittest.TestCase):
             )
             self.assertListEqual(lib.to_dict(parsed_response), ParsedErrorResponse)
 
+    def test_parse_missing_content_error_response(self):
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = MissingContentErrorResponse
+            parsed_response = (
+                karrio.Shipment.create(self.ShipmentRequest).from_(gateway).parse()
+            )
+            self.assertListEqual(
+                lib.to_dict(parsed_response), ParsedMissingContentErrorResponse
+            )
+
+    def test_parse_error_response_without_explanation_text(self):
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = NoExplanationErrorResponse
+            parsed_response = (
+                karrio.Shipment.create(self.ShipmentRequest).from_(gateway).parse()
+            )
+            self.assertListEqual(
+                lib.to_dict(parsed_response), ParsedNoExplanationErrorResponse
+            )
+
     def test_parse_partial_failure_response(self):
         # A mixed 200/201 booking: one parcel is allocated ids + label, another
         # fails inline. The successful shipment details must be preserved and the
@@ -2352,6 +2372,128 @@ class TestPostNordCustomsInvoice(unittest.TestCase):
                 self.assertEqual(invoice["type"], "PROFORMA")
 
 
+class TestPostNordCustomsLineContent(unittest.TestCase):
+    def setUp(self):
+        self.maxDiff = None
+
+    def _field_errors(self, payload: dict) -> dict:
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            shipment, messages = (
+                karrio.Shipment.create(models.ShipmentRequest(**payload))
+                .from_(gateway)
+                .parse()
+            )
+            mock.assert_not_called()
+        self.assertIsNone(shipment)
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0].code, "SHIPPING_SDK_FIELD_ERROR")
+        return messages[0].details
+
+    def _booked_shipment(self, payload: dict) -> dict:
+        request = gateway.mapper.create_shipment_request(
+            models.ShipmentRequest(**payload)
+        )
+        return lib.to_dict(request.serialize())["shipment"][0]
+
+    def test_cn22_line_without_title_or_description_rejected(self):
+        payload = {
+            **CustomsShipmentPayload,
+            "recipient": CanadaRecipient,
+            "customs": {
+                **CustomsShipmentPayload["customs"],
+                "commodities": [
+                    UntitledCommodity,
+                    CustomsShipmentPayload["customs"]["commodities"][1],
+                ],
+            },
+        }
+        self.assertEqual(
+            self._field_errors(payload),
+            {"customs.commodities[0].title": MissingLineContentError},
+        )
+
+    def test_customs_invoice_line_without_title_or_description_rejected(self):
+        payload = {
+            **CustomsInvoiceShipmentPayload,
+            "customs": {
+                **CustomsInvoiceShipmentPayload["customs"],
+                "commodities": [
+                    CustomsInvoiceShipmentPayload["customs"]["commodities"][0],
+                    UntitledCommodity,
+                ],
+            },
+        }
+        self.assertEqual(
+            self._field_errors(payload),
+            {"customs.commodities[1].title": MissingLineContentError},
+        )
+
+    def test_every_line_without_title_or_description_is_listed(self):
+        payload = {
+            **CustomsShipmentPayload,
+            "customs": {
+                **CustomsShipmentPayload["customs"],
+                "commodities": [
+                    UntitledCommodity,
+                    CustomsShipmentPayload["customs"]["commodities"][0],
+                    {**UntitledCommodity, "title": "", "description": ""},
+                ],
+            },
+        }
+        self.assertEqual(
+            self._field_errors(payload),
+            {
+                "customs.commodities[0].title": MissingLineContentError,
+                "customs.commodities[2].title": MissingLineContentError,
+            },
+        )
+
+    def test_description_used_when_title_empty(self):
+        commodity = {**UntitledCommodity, "title": "", "description": "Candy"}
+        for payload, structure in [
+            (CustomsShipmentPayload, "customsDeclarationCN22"),
+            (CustomsInvoiceShipmentPayload, "customsInvoice"),
+        ]:
+            with self.subTest(structure=structure):
+                shipment = self._booked_shipment(
+                    {
+                        **payload,
+                        "customs": {**payload["customs"], "commodities": [commodity]},
+                    }
+                )
+                self.assertEqual(
+                    shipment[structure]["detailedDescription"][0]["content"], "Candy"
+                )
+
+    def test_intra_eu_lines_without_title_or_description_not_checked(self):
+        for payload in [CustomsShipmentPayload, CustomsInvoiceShipmentPayload]:
+            with self.subTest(service=payload["service"]):
+                with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+                    mock.return_value = ShipmentResponse
+                    details, messages = (
+                        karrio.Shipment.create(
+                            models.ShipmentRequest(
+                                **{
+                                    **payload,
+                                    "recipient": PolandRecipient,
+                                    "customs": {
+                                        **payload["customs"],
+                                        "commodities": [UntitledCommodity],
+                                    },
+                                }
+                            )
+                        )
+                        .from_(gateway)
+                        .parse()
+                    )
+                    mock.assert_called_once()
+                self.assertIsNotNone(details)
+                self.assertEqual(
+                    [message.code for message in messages],
+                    ["customs_omitted_intra_eu"],
+                )
+
+
 class TestPostNordEUVATArea(unittest.TestCase):
     def setUp(self):
         self.maxDiff = None
@@ -2726,6 +2868,14 @@ GermanyRecipient = {
     "postal_code": "10117",
     "country_code": "DE",
 }
+CanadaRecipient = {
+    **NorwayRecipient,
+    "address_line1": "1000 Rue Sherbrooke Ouest",
+    "city": "Montreal",
+    "postal_code": "H3A 3G4",
+    "state_code": "QC",
+    "country_code": "CA",
+}
 AlandRecipient = {
     **NorwayRecipient,
     "address_line1": "Torggatan 1",
@@ -2962,6 +3112,20 @@ CustomsInvoiceShipmentPayload = {
     },
 }
 
+UntitledCommodity = {
+    "quantity": 1,
+    "weight": 0.3,
+    "weight_unit": "KG",
+    "value_amount": 120.0,
+    "value_currency": "SEK",
+    "hs_code": "1704900000",
+    "origin_country": "SE",
+}
+
+MissingLineContentError = (
+    "PostNord requires a title or description for each customs line"
+)
+
 CustomsInvoiceShipmentRequest = {
     **ShipmentRequest,
     "shipment": [
@@ -3126,10 +3290,11 @@ ParsedErrorResponse = [
             "code": "APPLICATION_ID",
             "message": "applicationId (2458) is not a type of integer",
             "details": {
+                "summary": "Invalid indata object EdiInstruction",
                 "references": {
                     "CustomerOriginValidationError.type": "MANDATORY_FIELDS_MISSING",
                     "CustomerOriginValidationError.subType": "APPLICATION_ID",
-                }
+                },
             },
         },
         {
@@ -3138,12 +3303,82 @@ ParsedErrorResponse = [
             "code": "ITEM_IDENTIFICATION",
             "message": "itemIdentification is a required field",
             "details": {
+                "summary": "Invalid indata object EdiInstruction",
                 "references": {
                     "CustomerOriginValidationError.type": "MANDATORY_FIELDS_MISSING",
                     "CustomerOriginValidationError.subType": "ITEM_IDENTIFICATION",
-                }
+                },
             },
         },
+    ],
+]
+
+# Captured from a live SE to CA booking on service 34 whose CN22 line had
+# no content.
+MissingContentErrorResponse = """{
+  "message": "Invalid indata object EdiInstruction",
+  "compositeFault": {
+    "faults": [
+      {
+        "explanationText": "content is a required field",
+        "faultReferences": [
+          {"key": "CustomerOriginValidationError.type", "value": "MANDATORY_FIELDS_MISSING"},
+          {"key": "CustomerOriginValidationError.subType", "value": "CONTENT"}
+        ]
+      }
+    ]
+  }
+}"""
+
+ParsedMissingContentErrorResponse = [
+    None,
+    [
+        {
+            "carrier_id": "postnord",
+            "carrier_name": "postnord",
+            "code": "CONTENT",
+            "message": (
+                "content is a required field "
+                "(set customs.commodities[].title or description)"
+            ),
+            "details": {
+                "summary": "Invalid indata object EdiInstruction",
+                "references": {
+                    "CustomerOriginValidationError.type": "MANDATORY_FIELDS_MISSING",
+                    "CustomerOriginValidationError.subType": "CONTENT",
+                },
+            },
+        }
+    ],
+]
+
+NoExplanationErrorResponse = """{
+  "message": "Invalid indata object EdiInstruction",
+  "compositeFault": {
+    "faults": [
+      {
+        "faultReferences": [
+          {"key": "CustomerOriginValidationError.subType", "value": "ITEM_IDENTIFICATION"}
+        ]
+      }
+    ]
+  }
+}"""
+
+ParsedNoExplanationErrorResponse = [
+    None,
+    [
+        {
+            "carrier_id": "postnord",
+            "carrier_name": "postnord",
+            "code": "ITEM_IDENTIFICATION",
+            "message": "Invalid indata object EdiInstruction",
+            "details": {
+                "references": {
+                    "CustomerOriginValidationError.subType": "ITEM_IDENTIFICATION",
+                },
+            },
+        }
     ],
 ]
 
