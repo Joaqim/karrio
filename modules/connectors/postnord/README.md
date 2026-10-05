@@ -110,7 +110,7 @@ points, messages = service_points.parse_service_points_response(
 ```
 
 Passing `northing` and `easting` instead of an address selects the coordinate lookup.
-Each point is a dict with `id`, `name`, `type`, `address`, `coordinates`, `opening_hours`, and `distance`.
+Each point is a dict with `id`, `name`, `type`, `address` (the delivery address used for EDI and labels), `visiting_address` (where the customer goes to collect, when PostNord returns one), `coordinates`, `opening_hours`, and `distance`.
 
 ## Customs declarations
 

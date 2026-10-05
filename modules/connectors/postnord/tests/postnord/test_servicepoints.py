@@ -49,6 +49,40 @@ class TestPostNordServicePoints(unittest.TestCase):
             )
             self.assertListEqual(lib.to_dict(parsed), ParsedServicePoints)
 
+    def test_parse_service_points_exposes_visiting_and_delivery_addresses(self):
+        """The EDI deliveryParty carries the deliveryAddress; the visiting
+        address guides the customer to the point, so both must survive the parse."""
+        response = {
+            "servicePointInformationResponse": {
+                "servicePoints": [
+                    {
+                        "servicePointId": "588462",
+                        "name": "Hemköp Sjövikshallen",
+                        "type": {"typeId": 25, "typeName": "Servicepoint"},
+                        "visitingAddress": {
+                            "streetName": "Sjövikstorget",
+                            "streetNumber": "17",
+                            "city": "STOCKHOLM",
+                            "postalCode": "11758",
+                            "countryCode": "SE",
+                        },
+                        "coordinates": [
+                            {"northing": "59.320", "easting": "18.050", "srId": "EPSG:4326"}
+                        ],
+                        "openingHours": {"postalServices": []},
+                        "routeDistance": {"distance": None},
+                    }
+                ]
+            }
+        }
+        points, messages = service_points.parse_service_points_response(
+            lib.Deserializable(response, lib.to_dict), gateway.settings
+        )
+        self.assertFalse(messages)
+        self.assertEqual(points[0]["id"], "588462")
+        self.assertEqual(points[0]["address"]["postal_code"], "11758")
+        self.assertEqual(points[0]["visiting_address"]["city"], "STOCKHOLM")
+
     def test_parse_error_response(self):
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
             mock.return_value = ErrorResponse
@@ -139,6 +173,13 @@ ServicePointsResponse = """{
           "streetName": "Vasagatan",
           "postalCode": "11120"
         },
+        "deliveryAddress": {
+          "countryCode": "SE",
+          "city": "STOCKHOLM",
+          "streetName": "Klarabergsviadukten",
+          "streetNumber": "70",
+          "postalCode": "11164"
+        },
         "coordinates": [],
         "type": {
           "typeId": 2,
@@ -190,10 +231,18 @@ ParsedServicePoints = [
             "distance": 412,
         },
         {
+            # Distinct delivery/visiting addresses verify which source
+            # feeds which key.
             "id": "1003370",
             "name": "Pressbyran Central",
             "type": "Parcel Box Location",
             "address": {
+                "address_line1": "Klarabergsviadukten 70",
+                "city": "STOCKHOLM",
+                "postal_code": "11164",
+                "country_code": "SE",
+            },
+            "visiting_address": {
                 "address_line1": "Vasagatan",
                 "city": "STOCKHOLM",
                 "postal_code": "11120",
