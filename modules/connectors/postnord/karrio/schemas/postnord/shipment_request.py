@@ -322,7 +322,7 @@ class PartyType:
 
 
 @attr.s(auto_attribs=True)
-class ConsignType:
+class ConsigneeType:
     issuerCode: typing.Optional[str] = None
     partyIdentification: typing.Optional[PartyIdentificationType] = jstruct.JStruct[PartyIdentificationType]
     party: typing.Optional[PartyType] = jstruct.JStruct[PartyType]
@@ -330,8 +330,9 @@ class ConsignType:
 
 @attr.s(auto_attribs=True)
 class PartiesType:
-    consignor: typing.Optional[ConsignType] = jstruct.JStruct[ConsignType]
-    consignee: typing.Optional[ConsignType] = jstruct.JStruct[ConsignType]
+    consignor: typing.Optional[ConsigneeType] = jstruct.JStruct[ConsigneeType]
+    consignee: typing.Optional[ConsigneeType] = jstruct.JStruct[ConsigneeType]
+    deliveryParty: typing.Optional[ConsigneeType] = jstruct.JStruct[ConsigneeType]
 
 
 @attr.s(auto_attribs=True)

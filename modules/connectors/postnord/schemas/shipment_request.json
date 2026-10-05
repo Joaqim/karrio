@@ -115,6 +115,34 @@
               "smsNo": "+46709876543"
             }
           }
+        },
+        "deliveryParty": {
+          "issuerCode": "Z12",
+          "partyIdentification": {
+            "partyId": "1408",
+            "partyIdType": "156"
+          },
+          "party": {
+            "nameIdentification": {
+              "name": "ICA Supermarket Solna",
+              "companyName": "ICA Supermarket Solna",
+              "careOfName": "Service point"
+            },
+            "address": {
+              "streets": ["Solnavagen 3"],
+              "postalCode": "17165",
+              "placeName": "Solna",
+              "state": "Stockholm",
+              "city": "Solna",
+              "countryCode": "SE"
+            },
+            "contact": {
+              "contactName": "Service point",
+              "emailAddress": "servicepoint@example.com",
+              "phoneNo": "+46701112233",
+              "smsNo": "+46701112233"
+            }
+          }
         }
       },
       "goodsItem": [

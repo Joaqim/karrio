@@ -433,8 +433,8 @@ def shipment_request(
         else None
     )
 
-    def _party(address, *, with_consignor_id: bool) -> postnord_req.ConsignType:
-        return postnord_req.ConsignType(
+    def _party(address, *, with_consignor_id: bool) -> postnord_req.ConsigneeType:
+        return postnord_req.ConsigneeType(
             issuerCode=settings.issuer_code,
             partyIdentification=lib.identity(
                 postnord_req.PartyIdentificationType(
