@@ -24,6 +24,18 @@ cd /home/joaqim/projects/karrio/.worktrees/<branch>
 nix develop 'git+file:///home/joaqim/projects/karrio?ref=dev-nix-flake#upstream' --command python -m unittest discover -v -f modules/connectors/<carrier>/tests
 ```
 
+## Inherited PYTHONPATH from the main checkout
+
+A shell already loaded in the main checkout, such as the direnv environment an agent session starts with, has `PYTHONPATH` pointing at the main checkout's `modules/` directories.
+Running `python -m unittest` after a plain `cd` into a worktree therefore imports the main checkout's sources, currently the assembled `develop`, and a green result says nothing about the worktree's branch.
+Always start a fresh `nix develop` from the worktree root as shown above, which discards the inherited `PYTHONPATH`, and confirm the resolution under the same invocation:
+
+```bash
+nix develop 'git+file:///home/joaqim/projects/karrio?ref=dev-nix-flake#upstream' --command python -c 'import karrio.lib, karrio.providers.<carrier>.units as u; print(karrio.lib.__file__, u.__file__)'
+```
+
+Both paths must lie under `.worktrees/<branch>/`.
+
 ## Why worktrees need their own .envrc
 
 Worktrees live under `.worktrees/` inside the `develop` checkout.
