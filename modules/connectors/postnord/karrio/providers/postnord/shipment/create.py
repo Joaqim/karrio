@@ -367,9 +367,23 @@ def shipment_request(
 
     # Truthy-state emission: an explicit False (or zero-valued float) must not
     # book its additional service — Options.items() filters by key, not state.
+    # The service-point detail members carry the chosen point's party data,
+    # not additionalServiceCode values, so they stay out of the code list.
     additional_service_codes = [
-        option.code for _, option in options.items() if option.state
+        option.code
+        for key, option in options.items()
+        if option.state and key not in provider_units.SERVICE_POINT_DETAIL_OPTIONS
     ]
+
+    # A chosen service point switches the product into optional-service-point
+    # mode (A7) and pairs with SMS (A3) when the consignee has a phone, per
+    # the official "MyPack Collect (19) + Addon: Optional Servicepoint" sample.
+    service_point = _service_point_details(options)
+    if service_point:
+        if "A7" not in additional_service_codes:
+            additional_service_codes.append("A7")
+        if recipient.phone_number and "A3" not in additional_service_codes:
+            additional_service_codes.append("A3")
 
     # Booking locale: request options.language > connection config language >
     # recipient country (when config locale_by_recipient is enabled) > "en".
@@ -500,6 +514,9 @@ def shipment_request(
                 parties=postnord_req.PartiesType(
                     consignor=_party(shipper, with_consignor_id=True),
                     consignee=_party(recipient, with_consignor_id=False),
+                    deliveryParty=lib.identity(
+                        _delivery_party(service_point) if service_point else None
+                    ),
                 ),
                 goodsItem=[
                     postnord_req.GoodsItemType(
@@ -560,5 +577,62 @@ def shipment_request(
             # resolved service code and on the declaration having been embedded.
             basic_service_code=service,
             customs_declared=customs_declaration is not None,
+        ),
+    )
+
+
+def _service_point_details(options) -> typing.Optional[dict]:
+    """Collect the chosen service point from shipment options, or None.
+
+    An id without complete name/address details refuses before any request
+    is sent, naming the missing option keys — PostNord rejects a
+    deliveryParty without a name and address, so the booking fails locally
+    instead of as a carrier fault (the dhl_freight_sweden connector's
+    service-point discipline).
+    """
+    point_id = options.postnord_service_point_id.state
+    if not point_id:
+        return None
+
+    # Keys double as the ``postnord_service_point_{key}`` option names.
+    details = dict(
+        name=options.postnord_service_point_name.state,
+        street=options.postnord_service_point_street.state,
+        city=options.postnord_service_point_city.state,
+        postal_code=options.postnord_service_point_postal_code.state,
+        country_code=options.postnord_service_point_country_code.state,
+    )
+    missing = [key for key, value in details.items() if not value]
+
+    if any(missing):
+        raise lib.exceptions.FieldError(
+            {
+                f"options.postnord_service_point_{key}": (
+                    "a chosen service point requires the complete point details"
+                )
+                for key in missing
+            }
+        )
+
+    return {"id": point_id, **details}
+
+
+def _delivery_party(point: dict) -> postnord_req.ConsigneeType:
+    """The chosen point as an EDI deliveryParty (partyIdType "156")."""
+    return postnord_req.ConsigneeType(
+        partyIdentification=postnord_req.PartyIdentificationType(
+            partyId=point["id"],
+            partyIdType="156",
+        ),
+        party=postnord_req.PartyType(
+            nameIdentification=postnord_req.NameIdentificationType(
+                name=point["name"],
+            ),
+            address=postnord_req.AddressType(
+                streets=[point["street"]],
+                postalCode=point["postal_code"],
+                city=point["city"],
+                countryCode=point["country_code"],
+            ),
         ),
     )
