@@ -20,4 +20,4 @@
 
 ## 4. Develop
 
-- [ ] 4.1 Regenerate `develop` with `rebuild-develop.sh` from the main checkout and push it after the user's go-ahead; verify `develop-status.sh --fetch` reports `postnord-service-point-booking` contained in `develop` and `origin/develop`.
+- [x] 4.1 Regenerate `develop` with `rebuild-develop.sh` from the main checkout and push it after the user's go-ahead; verify `develop-status.sh --fetch` reports `postnord-service-point-booking` contained in `develop` and `origin/develop`.
