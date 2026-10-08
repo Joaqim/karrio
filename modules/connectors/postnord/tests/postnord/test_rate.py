@@ -114,6 +114,17 @@ class TestPostNordRating(unittest.TestCase):
         self.assertEqual(varubrev.total_charge, 0.0)
         self.assertEqual(varubrev.currency, "SEK")
 
+    def test_parse_rate_response_varubrev_first_class_domestic_only(self):
+        # Varubrev 1:a klass (86) is a domestic product, so a SE->NO request
+        # through the default catalog does not offer it.
+        request = models.RateRequest(**NordicAllServicesRatePayload)
+        rates, _ = (
+            karrio.Rating.fetch(request).from_(gateway_default_catalog).parse()
+        )
+
+        offered = [rate.service for rate in rates]
+        self.assertNotIn("postnord_varubrev_first_class", offered)
+
     def test_get_rates_issues_transit_call(self):
         # Opt-in gateway: rate() calls the Transit Time V2 API once per request.
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
@@ -627,6 +638,13 @@ HomeServicesCrossBorderPayload = {
         "postnord_mypack_home_small",
         "postnord_mypack_home_no",
     ],
+}
+
+# Nordic cross-border shipment (SE->NO) requesting all services, used to observe
+# which services the default catalog offers outside Sweden.
+NordicAllServicesRatePayload = {
+    **HomeServicesCrossBorderPayload,
+    "services": [],
 }
 
 NoZoneParsedRateResponse = [

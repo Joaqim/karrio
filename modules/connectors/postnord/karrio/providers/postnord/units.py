@@ -613,7 +613,8 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
     ),
     # Remaining bookable letter and registered-mail products: no domicile or
     # international flag and an unrestricted zone, so every destination is
-    # offered and PostNord's booking API is the gate.
+    # offered and PostNord's booking API is the gate. Varubrev 1:a Klass is
+    # the exception: it is domestic only and scoped to Sweden.
     models.ServiceLevel(
         service_name="PostNord Tracked",
         service_code="postnord_tracked",
@@ -627,7 +628,9 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
         carrier_service_code="86",
         currency="SEK",
         transit_days=2,
-        zones=[models.ServiceZone(rate=0.0)],
+        domicile=True,
+        international=False,
+        zones=[models.ServiceZone(label="Sweden", rate=0.0, country_codes=["SE"])],
     ),
     models.ServiceLevel(
         service_name="PostNord Expressbrev",
