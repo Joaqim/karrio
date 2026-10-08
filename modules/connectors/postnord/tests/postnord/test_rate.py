@@ -99,6 +99,22 @@ class TestPostNordRating(unittest.TestCase):
         self.assertIn("postnord_mypack_home_no", offered)
         self.assertNotIn("destination_not_supported", [m.code for m in messages])
 
+    def test_parse_rate_response_varubrev_first_class_default_catalog(self):
+        # Varubrev 1:a klass (86) is offered by the default catalog with a
+        # zero placeholder rate; PostNord's booking API is the gate.
+        request = models.RateRequest(**AllServicesRatePayload)
+        rates, _ = (
+            karrio.Rating.fetch(request).from_(gateway_default_catalog).parse()
+        )
+
+        varubrev = next(
+            (r for r in rates if r.service == "postnord_varubrev_first_class"),
+            None,
+        )
+        self.assertIsNotNone(varubrev)
+        self.assertEqual(varubrev.total_charge, 0.0)
+        self.assertEqual(varubrev.currency, "SEK")
+
     def test_get_rates_issues_transit_call(self):
         # Opt-in gateway: rate() calls the Transit Time V2 API once per request.
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
@@ -133,7 +149,7 @@ class TestPostNordRating(unittest.TestCase):
         query = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
         self.assertEqual(
             query["serviceCodes"],
-            ["17,18,19,20,52,91,11,24,30,32,37,48,49,51,53,57,59,83,84,85"],
+            ["17,18,19,20,52,91,11,24,30,32,37,48,49,51,53,57,59,83,84,85,04,86,LX,RR,RK,RL,RE,RQ"],
         )
 
     def test_parse_rate_response_transit_enriched(self):

@@ -145,7 +145,7 @@ class ShippingService(lib.StrEnum):
     # International parcel
     postnord_postpaket_utrikes = "91"       # "International Parcel"; Denmark markets as "EMS"
 
-    # Letters & registered mail (bookable on the create path; not on the rate path)
+    # Letters & registered mail (all but VV and AF are in DEFAULT_SERVICES)
     postnord_tracked = "04"                 # Denmark "PostNord Tracked" / "Tracked Letters"
     postnord_tracked_letter = "34"
     postnord_export_letter = "UX"           # "Export Letter Sweden"
@@ -453,8 +453,7 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
         international=True,
         zones=[models.ServiceZone(label="International", rate=0.0)],
     ),
-    # Parcel & freight services; other letters and registered mail are
-    # enum-only, not rated.
+    # Parcel & freight services.
     models.ServiceLevel(
         service_name="PostNord Home Small",
         service_code="postnord_home_small",
@@ -617,6 +616,66 @@ DEFAULT_SERVICES: typing.List[models.ServiceLevel] = [
         domicile=False,
         international=True,
         zones=[models.ServiceZone(label="International", rate=0.0)],
+    ),
+    # Remaining bookable letter and registered-mail products: no domicile or
+    # international flag and an unrestricted zone, so every destination is
+    # offered and PostNord's booking API is the gate.
+    models.ServiceLevel(
+        service_name="PostNord Tracked",
+        service_code="postnord_tracked",
+        carrier_service_code="04",
+        currency="SEK",
+        zones=[models.ServiceZone(rate=0.0)],
+    ),
+    models.ServiceLevel(
+        service_name="PostNord Varubrev 1:a Klass",
+        service_code="postnord_varubrev_first_class",
+        carrier_service_code="86",
+        currency="SEK",
+        transit_days=2,
+        zones=[models.ServiceZone(rate=0.0)],
+    ),
+    models.ServiceLevel(
+        service_name="PostNord Expressbrev",
+        service_code="postnord_expressbrev",
+        carrier_service_code="LX",
+        currency="SEK",
+        zones=[models.ServiceZone(rate=0.0)],
+    ),
+    models.ServiceLevel(
+        service_name="PostNord Rek",
+        service_code="postnord_rek",
+        carrier_service_code="RR",
+        currency="SEK",
+        zones=[models.ServiceZone(rate=0.0)],
+    ),
+    models.ServiceLevel(
+        service_name="PostNord Rek Retur",
+        service_code="postnord_rek_retur",
+        carrier_service_code="RK",
+        currency="SEK",
+        zones=[models.ServiceZone(rate=0.0)],
+    ),
+    models.ServiceLevel(
+        service_name="PostNord Rek Extra",
+        service_code="postnord_rek_extra",
+        carrier_service_code="RL",
+        currency="SEK",
+        zones=[models.ServiceZone(rate=0.0)],
+    ),
+    models.ServiceLevel(
+        service_name="PostNord Rekommanderet Brev",
+        service_code="postnord_rekommanderet_brev",
+        carrier_service_code="RE",
+        currency="SEK",
+        zones=[models.ServiceZone(rate=0.0)],
+    ),
+    models.ServiceLevel(
+        service_name="PostNord Rekommanderet Quickbrev",
+        service_code="postnord_rekommanderet_quickbrev",
+        carrier_service_code="RQ",
+        currency="SEK",
+        zones=[models.ServiceZone(rate=0.0)],
     ),
 ]
 
