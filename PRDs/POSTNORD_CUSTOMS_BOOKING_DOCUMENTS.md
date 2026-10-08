@@ -127,7 +127,7 @@ The earlier convention that PDF labels and declarations are separate while ZPL c
 |-----------|----------|-------|
 | Booking request ctx | `karrio/providers/postnord/shipment/create.py` (`shipment_request`) | Adds the resolved opt-in beside `customs_declared` and `basic_service_code` |
 | Connector-local option precedent | `entry_code` read from `payload.options` | Same reading path for the opt-in |
-| Connection defaults | `units.ConnectionConfig` (`offer_export_letter`) | Adds the opt-in fallback |
+| Connection defaults | `units.ConnectionConfig` (`enable_transit_times`) | Adds the opt-in fallback |
 | Standalone fetch gate | `karrio/mappers/postnord/proxy.py` (`create_shipment`, `_get_customs_printouts`) | Gate widened to CN22 structure plus opt-in; fetch unchanged |
 | Customs branch selection | `units.customs_structure`, `CustomsStructure.cn22` | Identifies the CN22 services, 91 included |
 | Warning precedent | `_customs_omitted_message`, `CUSTOMS_OMITTED_INTRA_EU` | Same message shape |
