@@ -95,9 +95,9 @@ NotFoundTransitResponse = lib.to_json(
     ]
 )
 
-# Letter-service gating fixtures: an international parcel service plus the two
-# gated letter products (34 tracked, UX export), all priced. Gating is driven by
-# issuer_code + the offer_* toggles, independent of transit enrichment (off).
+# Letter-service fixtures: an international parcel service plus the two letter
+# products (34 tracked, UX export), all priced. Export letter availability is
+# driven by issuer_code, independent of transit enrichment (off).
 _letter_services = [
     dict(
         service_name="PostNord Postpaket Utrikes",
@@ -131,29 +131,15 @@ _letter_services = [
     ),
 ]
 
-# Toggles off (Z12): only the ungated parcel service is offered.
-gateway_letters_off = karrio.gateway["postnord"].create(
+# Sweden issuer (Z12): both letter products join the parcel service.
+gateway_letters = karrio.gateway["postnord"].create(
     dict(_settings, services=_letter_services)
 )
 
-# Toggles on (Z12): both letter products join the parcel service.
-gateway_letters_on = karrio.gateway["postnord"].create(
-    dict(
-        _settings,
-        services=_letter_services,
-        config=dict(offer_tracked_letter=True, offer_export_letter=True),
-    )
-)
-
-# Toggles on but Denmark issuer (Z11): tracked letter is offered, export letter
-# is withheld because it is scoped to the Sweden (Z12) issuer.
+# Denmark issuer (Z11): tracked letter is offered, export letter is withheld
+# because it is scoped to the Sweden (Z12) issuer.
 gateway_letters_z11 = karrio.gateway["postnord"].create(
-    dict(
-        _settings,
-        issuer_code="Z11",
-        services=_letter_services,
-        config=dict(offer_tracked_letter=True, offer_export_letter=True),
-    )
+    dict(_settings, issuer_code="Z11", services=_letter_services)
 )
 
 # Gateway with a non-default physical label size (labelType=small query param).

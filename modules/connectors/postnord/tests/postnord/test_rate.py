@@ -25,8 +25,7 @@ from .fixture import (
     gateway_default_catalog,
     gateway_transit_not_found,
     gateway_with_transit,
-    gateway_letters_off,
-    gateway_letters_on,
+    gateway_letters,
     gateway_letters_z11,
     NotFoundTransitResponse,
 )
@@ -137,7 +136,7 @@ class TestPostNordRating(unittest.TestCase):
 
     def test_get_rates_transit_service_codes_follow_offered_catalog(self):
         # The transit filter lists the services rating offers: the default
-        # catalog when no services are configured, without gated letters.
+        # catalog when no services are configured.
         gateway_catalog_transit = karrio.gateway["postnord"].create(
             dict(_settings, services=[], config=dict(enable_transit_times=True))
         )
@@ -149,7 +148,7 @@ class TestPostNordRating(unittest.TestCase):
         query = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
         self.assertEqual(
             query["serviceCodes"],
-            ["17,18,19,20,52,91,11,24,30,32,37,48,49,51,53,57,59,83,84,85,04,86,LX,RR,RK,RL,RE,RQ"],
+            ["17,18,19,20,52,91,11,24,30,32,37,48,49,51,53,57,59,83,84,85,34,UX,04,86,LX,RR,RK,RL,RE,RQ"],
         )
 
     def test_parse_rate_response_transit_enriched(self):
@@ -228,20 +227,11 @@ class TestPostNordRating(unittest.TestCase):
             lib.to_dict(parsed_response), AuthDegradedParsedRateResponse
         )
 
-    def test_letter_services_hidden_by_default(self):
-        # Gated letter products (34, UX) are withheld unless their opt-in toggle
-        # is enabled; only the ungated international parcel service is offered.
+    def test_letter_services_offered_by_default(self):
+        # With no connection config and the Sweden issuer (Z12), both letter
+        # products join the international parcel service.
         request = models.RateRequest(**InternationalRatePayload)
-        rates, _ = karrio.Rating.fetch(request).from_(gateway_letters_off).parse()
-
-        offered = {rate.service for rate in rates}
-        self.assertEqual(offered, {"postnord_postpaket_utrikes"})
-
-    def test_letter_services_offered_when_enabled(self):
-        # With both toggles on and the Sweden issuer (Z12), both letter products
-        # join the international parcel service.
-        request = models.RateRequest(**InternationalRatePayload)
-        rates, _ = karrio.Rating.fetch(request).from_(gateway_letters_on).parse()
+        rates, _ = karrio.Rating.fetch(request).from_(gateway_letters).parse()
 
         offered = {rate.service for rate in rates}
         self.assertEqual(
@@ -254,8 +244,8 @@ class TestPostNordRating(unittest.TestCase):
         )
 
     def test_export_letter_requires_sweden_issuer(self):
-        # Under the Denmark issuer (Z11) the export letter is withheld even with
-        # its toggle on; the tracked letter (no issuer restriction) is offered.
+        # Under the Denmark issuer (Z11) the export letter is withheld; the
+        # tracked letter (no issuer restriction) is offered.
         request = models.RateRequest(**InternationalRatePayload)
         rates, _ = karrio.Rating.fetch(request).from_(gateway_letters_z11).parse()
 
@@ -310,7 +300,7 @@ AllServicesRatePayload = {
 }
 
 # International shipment (SE->DE) requesting all services, used to observe which
-# international-flagged services (including gated letter products) are offered.
+# international-flagged services (including letter products) are offered.
 InternationalRatePayload = {
     **RatePayload,
     "recipient": {

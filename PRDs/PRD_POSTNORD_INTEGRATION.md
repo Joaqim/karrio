@@ -51,7 +51,7 @@ PostNord publishes no money-rate API and no end-of-day manifest, so rating and m
 
 | In Scope | Out of Scope |
 |----------|--------------|
-| Rating from the rate sheet, opt-in transit-time enrichment, letter-service gating | Live money-rate quoting (no PostNord API) |
+| Rating from the rate sheet, opt-in transit-time enrichment, export-letter issuer scoping | Live money-rate quoting (no PostNord API) |
 | Booking with PDF/ZPL labels, label size, returns via return service codes | Shipment cancellation (no documented REST endpoint) |
 | Track & Trace v7 events with link-only fallback | End-of-day manifest documents (no PostNord endpoint) |
 | Pickup scheduling (`/v3/pickups`) | Pickup update and cancel (no PostNord route) |
@@ -84,7 +84,7 @@ PostNord publishes no money-rate API and no end-of-day manifest, so rating and m
 | D5 | Transit degrade | Any transit failure keeps static transit days, applies no filtering, and adds one warning (`transit_time_unauthorized` for 401/403, else `transit_time_unavailable`) naming the opt-in setting | Price rating must never fail because of an enrichment call |
 | D6 | Transit variants | Map only the base entry (no `additionalServices`) per `basicServiceCode` | The response lists one entry per variant (`18`, `18+Q1`, …) with differing bookability; the catalog is keyed on bare codes |
 | D7 | Transit not-found | An entry with `isSupported=false` (or a "Requested service …" message) keeps the static rate with no message; a route rejection drops the rate with an info `service_not_bookable` message | "Requested service 'SE-37' not found." marks services absent from the transit system (37, 48, 49, 51), not route verdicts |
-| D8 | Letter services | Tracked Letter (34) and Export Letter (UX) are rated only when `offer_tracked_letter` / `offer_export_letter` are on; UX additionally requires issuer `Z12`; gating filters `settings.shipping_services` | Keeps the default catalog unchanged; the universal engine and dashboard need no change |
+| D8 | Letter services | Tracked Letter (34), Export Letter (UX), and the other bookable letter and registered-mail products are in the default catalog with no opt-in; UX requires issuer `Z12`, filtered in `settings.shipping_services` | PostNord's booking API is the gate; the connector withholds a service only by its own explicit criteria |
 | D9 | Issuer code | `issuer_code` stays a user-set connection setting (Z11–Z14) | It encodes the merchant's market agreement and drives letter gating, so it cannot be derived from a shipment's origin |
 | D10 | Booking ids | `itemId="0"` lets PostNord allocate the parcel id (the tracking number); `shipmentId` is the caller reference or a generated id | An arbitrary item id fails with "unable to determine id type"; the client shipment id makes bookings searchable in Track & Trace |
 | D11 | Partial bookings | Any item with allocated ids yields shipment details; inline per-item faults surface as messages alongside them | PostNord reports mixed item outcomes inside a 200/201 body |
@@ -283,7 +283,6 @@ config.label_size ─────> ?labelType=standard|small|ste (omitted when u
 | `config.language` | str | unset | Booking locale default |
 | `config.locale_by_recipient` | bool | false | Derive the locale from the recipient country |
 | `config.enable_transit_times` | bool | false | Transit Time enrichment |
-| `config.offer_tracked_letter` / `offer_export_letter` | bool | false | Letter-service gating |
 
 ---
 
@@ -342,7 +341,7 @@ Tests use `unittest`, mock `karrio.mappers.postnord.proxy.lib.request`, and asse
 
 | Suite | Coverage |
 |-------|----------|
-| `test_rate.py` | Static rates, zone misses, cross-border catalog, transit enrichment, variants, not-found, degrade, letter gating |
+| `test_rate.py` | Static rates, zone misses, cross-border catalog, transit enrichment, variants, not-found, degrade, letter availability |
 | `test_shipment.py` | Booking request, label routing and encoding, locale tiers and `recipient_locale`, entry code, notifications, customs mapping and limits, by-id customs fetch fail-open paths, cancel, partial and auth errors |
 | `test_tracking.py` | Delivered and in-transit events, link-only degrade |
 | `test_pickup.py`, `test_manifest.py` | Pickup booking and unsupported operations |

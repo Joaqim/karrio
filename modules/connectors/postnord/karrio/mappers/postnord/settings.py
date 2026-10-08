@@ -43,14 +43,10 @@ class Settings(provider_utils.Settings, rating_proxy.RatingMixinSettings):
         issuer_code = getattr(self.issuer_code, "name", None) or str(
             self.issuer_code or ""
         )
-        connection_config = self.connection_config
-
         return [
             service
             for service in services
-            if provider_units.is_service_available(
-                service.service_code, issuer_code, connection_config
-            )
+            if provider_units.is_service_available(service.service_code, issuer_code)
         ]
 
     def recipient_locale(
