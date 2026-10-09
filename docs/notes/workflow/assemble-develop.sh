@@ -51,6 +51,7 @@ BRANCHES=(
   fix-postnord-eu-vat-territories
   fix-postnord-customs-line-content
   feat-postnord-eori-vat-fallback
+  fix-postnord-cn23-international-parcel
   dev-nix-flake
   docs-openspec
 )
