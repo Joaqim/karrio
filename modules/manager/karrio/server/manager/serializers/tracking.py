@@ -113,6 +113,14 @@ class TrackingSerializer(TrackingDetails):
         if last_fetch >= 1 and instance.delivered is not True:
             carrier_filter = validated_data["carrier_filter"]
             options = {
+                # Carry the persisted locale (flat keys like `language`) into
+                # the fetch so it stays in effect, alongside the per-number
+                # options merge below.
+                **{
+                    k: v
+                    for k, v in (instance.options or {}).items()
+                    if k != instance.tracking_number
+                },
                 instance.tracking_number: {
                     **(instance.options.get(instance.tracking_number) or {}),
                     **(
@@ -121,7 +129,7 @@ class TrackingSerializer(TrackingDetails):
                         )
                         or {}
                     ),
-                }
+                },
             }
             # Try to get carrier from filter, fall back to resolved carrier from snapshot
             carrier = Connections.first(
