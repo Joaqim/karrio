@@ -163,3 +163,9 @@ gateway_with_language = karrio.gateway["postnord"].create(
 gateway_with_country_locale = karrio.gateway["postnord"].create(
     dict(_settings, config=dict(locale_by_recipient=True))
 )
+
+# Standalone customs documents gateway: the by-id customs document opt-in
+# enabled on the connection.
+gateway_with_standalone_customs = karrio.gateway["postnord"].create(
+    dict(_settings, config=dict(postnord_standalone_customs_documents=True))
+)

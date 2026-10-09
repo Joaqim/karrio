@@ -57,7 +57,7 @@ PostNord publishes no money-rate API and no end-of-day manifest, so rating and m
 | Pickup scheduling (`/v3/pickups`) | Pickup update and cancel (no PostNord route) |
 | Service-point lookup (connector-local) | A unified Karrio service-point contract |
 | Booking locale, recipient-country locale, entry code, notification options | Karrio-native notification pipeline |
-| CN22 customs at booking, standalone customs document, post-booking declarations | Automatic CN23 and customs-invoice embedding; NVIT data set (see [Future Work](#future-work)) |
+| CN22 customs at booking for letters and 91, customs-invoice embedding for parcel products (since 2026-09-25, see [POSTNORD_CUSTOMS_BOOKING_DOCUMENTS.md](./POSTNORD_CUSTOMS_BOOKING_DOCUMENTS.md)), standalone customs document, post-booking declarations | CN23 selection, including for 91 (deferred); NVIT data set (see [Future Work](#future-work)) |
 
 ---
 
@@ -97,10 +97,10 @@ PostNord publishes no money-rate API and no end-of-day manifest, so rating and m
 | D18 | Recipient-country locale | `CountryLocale` maps SE→sv, DK→da, NO→no, FI→fi; `Settings.recipient_locale` returns it when `locale_by_recipient` is on and `config.language` is unset | The server persists the derived locale on the shipment and its tracker through the carrier-neutral hook, so polls keep it |
 | D19 | Entry code | `options.entry_code` (string, coerced and stripped, max 50 chars) becomes a shipment `freeText` with usage code `ZDC`; over-length values reject the booking with an `ENTRY_CODE_LENGTH` message and no HTTP call | ZDC is printed as "Ref 2"; no PostNord source lists which services accept it, so it passes through unverified; a truncated door code is a wrong door code |
 | D20 | Notifications | `sms_notification` → A3, `email_notification` → A4, plus `postnord_notify_by_letter` (A2), `postnord_notify_by_phone` (A9), `postnord_driver_notification` (B8); codes are emitted only for truthy option states | PostNord notifications are an additive opt-in menu with no suppress flag; an explicit `False` must mean opt-out |
-| D21 | Booking customs | Unified `customs` maps to the `customsDeclarationCN22` branch when commodities are present; `content_type` resolves through `CN22CategoryType`; registration numbers come from `customs.options` via a provider `CustomsOption` enum | CN22 is the only branch fully derivable from the unified model; the core `CustomsOption` enum lacks `voec_number`/`ioss_number`, which the typed-options helper would drop |
+| D21 | Booking customs | Unified `customs` maps to the `customsDeclarationCN22` branch when commodities are present; `content_type` resolves through `CN22CategoryType`; registration numbers come from `customs.options` via a provider `CustomsOption` enum | CN22 is the only branch fully derivable from the unified model; the core `CustomsOption` enum lacks `voec_number`/`ioss_number`, which the typed-options helper would drop. Superseded 2026-09-25: `customs_structure(service)` in `units.py` sends CN22 for letter services and 91 and `customsInvoice` for every other (parcel) service; CN22 versus CN23 selection is deferred (see [POSTNORD_CUSTOMS_BOOKING_DOCUMENTS.md](./POSTNORD_CUSTOMS_BOOKING_DOCUMENTS.md)) |
 | D22 | Misplaced registration numbers | `eori_number`/`voec_number`/`ioss_number` under shipment `options` reject a customs booking with a field error | Unknown shipment options are dropped silently, and PostNord rejects a CN22 without any of them (`SACUS-BR-24062502`) |
 | D23 | Line limit | At most 13 `detailedDescription` lines per declaration, enforced by one shared guard at booking and in the declaration builder | Documented in PostNord's Booking Customs Information; the swagger has no `maxItems` |
-| D24 | Standalone customs document | Export-letter bookings with an embedded declaration fetch `POST /v3/labels/ids/{pdf,zpl}?definePrintout=onlyCustomsDeclarations` keyed by `printId` (item id as fallback) and attach results to `docs.extra_documents`; failures are messages, never booking failures | Merged booking printouts carry composition counts without page ranges; the by-id endpoint resolves `printId`, not the item id (verified live) |
+| D24 | Standalone customs document | Opt-in through `postnord_standalone_customs_documents` (shipment option, connection fallback): CN22 bookings (export letters, other CN22 letters, 91) fetch `POST /v3/labels/ids/{pdf,zpl}?definePrintout=onlyCustomsDeclarations` keyed by `printId` (item id as fallback) and attach results to `docs.extra_documents`; by default the CN22 is carried only in the composed label (see `POSTNORD_CUSTOMS_BOOKING_DOCUMENTS.md`); failures are messages, never booking failures | Merged booking printouts carry composition counts without page ranges; the by-id endpoint resolves `printId`, not the item id (verified live) |
 | D25 | Post-booking declaration | `create_customs_declaration` and `create_customs_declaration_pdf` proxy methods take a caller-built declaration (one id, one branch); Karrio builds the envelope, submits, and reports | The caller owns branch, ids, and update semantics; Karrio does not reconcile or retract declarations |
 
 ---
@@ -167,7 +167,7 @@ karrio.Pickup.schedule(pickup_request).from_(gateway)   # courier collection
 | Truncating over-length entry codes | Rejected | Produces a wrong door code silently |
 | Suppressing notifications by clearing consignee contact slots | Rejected | Breaks mandatory contact-data rules of services 17, 20, 24 |
 | Enforcing per-service notification rules client-side | Rejected | Duplicates PostNord validation of rules only documented in prose |
-| Choosing CN22/CN23/invoice per shipment at booking | Rejected | Invents threshold semantics the spec does not document |
+| Choosing CN22/CN23/invoice per shipment at booking by value threshold | Deferred (was Rejected until 2026-09-25) | Invents threshold semantics the spec does not document; the branch is now chosen per service (customs invoice for parcel products, CN22 for letters and 91), and CN22 versus CN23 selection awaits specified rules |
 | Splitting the booking printout into label and customs pages | Rejected | Composition counts carry no page ranges |
 | Plain-dict customs declaration bodies | Rejected | Deeply structured bodies benefit from generated types |
 
@@ -207,14 +207,17 @@ karrio.Pickup.schedule(pickup_request).from_(gateway)   # courier collection
 ```
 Caller          create.py              Proxy                         PostNord
   │ ShipmentRequest │                    │                               │
-  ├────────────────>│ resolve label_type, locale, entry_code, CN22      │
+  ├────────────────>│ resolve label_type, locale, entry_code, customs   │
   │                 │ ctx = {shipment_id, label_type, locale,           │
   │                 │        entry_code_error, basic_service_code,      │
-  │                 │        customs_declared}                           │
+  │                 │        customs_declared,                          │
+  │                 │        standalone_customs_documents}              │
   │                 ├───────────────────>│ entry_code_error? → fault body (no call)
   │                 │                    ├── POST /v3/edi/labels/{fmt} ─>│
   │                 │                    │<──── ediLabelResponse ────────┤
-  │                 │                    │ UX + customs_declared?        │
+  │                 │                    │ customs_declared and          │
+  │                 │                    │ (customsInvoice structure, or │
+  │                 │                    │  CN22 with standalone opt-in)?│
   │                 │                    ├── POST /v3/labels/ids/{fmt} ─>│
   │                 │                    │   definePrintout=onlyCustoms  │
   │                 │                    │<──── labelPrintout[] ─────────┤
@@ -246,7 +249,7 @@ config.label_size ─────> ?labelType=standard|small|ste (omitted when u
 | — | (no carrier call) | `get_rates` from the rate sheet |
 | GET | `/rest/transport/v2/transittime/addresstoaddress` | `get_rates` enrichment (opt-in) |
 | POST | `/rest/shipment/v3/edi/labels/{pdf,zpl}` | `create_shipment`, returns |
-| POST | `/rest/shipment/v3/labels/ids/{pdf,zpl}` | standalone customs document (export letters) |
+| POST | `/rest/shipment/v3/labels/ids/{pdf,zpl}` | standalone customs document: always for customs-invoice bookings, for CN22 bookings only with `postnord_standalone_customs_documents` |
 | POST | `/rest/shipment/v3/edi` | `cancel_shipment` placeholder body `{ids:[{id}]}`, rejected by PostNord |
 | POST | `/rest/shipment/v3/pickups` | `schedule_pickup` |
 | GET | `/rest/shipment/v7/trackandtrace/id/{id}/public` | `get_tracking` |
@@ -362,7 +365,7 @@ python -m unittest discover -v -f modules/connectors/postnord/tests
 | Rate-sheet prices drift from contracts | Medium | Prices are merchant-maintained; documented |
 | Undocumented live behaviors change | Medium | Each is isolated in one parser branch and covered by fixtures modeled on live captures |
 | Customs data previously ignored now reaches PostNord | Low | Intended; CN22 is emitted only when commodities are present |
-| Duplicate CN22 pages between booking printout and standalone document | Low | Accepted; `definePrintout=onlyLabels` is the lever if consumers report double printing |
+| Duplicate CN22 pages between booking printout and standalone document | Low | The standalone CN22 is off by default and fetched only with `postnord_standalone_customs_documents`, so a duplicate appears only on opt-in; `definePrintout=onlyLabels` was rejected because it makes PDF and ZPL printouts non-interchangeable (see `POSTNORD_CUSTOMS_BOOKING_DOCUMENTS.md`) |
 
 ---
 
@@ -379,8 +382,18 @@ Rollback removes the package and the two registration lines.
 ### NVIT customs data set
 
 From 1 April 2026, Norwegian goods moving Norway-to-Norway via Sweden or Finland need per-goods-line trade description, six-digit HS code, net and gross weight, and packaging details at booking.
-The CN22 mapping carries gross weight only; PostNord's `customsInvoice` branch models line net and gross weight, per-parcel `refItemIds`, and `totalNetWeight`.
-Open questions: which branch PostNord expects for NVIT flows, whether to add a unified `Commodity.net_weight` or use a connector convention, whether lines come from `Parcel.items` or `customs.commodities`, where packaging details land, and whether to gate on the affected postcode bands.
+Parcel products already book the `customsInvoice` branch (letters and 91 keep `customsDeclarationCN22`), which models line net and gross weight, per-parcel `refItemIds`, `totalNetWeight`, `splitShipmentReference`, and `returnHsTariffNumber`.
+The remaining gaps against that data set are:
+
+| Gap | Current behavior |
+|-----|------------------|
+| Line net weight | `netWeight` is sent equal to `grossWeight`, both from the unified per-unit `Commodity.weight` times quantity; there is no unified net weight |
+| Returns | `reasonForExportation` is always `1000` (`ExportReason` has only `permanent_export`); returns need `1040` and `returnHsTariffNumber`, which is not mapped |
+| Per-parcel linkage | Every goods item is booked with `itemId="0"` and invoice rows carry no `refItemIds` |
+| HS code format | `hsTariffNumber` is required but not checked for six or more digits without spaces |
+| Split shipments and parcel descriptions | `splitShipmentReference` and goodsItem `goodsDescription` are not mapped |
+
+Open questions: whether to add a unified `Commodity.net_weight` or use a connector convention, whether lines come from `Parcel.items` or `customs.commodities`, where packaging details land, and whether to gate on the affected postcode bands.
 Per-parcel linkage requires replacing the constant `itemId="0"` with unique item ids.
 Until then, callers can submit caller-built `customsInvoice` declarations per item id through `create_customs_declaration`.
 
