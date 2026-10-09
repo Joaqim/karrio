@@ -449,6 +449,7 @@ def _customs_declaration(
         len(customs.commodities), field="customs.commodities"
     )
     provider_units.enforce_cn22_registration_numbers(options)
+    provider_units.enforce_customs_line_content(customs.commodities)
 
     total_gross_weight = _total_gross_weight(parcel_weight, customs.commodities)
     category = (
@@ -598,6 +599,7 @@ def _customs_invoice(
     parcel weight, which includes packaging. Registration numbers are passed through without the CN22
     completeness rule, which the sandbox did not apply to customs invoices.
     """
+    provider_units.enforce_customs_line_content(customs.commodities)
     errors = _customs_invoice_errors(shipper, recipient, customs, invoice_number)
     if errors:
         raise lib.exceptions.FieldError(errors)
