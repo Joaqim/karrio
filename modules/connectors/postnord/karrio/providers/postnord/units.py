@@ -446,22 +446,46 @@ def enforce_customs_declaration_lines(
     raise lib.exceptions.FieldError({field: explanation})
 
 
-def enforce_cn22_registration_numbers(options: units.CustomsOptions) -> None:
+def resolve_eori_number(
+    options: units.CustomsOptions, shipper: units.ComputedAddress
+) -> typing.Optional[str]:
+    """Resolve the sender EORI from customs options, address second.
+
+    ``customs.options.eori_number`` wins when present; otherwise the
+    shipper's ``state_tax_id`` is used as the EORI so a booking whose
+    identifiers live on the party address still satisfies PostNord's
+    registration-number rule (SACUS-BR-24062502). The federal tax
+    identifier is not considered: it is reserved for the customs invoice's
+    VAT number. One resolution shared by the CN22 branch, the customs
+    invoice branch, and the CN22 registration guard so precedence cannot
+    drift between them.
+    """
+    return options.eori_number.state or shipper.state_tax_id or None
+
+
+def enforce_cn22_registration_numbers(
+    options: units.CustomsOptions, shipper: units.ComputedAddress
+) -> None:
     """Raise a FieldError when a CN22 carries none of EORI, VOEC, or IOSS.
 
     PostNord rejects such a declaration with SACUS-BR-24062502 ("Customs
     CN22/CN23 should have either EORI, VOEC, IOSS"), observed live. The
     sandbox did not apply the rule to customs invoices, so this guard is
-    scoped to the CN22 branch.
+    scoped to the CN22 branch. The EORI check accepts the shipper's state
+    tax identifier as a fallback (``resolve_eori_number``); VOEC and IOSS
+    have no address field that could carry them.
     """
-    if any(options[key].state for key in CustomsOption.__members__):
+    if any(
+        options[key].state for key in CustomsOption.__members__
+    ) or resolve_eori_number(options, shipper):
         return
 
     raise lib.exceptions.FieldError(
         {
             "customs.options": (
                 "a CN22 declaration requires at least one of "
-                "eori_number, voec_number, or ioss_number"
+                "eori_number, voec_number, or ioss_number, "
+                "or a shipper state_tax_id to use as the EORI"
             )
         }
     )

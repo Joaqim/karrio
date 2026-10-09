@@ -431,7 +431,7 @@ def _customs_declaration(
     customs: models.Customs,
     options: units.CustomsOptions,
     parcel_weight: typing.Optional[float],
-    country_of_origin: str,
+    shipper: units.ComputedAddress,
 ) -> postnord_req.CustomsDeclarationCN22Type:
     """Map unified customs data onto the booking's CN22 declaration branch.
 
@@ -442,13 +442,15 @@ def _customs_declaration(
     (``CN22CategoryType.lookup``), with unknown values passing through
     verbatim.
     Registration numbers are per-request passthrough from ``customs.options``
-    converted with the provider ``CustomsOption`` enum; a declaration with
-    none of them is rejected locally, matching PostNord's SACUS-BR-24062502.
+    converted with the provider ``CustomsOption`` enum, with the EORI
+    falling back to the shipper's ``state_tax_id``
+    (``resolve_eori_number``); a declaration with none of them and no
+    fallback is rejected locally, matching PostNord's SACUS-BR-24062502.
     """
     provider_units.enforce_customs_declaration_lines(
         len(customs.commodities), field="customs.commodities"
     )
-    provider_units.enforce_cn22_registration_numbers(options)
+    provider_units.enforce_cn22_registration_numbers(options, shipper)
     provider_units.enforce_customs_line_content(customs.commodities)
 
     total_gross_weight = _total_gross_weight(parcel_weight, customs.commodities)
@@ -459,10 +461,10 @@ def _customs_declaration(
     )
 
     return postnord_req.CustomsDeclarationCN22Type(
-        EORIorPersonalIdNumber=options.eori_number.state or None,
+        EORIorPersonalIdNumber=provider_units.resolve_eori_number(options, shipper),
         voec=options.voec_number.state or None,
         ioss=options.ioss_number.state or None,
-        countryOfOrigin=country_of_origin,
+        countryOfOrigin=shipper.country_code,
         categoryOfItem=lib.identity(
             postnord_req.CategoryOfItemType(categoryType=[category])
             if category
@@ -489,10 +491,12 @@ def _customs_invoice_errors(
 ) -> typing.Dict[str, str]:
     """Collect the customs invoice fields the booking swagger requires.
 
-    Seller ``vatNo``, ``invoice.invoiceNo``, seller and buyer
-    ``contacts.name``/``phoneNo``, and per-line ``hsTariffNumber`` and
-    ``countryOfOrigin`` are required by booking.swagger.json and cannot be
-    derived when absent from the unified payload.
+    Seller ``vatNo`` (strictly the shipper's federal tax identifier; the
+    state identifier is reserved for EORI resolution), ``invoice.invoiceNo``,
+    seller and buyer ``contacts.name``/``phoneNo``, and per-line
+    ``hsTariffNumber`` and ``countryOfOrigin`` are required by
+    booking.swagger.json and cannot be derived when absent from the unified
+    payload.
     """
     required = "is required for a PostNord customs invoice"
     party_errors = {
@@ -517,7 +521,7 @@ def _customs_invoice_errors(
     return {
         **(
             {"shipper.federal_tax_id": f"shipper VAT number {required}"}
-            if not shipper.tax_id
+            if not shipper.federal_tax_id
             else {}
         ),
         **(
@@ -596,8 +600,10 @@ def _customs_invoice(
     ``commercial_invoice`` selects COMMERCIAL or PROFORMA literally. Line
     values and weights are totals over the quantity; the invoice total and
     total net weight sum the lines, while the total gross weight is the
-    parcel weight, which includes packaging. Registration numbers are passed through without the CN22
-    completeness rule, which the sandbox did not apply to customs invoices.
+    parcel weight, which includes packaging. Registration numbers pass
+    through without the CN22 completeness rule, which the sandbox did not
+    apply to customs invoices; the EORI resolves through the shared
+    option-then-address helper (``resolve_eori_number``).
     """
     provider_units.enforce_customs_line_content(customs.commodities)
     errors = _customs_invoice_errors(shipper, recipient, customs, invoice_number)
@@ -626,8 +632,8 @@ def _customs_invoice(
                 if settings.customer_number
                 else None
             ),
-            vatNo=shipper.tax_id,
-            eoriNo=options.eori_number.state or None,
+            vatNo=shipper.federal_tax_id,
+            eoriNo=provider_units.resolve_eori_number(options, shipper),
         ),
         buyer=_invoice_party(recipient, vatNo=recipient.tax_id),
         invoice=postnord_req.InvoiceType(
@@ -777,7 +783,7 @@ def shipment_request(
             payload.customs,
             options=customs_options,
             parcel_weight=packages.weight.KG,
-            country_of_origin=shipper.country_code,
+            shipper=shipper,
         )
         if has_customs and customs_structure == provider_units.CustomsStructure.cn22
         else None
