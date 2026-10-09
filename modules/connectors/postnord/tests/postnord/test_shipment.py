@@ -1770,6 +1770,9 @@ class TestPostNordLabelComposition(unittest.TestCase):
                 )
                 self.assertListEqual(lib.to_dict(messages), [])
                 self.assertEqual(details.docs.label, label)
+                self.assertEqual(
+                    details.meta["printout_composition"], ["cn22", "label"]
+                )
 
     def test_international_parcel_label_without_cn22_format_is_not_verified(self):
         # A CN23 booking whose label is not a CN22 composition stays silent:

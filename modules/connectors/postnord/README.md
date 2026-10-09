@@ -62,14 +62,14 @@ Connection config options (under the connection's config):
 | `locale_by_recipient` | `false` | Derive the booking locale from the recipient country (`SE`→`sv`, `DK`→`da`, `NO`→`no`, `FI`→`fi`) when neither `options.language` nor `language` is set. The server also persists the derived locale on the shipment and its tracker. |
 | `offer_tracked_letter` | `false` | Offer Tracked Letter (34) in rates. |
 | `offer_export_letter` | `false` | Offer Export Letter (UX) in rates; requires issuer `Z12`. |
-| `postnord_standalone_customs_documents` | `false` | Connection default for the shipment option of the same name: attach the standalone CN22 of letter and International Parcel (91) bookings with customs data (see [Customs declarations](#customs-declarations)). |
+| `postnord_standalone_customs_documents` | `false` | Connection default for the shipment option of the same name: attach the standalone customs declaration of letter (CN22) and International Parcel (91, CN23) bookings with customs data (see [Customs declarations](#customs-declarations)). |
 
 ## Shipment options
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `entry_code` | string | — | PostNord entry code (door code) for the recipient's building, e.g. an apartment entrance code. Sent as a shipment `freeText` with usage code `ZDC`; PostNord prints it as "Ref 2" on the label and maps it to the consignee reference. Max 50 characters: a longer value rejects the booking with an `ENTRY_CODE_LENGTH` message before any call to PostNord. PostNord does not document which services accept it — the value is passed through unverified and is ignored by services without door-code support. |
-| `postnord_standalone_customs_documents` | bool | connection config, else `false` | Attach the standalone CN22 of a letter or International Parcel (91) booking with customs data to `docs.extra_documents`, fetched by id in the label's format. Read by the connector only; never sent to PostNord as an additional service. |
+| `postnord_standalone_customs_documents` | bool | connection config, else `false` | Attach the standalone customs declaration of a letter (CN22) or International Parcel (91, CN23) booking with customs data to `docs.extra_documents`, fetched by id in the label's format. Read by the connector only; never sent to PostNord as an additional service. |
 | `language` | string | `en` | Booking/notification locale (lowercase ISO 639-1), sent as the query `locale` (SMS/Email language) and uppercased as the body `language` element (label/document text). Resolved per request, then from connection config, then (with `locale_by_recipient` enabled) from the recipient's country code. PostNord's documented booking default is `sv`, but the connector sends `en` when nothing else resolves, so Swedish-market connections that expect Swedish SMS/Email text should set `config.language` to `sv`. |
 | `sms_notification` | bool | — | Opt in to PostNord notifying the consignee by SMS (`additionalServiceCode` `A3`, consignee `smsNo`). Least intrusive channel; notification language follows the booking locale. |
 | `email_notification` | bool | — | Opt in to e-mail notification (`A4`, consignee `emailAddress`). |
@@ -121,8 +121,8 @@ Each point is a dict with `id`, `name`, `type`, `address`, `coordinates`, `openi
 When a shipment carries `customs` with at least one commodity, the booking embeds one customs structure selected by the service.
 When both the shipper and the recipient are inside the EU VAT area, no customs structure is sent, no customs document is fetched, and none of the customs field checks below apply; a caller-supplied `customs` block is reported as a `customs_omitted_intra_eu` warning message instead.
 The EU VAT area follows the DHL Freight Sweden connector's definition (`in_eu_vat_area` in `units.py`): Greece is accepted as `GR` or `EL`, and special fiscal territories such as Åland (`AX`, or `FI` 22000–22999), the Canary Islands, Ceuta, Melilla, Büsingen, Heligoland, Livigno, Campione d'Italia, and the French overseas departments are outside it.
-Currently, letter services (`LETTER_SERVICES` in `units.py`) and International Parcel (91) send a CN22 declaration (`customsDeclarationCN22`); every other service is a parcel product and sends a customs invoice (`customsInvoice`).
-PostNord's published requirement for Postpaket Utrikes / International Parcel (91) is a CN23 at any value (customs documents pages and Postpaket Utrikes terms §2), not a CN22; selecting CN23 is deferred until the CN22 versus CN23 rules are specified.
+Currently, letter services (`LETTER_SERVICES` in `units.py`) send a CN22 declaration (`customsDeclarationCN22`), International Parcel (91) sends a CN23 declaration (`customsDeclarationCN23`), and every other service is a parcel product and sends a customs invoice (`customsInvoice`).
+International Parcel (91) books the CN23 unconditionally — PostNord's published requirement for Postpaket Utrikes is a CN23 at any value (customs documents pages and Postpaket Utrikes terms §2), not a CN22.
 Duties after booking, such as printing the customs documents and attaching the invoice copies to the parcel, are the consumer's.
 
 CN22 mapping:
@@ -142,6 +142,7 @@ Other values are sent verbatim, and an absent `content_type` sends no `categoryO
 A CN22 without any of EORI, VOEC, or IOSS under `customs.options` is rejected with a field error before any call, matching PostNord's rejection `SACUS-BR-24062502`.
 Commodity `weight` and `value_amount` are per unit, so each line carries them multiplied by `quantity`, on both the CN22 and the customs invoice.
 A CN22 accepts at most 13 commodity lines; more are rejected before any call to PostNord.
+The CN23 branch of International Parcel (91) reuses the CN22 mapping and these checks in full, minus the CN22-only `countryOfOrigin`, and books `postalCharges` — required by the booking swagger but absent from the unified model — as a zero amount in the `totalValue` currency.
 
 Customs invoice mapping:
 
@@ -163,16 +164,16 @@ Registration numbers are optional on the customs invoice.
 
 Registration-number keys under shipment `options` are rejected with a field error, because unknown shipment options would otherwise be dropped silently.
 
-For letter services and International Parcel (91) booked with customs data, PostNord composes the CN22 into the booking printout in both formats: one PDF or one ZPL format carrying the CN22 section and the shipping label section.
+For letter services booked with customs data, PostNord composes the CN22 into the booking printout in both formats: one PDF or one ZPL format carrying the CN22 section and the shipping label section.
 In a PDF the two sections may share one A4 page or sit on separate pages (a sandbox export letter booking returned the tracked letter label on page 1 and the CN22 on page 2); verification accepts both layouts.
-For International Parcel (91), PostNord returns the parcel label followed by an upright CN22 V2, as a second `^XA`...`^XZ` format in ZPL and a second page in PDF; this composed printout is `docs.label` and passes verification without a warning.
-`docs.label` is that composed printout, returned unchanged, and `meta.printout_composition` reports the composed kinds, e.g. `["cn22", "label"]`.
+`docs.label` is that composed printout, returned unchanged, and `meta.printout_composition` reports the composed kinds PostNord declares, e.g. `["cn22", "label"]`.
 The connector verifies the label with the SDK customs classifier (`lib.classify_customs_composition`) using PostNord's declared section markers (`DOCUMENT_SECTIONS` in `providers/postnord/stamping.py`).
 A label that does not classify as the shipping label composed with a CN22 is still returned unchanged, with a `postnord_unexpected_label_composition` warning message naming the expected and the classified composition; the booking never fails on it.
-Bookings without customs data or within the EU VAT area are not verified.
+Bookings without customs data, within the EU VAT area, or on International Parcel (91) are not verified.
+The live 2026-09-28 captures of 91, made while the connector still embedded a CN22, show the parcel label followed by an upright CN22 V2 (a second `^XA`...`^XZ` format in ZPL, a second page in PDF) and stay load-bearing for the `label_cn22` stamping seeds; a phase-2 sandbox capture of a CN23 booking decides whether PostNord composes a CN23 into the label and what its stamping needs, so until then 91 bookings' documents pass through unverified.
 
 For parcel-product bookings with customs data, the connector also fetches the standalone customs document (`POST /rest/shipment/v3/labels/ids/{pdf,zpl}` with `definePrintout=onlyCustomsDeclarations`), in the label's format and keyed by the booking's `printId`, and attaches it to `docs.extra_documents`.
-For letter services and International Parcel (91), the CN22 is carried only within the label unless the `postnord_standalone_customs_documents` opt-in is set, per shipment in `options` or on the connection config; with the opt-in the same by-id fetch attaches the standalone CN22 as a `cn22` document in addition to the composed label, identically for PDF and ZPL.
+For letter services and International Parcel (91), no standalone document is fetched unless the `postnord_standalone_customs_documents` opt-in is set, per shipment in `options` or on the connection config; with the opt-in the same by-id fetch attaches the standalone declaration — the CN22 for letters, the CN23 for International Parcel (91) — in addition to the label, identically for PDF and ZPL.
 The document category is the kind PostNord reports in `printoutComposition` (`cn22`, `customsInvoice`, …), falling back to `customs_declaration`.
 A failed fetch never fails the booking; it surfaces as a message.
 
