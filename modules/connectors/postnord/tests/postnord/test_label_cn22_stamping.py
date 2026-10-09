@@ -1,0 +1,750 @@
+"""PostNord combined label + CN22 printouts: live fixtures, classification, seeds.
+
+The combined fixtures are live export-letter (UX) captures: the ZPL from a
+booking and from a by-printId fetch without ``definePrintout``, the PDF from the
+same by-printId fetch. The two-page PDF is a sandbox export-letter booking
+printout: a "PostNord Tracked Letter" label on page 1 and an upright CN22 on
+page 2. The lone CN22 PDF is the ``definePrintout=onlyCustomsDeclarations``
+capture already vendored as ``postnord_cn22.pdf``.
+"""
+
+import io
+import re
+import base64
+import unittest
+
+import pypdf
+from pypdf.generic import ArrayObject, ContentStream
+
+import karrio.lib as lib
+import karrio.references as references
+import karrio.core.models as models
+import karrio.core.utils.stamping as stamping
+import karrio.providers.postnord.stamping as postnord_stamping
+
+from postnord.test_cn22_stamping import (
+    KEYWORD,
+    _decode_zpl,
+    _grf_fields,
+    _read_b64,
+    _signature_png_b64,
+)
+
+COMBINED_ZPL_FIXTURES = (
+    "postnord_label_cn22_booking.zpl",
+    "postnord_label_cn22_printid.zpl",
+)
+COMBINED_PDF_FIXTURE = "postnord_label_cn22_printid.pdf"
+TWO_PAGE_PDF_FIXTURE = "postnord_label_cn22_booking_two_pages.pdf"
+LONE_ZPL_FIXTURE = "postnord_cn22.zpl"
+LONE_PDF_FIXTURE = "postnord_cn22.pdf"
+
+ZPL_CN22_MARKER = "^FX CUSTOMS_CN22_ROTATED^FS"
+ZPL_LABEL_MARKER = "^FX SE_INTERNATIONAL_LETTER_LABEL^FS"
+PDF_CN22_TEXT = ("CUSTOMS DECLARATION", "CN22")
+PDF_LABEL_TEXT = ("Brev utrikes", "Parcel ID")
+PDF_TRACKED_LETTER_TEXT = ("PostNord Tracked Letter", "Item-ID")
+PDF_FIXTURES = (COMBINED_PDF_FIXTURE, TWO_PAGE_PDF_FIXTURE, LONE_PDF_FIXTURE)
+
+
+def _document(name: str, document_format: str) -> models.ShippingDocument:
+    return models.ShippingDocument(
+        category="label", format=document_format, base64=_read_b64(name)
+    )
+
+
+def _zpl_stream(name: str) -> str:
+    return base64.b64decode(_read_b64(name)).decode("utf-8")
+
+
+def _pdf_pages(document_b64: str):
+    return pypdf.PdfReader(io.BytesIO(base64.b64decode(document_b64))).pages
+
+
+def _page_text(document_b64: str, page: int = 1) -> str:
+    # PostNord's text runs break mid-phrase ("CUSTOMS \nDECLARATIONCN22").
+    return " ".join(_pdf_pages(document_b64)[page - 1].extract_text().split())
+
+
+def _page_mm(page) -> tuple:
+    return tuple(
+        round(float(value) * 25.4 / 72.0, 1)
+        for value in (page.mediabox.width, page.mediabox.height)
+    )
+
+
+class TestPostnordCombinedFixtures(unittest.TestCase):
+    def test_combined_zpl_fixtures_are_one_format_with_both_sections(self):
+        for name in COMBINED_ZPL_FIXTURES:
+            with self.subTest(fixture=name):
+                stream = _zpl_stream(name)
+
+                self.assertTrue(stream.startswith("^XA"))
+                self.assertEqual(stream.count("^XZ"), 1)
+                self.assertEqual(stream.count(ZPL_CN22_MARKER), 1)
+                self.assertEqual(stream.count(ZPL_LABEL_MARKER), 1)
+                self.assertLess(
+                    stream.index(ZPL_CN22_MARKER), stream.index(ZPL_LABEL_MARKER)
+                )
+                self.assertEqual(stream.count(KEYWORD), 1)
+
+    def test_combined_zpl_cn22_section_carries_no_label_marker(self):
+        for name in COMBINED_ZPL_FIXTURES:
+            with self.subTest(fixture=name):
+                stream = _zpl_stream(name)
+                cn22_section = stream[: stream.index(ZPL_LABEL_MARKER)]
+
+                self.assertIn(KEYWORD, cn22_section)
+                self.assertNotIn("SE_INTERNATIONAL_LETTER_LABEL", cn22_section)
+                # The label section carries PostNord's own ^GFA logo graphics.
+                self.assertNotIn("^GFA", cn22_section)
+
+    def test_lone_zpl_fixture_carries_no_label_section(self):
+        stream = _zpl_stream(LONE_ZPL_FIXTURE)
+
+        self.assertEqual(stream.count(ZPL_CN22_MARKER), 1)
+        self.assertNotIn(ZPL_LABEL_MARKER, stream)
+
+    def test_combined_pdf_fixture_is_one_a4_page_with_both_sections(self):
+        document = _document(COMBINED_PDF_FIXTURE, "PDF")
+        text = _page_text(document.base64)
+
+        self.assertEqual(len(_pdf_pages(document.base64)), 1)
+        self.assertEqual(stamping._detect_paper_variant(document.base64, "PDF"), "A4")
+        for marker in PDF_CN22_TEXT + PDF_LABEL_TEXT:
+            self.assertIn(marker, text)
+        self.assertLess(text.index("CUSTOMS DECLARATION"), text.index("Brev utrikes"))
+
+    def test_two_page_pdf_fixture_is_a_tracked_letter_label_then_a_cn22(self):
+        document = _document(TWO_PAGE_PDF_FIXTURE, "PDF")
+        pages = _pdf_pages(document.base64)
+        label, cn22 = _page_text(document.base64, 1), _page_text(document.base64, 2)
+
+        self.assertEqual(len(pages), 2)
+        self.assertEqual([_page_mm(page) for page in pages], [(210.0, 297.0)] * 2)
+        self.assertEqual(stamping._detect_paper_variant(document.base64, "PDF"), "A4")
+        for marker in PDF_TRACKED_LETTER_TEXT + ("Cust. No", "DELIVERY CONFIRMATION"):
+            self.assertIn(marker, label)
+        for marker in PDF_CN22_TEXT + PDF_LABEL_TEXT + (KEYWORD,):
+            self.assertNotIn(marker, label)
+        for marker in PDF_CN22_TEXT + (KEYWORD,):
+            self.assertIn(marker, cn22)
+        for marker in PDF_LABEL_TEXT + PDF_TRACKED_LETTER_TEXT:
+            self.assertNotIn(marker, cn22)
+
+    def test_tracked_letter_markers_occur_on_no_cn22_page(self):
+        for name in PDF_FIXTURES:
+            document = _document(name, "PDF")
+            for page in range(1, len(_pdf_pages(document.base64)) + 1):
+                text = _page_text(document.base64, page)
+                if "CUSTOMS DECLARATION" not in text:
+                    continue
+                with self.subTest(fixture=name, page=page):
+                    for marker in PDF_TRACKED_LETTER_TEXT:
+                        self.assertNotIn(marker, text)
+
+    def test_lone_pdf_fixture_is_one_a4_page_without_label_text(self):
+        document = _document(LONE_PDF_FIXTURE, "PDF")
+        text = _page_text(document.base64)
+
+        self.assertEqual(len(_pdf_pages(document.base64)), 1)
+        self.assertEqual(stamping._detect_paper_variant(document.base64, "PDF"), "A4")
+        for marker in PDF_CN22_TEXT:
+            self.assertIn(marker, text)
+        for marker in PDF_LABEL_TEXT + PDF_TRACKED_LETTER_TEXT:
+            self.assertNotIn(marker, text)
+
+
+COMBINED = lib.CustomsComposition.label_with_declaration
+DECLARATION = lib.CustomsComposition.declaration
+
+
+class TestPostnordDocumentSections(unittest.TestCase):
+    def test_plugin_metadata_declares_the_document_sections(self):
+        sections = references.collect_providers_data()["postnord"].document_sections
+
+        self.assertIs(sections, postnord_stamping.DOCUMENT_SECTIONS)
+        self.assertEqual(
+            sections,
+            {
+                "ZPL": {
+                    "cn22": lib.AnyOf(ZPL_CN22_MARKER, "^FX CUSTOMS_CN22_V2^FS"),
+                    "label": lib.AnyOf(
+                        ZPL_LABEL_MARKER, "^FX NORDIC_SHIPPING_LABEL^FS"
+                    ),
+                },
+                "PDF": {
+                    "cn22": PDF_CN22_TEXT,
+                    "label": lib.AnyOf(
+                        PDF_LABEL_TEXT,
+                        PDF_TRACKED_LETTER_TEXT,
+                        ("International Parcel", "Item-ID"),
+                    ),
+                },
+            },
+        )
+
+    def test_combined_zpl_fixtures_classify_as_label_cn22(self):
+        for name in COMBINED_ZPL_FIXTURES:
+            with self.subTest(fixture=name):
+                result = lib.classify_customs_composition(
+                    _document(name, "ZPL"), carrier="postnord"
+                )
+
+                self.assertEqual(
+                    result,
+                    lib.CustomsClassification(
+                        composition=COMBINED,
+                        kinds=("cn22", "label"),
+                        doc_type="label_cn22",
+                        page=None,
+                    ),
+                )
+
+    def test_combined_pdf_fixture_classifies_as_label_cn22_on_page_one(self):
+        result = lib.classify_customs_composition(
+            _document(COMBINED_PDF_FIXTURE, "PDF"), carrier="postnord"
+        )
+
+        self.assertEqual(
+            result,
+            lib.CustomsClassification(
+                composition=COMBINED,
+                kinds=("cn22", "label"),
+                doc_type="label_cn22",
+                page=1,
+            ),
+        )
+
+    def test_two_page_pdf_fixture_classifies_as_label_cn22_on_page_two(self):
+        result = lib.classify_customs_composition(
+            _document(TWO_PAGE_PDF_FIXTURE, "PDF"), carrier="postnord"
+        )
+
+        self.assertEqual(
+            result,
+            lib.CustomsClassification(
+                composition=COMBINED,
+                kinds=("cn22", "label"),
+                doc_type="label_cn22",
+                page=2,
+            ),
+        )
+
+    def test_lone_zpl_fixture_classifies_as_cn22(self):
+        result = lib.classify_customs_composition(
+            _document(LONE_ZPL_FIXTURE, "ZPL"), carrier="postnord"
+        )
+
+        self.assertEqual(
+            result,
+            lib.CustomsClassification(
+                composition=DECLARATION, kinds=("cn22",), doc_type="cn22", page=None
+            ),
+        )
+
+    def test_lone_pdf_fixture_classifies_as_cn22_on_page_one(self):
+        result = lib.classify_customs_composition(
+            _document(LONE_PDF_FIXTURE, "PDF"), carrier="postnord"
+        )
+
+        self.assertEqual(
+            result,
+            lib.CustomsClassification(
+                composition=DECLARATION, kinds=("cn22",), doc_type="cn22", page=1
+            ),
+        )
+
+    def test_zpl_label_without_the_cn22_section_is_not_customs_bearing(self):
+        stream = _zpl_stream(COMBINED_ZPL_FIXTURES[0])
+        label_only = (
+            stream[: stream.index(ZPL_CN22_MARKER)]
+            + stream[stream.index(ZPL_LABEL_MARKER) :]
+        )
+        document = models.ShippingDocument(
+            category="label",
+            format="ZPL",
+            base64=base64.b64encode(label_only.encode("utf-8")).decode("utf-8"),
+        )
+
+        result = lib.classify_customs_composition(document, carrier="postnord")
+
+        self.assertEqual(result.composition, lib.CustomsComposition.none)
+        self.assertEqual(result.kinds, ("label",))
+        self.assertIsNone(result.doc_type)
+
+
+def _stamped_zpl(name: str, doc_type: str) -> str:
+    stamped = lib.stamp_document(
+        _document(name, "ZPL"),
+        image=_signature_png_b64(),
+        date="2026-09-28",
+        carrier="postnord",
+        doc_type=doc_type,
+    )
+    return _decode_zpl(stamped.base64)
+
+
+def _stamp_field(zpl: str) -> str:
+    (field,) = re.findall(r"\^FO\d+,\d+\^GFA,[0-9,A-F]*\^FS", zpl)
+    return field
+
+
+class TestLabelCn22ZplStamp(unittest.TestCase):
+    def test_zpl_seed_anchors_the_cn22_keyword_in_its_reading_frame(self):
+        seeds = references.collect_providers_data()["postnord"].stamp_seeds
+        combined, lone = seeds["label_cn22/ZPL/*"], seeds["cn22/ZPL/*"]
+
+        self.assertEqual(combined.keyword, KEYWORD)
+        self.assertEqual(lone.keyword, KEYWORD)
+        self.assertIsNotNone(combined.zpl_keyword_frame_placement)
+        self.assertIsNone(combined.keyword_placement)
+        self.assertIsNone(lone.zpl_keyword_frame_placement)
+
+    def test_combined_zpl_stamps_at_the_lone_cn22_placement(self):
+        lone_field = _stamp_field(_stamped_zpl(LONE_ZPL_FIXTURE, "cn22"))
+        ((lone_x, lone_y, *_),) = _grf_fields(lone_field)
+        self.assertEqual((lone_x, lone_y), (7, 303))
+
+        for name in COMBINED_ZPL_FIXTURES:
+            with self.subTest(fixture=name):
+                zpl = _stamped_zpl(name, "label_cn22")
+
+                self.assertEqual(_stamp_field(zpl), lone_field)
+
+    def test_combined_zpl_label_section_is_byte_identical(self):
+        # The backend splices its one ^GFA field immediately before ^XZ, so
+        # everything the carrier emitted, the label section from its marker
+        # up to ^XZ included, keeps its bytes and offsets.
+        for name in COMBINED_ZPL_FIXTURES:
+            with self.subTest(fixture=name):
+                original = _zpl_stream(name)
+                zpl = _stamped_zpl(name, "label_cn22")
+                close = original.rindex("^XZ")
+                label_start = original.index(ZPL_LABEL_MARKER)
+
+                self.assertEqual(zpl[label_start:close], original[label_start:close])
+                self.assertEqual(zpl[:close], original[:close])
+                self.assertEqual(zpl[close:], _stamp_field(zpl) + original[close:])
+                self.assertIn("^BCR,95,N,N,N,N", zpl[label_start:close])
+
+
+# Measured on the combined page (postnord_label_cn22_printid.pdf) with pypdf.
+# The page draws the whole printout as one /Form1 XObject, the 839 x 1518-dot
+# label frame at 203 dpi, placed by a pure translation; label dots map to form
+# points at 72/203 pt per dot with the label y axis running down from the
+# form's top edge.
+DOT_PT = 72.0 / 203.0
+PAGE_HEIGHT_PT = 841.8898
+FORM_ORIGIN_PT = (148.84964, 151.74292)
+FORM_HEIGHT_PT = 538.40393
+# Landmarks in form points: the keyword text matrix origin and the CN22 box's
+# outer bottom rule. They sit at label (25, 35) and y 695 dots, the landmarks
+# of the lone CN22 form the signature strip was measured against.
+KEYWORD_TM_PT = (8.867, 525.9902)
+CN22_BOX_BOTTOM_RULE_PT = 291.9015
+# The signature strip in label dots: x 6.63-67.53, y 302.97-695.44, its bottom
+# edge on the box's bottom rule. On this page it spans x 53.34-60.96 mm and
+# y 91.44-140.55 mm, the same page region as the lone CN22 page.
+STRIP_LABEL_DOTS = ((6.63, 67.53), (302.97, 695.44))
+
+
+def _label_dots(form_x: float, form_y: float):
+    return form_x / DOT_PT, (FORM_HEIGHT_PT - form_y) / DOT_PT
+
+
+def _page_mm_x(label_x: float) -> float:
+    return (FORM_ORIGIN_PT[0] + label_x * DOT_PT) * 25.4 / 72.0
+
+
+def _page_mm_y(label_y: float) -> float:
+    form_top_pt = PAGE_HEIGHT_PT - FORM_ORIGIN_PT[1] - FORM_HEIGHT_PT
+    return (form_top_pt + label_y * DOT_PT) * 25.4 / 72.0
+
+
+def _strip_mm():
+    (x_lo, x_hi), (y_lo, y_hi) = STRIP_LABEL_DOTS
+    return (_page_mm_x(x_lo), _page_mm_x(x_hi)), (_page_mm_y(y_lo), _page_mm_y(y_hi))
+
+
+def _pt(mm: float) -> float:
+    return mm * 72.0 / 25.4
+
+
+def _form_page(document_b64: str):
+    page = _pdf_pages(document_b64)[0]
+    form = page["/Resources"]["/XObject"]["/Form1"].get_object()
+    return page, form
+
+
+def _text_runs(page):
+    runs = []
+    page.extract_text(
+        visitor_text=lambda text, cm, tm, font, size: (
+            runs.append((" ".join(text.split()), tm[4], tm[5]))
+            if text.strip()
+            else None
+        )
+    )
+    return runs
+
+
+def _overlays(document_b64: str, page_number: int = 1):
+    """The matrix and page-point bounds of every merged stamp overlay.
+
+    Each merged overlay is a ``cm`` and its clip ``re`` followed by the
+    image's own scaling ``cm``; the carrier's page-level ``cm`` and clip are
+    followed by its form's ``Do`` instead and are skipped.
+    """
+    page = _pdf_pages(document_b64)[page_number - 1]
+    contents = page["/Contents"].get_object()
+    streams = contents if isinstance(contents, ArrayObject) else [contents]
+    operations = [
+        (
+            () if operator == b"Do" else tuple(float(value) for value in operands),
+            operator,
+        )
+        for element in streams
+        for operands, operator in ContentStream(
+            element.get_object(), page.pdf
+        ).operations
+        if operator in (b"cm", b"re", b"Do")
+    ]
+    placed = [
+        (matrix, clip[2:])
+        for (matrix, op), (clip, clip_op), (_, image_op) in zip(
+            operations, operations[1:], operations[2:]
+        )
+        if (op, clip_op, image_op) == (b"cm", b"re", b"cm")
+    ]
+    return [
+        (
+            (a, b, c, d, e, f),
+            (
+                min(xs := [e + a * u + c * v for u in (0, w) for v in (0, h)]),
+                max(xs),
+                min(ys := [f + b * u + d * v for u in (0, w) for v in (0, h)]),
+                max(ys),
+            ),
+        )
+        for (a, b, c, d, e, f), (w, h) in placed
+    ]
+
+
+def _overlay_bounds(document_b64: str, page_number: int = 1):
+    """Page-point bounds of every stamp overlay turned a quarter clockwise."""
+    return [
+        bounds
+        for (a, b, *_), bounds in _overlays(document_b64, page_number)
+        if abs(a) < 1e-6 and b < 0
+    ]
+
+
+def _reads_down_the_page(matrix) -> bool:
+    a, b, c, d, *_ = matrix
+    return abs(a) < 1e-6 and abs(d) < 1e-6 and b < 0 and c > 0
+
+
+def _reads_left_to_right(matrix) -> bool:
+    a, b, c, d, *_ = matrix
+    return abs(b) < 1e-6 and abs(c) < 1e-6 and a > 0 and d > 0
+
+
+def _within(test: unittest.TestCase, bounds, region, tolerance: float = 0.05):
+    left, right, bottom, top = bounds
+    region_left, region_right, region_bottom, region_top = region
+    test.assertGreaterEqual(left, region_left - tolerance)
+    test.assertLessEqual(right, region_right + tolerance)
+    test.assertGreaterEqual(bottom, region_bottom - tolerance)
+    test.assertLessEqual(top, region_top + tolerance)
+
+
+def _rotated_strip_region():
+    """The single-page capture's measured strip in bottom-up page points."""
+    (x_lo, x_hi), (y_lo, y_hi) = _strip_mm()
+    return _pt(x_lo), _pt(x_hi), PAGE_HEIGHT_PT - _pt(y_hi), PAGE_HEIGHT_PT - _pt(y_lo)
+
+
+# Measured on page 2 of the two-page booking PDF with pypdf. The page draws
+# the upright CN22 as /Form2 (BBox 297.57635 x 467.468 pt, the 839 x 1318-dot
+# label frame) placed by a pure translation. In form points: the keyword text
+# matrix origin, the CN22 box's inner left, right and bottom rules (label dots
+# x 11 and 829, y 834), and the baseline of the certification text's last line.
+TWO_PAGE_FORM_ORIGIN_PT = (148.84964, 187.21091)
+TWO_PAGE_FORM_SIZE_PT = (297.57635, 467.468)
+TWO_PAGE_KEYWORD_TM_PT = (8.867, 184.4335)
+TWO_PAGE_BOX_INNER_RULES_PT = {"left": 3.9015, "right": 294.0296, "bottom": 171.665}
+TWO_PAGE_CERTIFICATION_BASELINE_PT = 203.9409
+# The certification text's lowest ink row, page y in millimetres from the top,
+# read from a 300 dpi pdftoppm render of page 2: its descenders end 0.42 mm
+# below the baseline above.
+TWO_PAGE_CERTIFICATION_INK_MM = 159.43
+
+
+def _two_page_free_area():
+    """The upright signature area in bottom-up page points.
+
+    Along the keyword's line it spans the box between its inner left and right
+    rules; across, from the box's inner bottom rule up to the certification
+    text's lowest ink.
+    """
+    form_x, form_y = TWO_PAGE_FORM_ORIGIN_PT
+    return (
+        form_x + TWO_PAGE_BOX_INNER_RULES_PT["left"],
+        form_x + TWO_PAGE_BOX_INNER_RULES_PT["right"],
+        form_y + TWO_PAGE_BOX_INNER_RULES_PT["bottom"],
+        PAGE_HEIGHT_PT - _pt(TWO_PAGE_CERTIFICATION_INK_MM),
+    )
+
+
+class TestLabelCn22PdfMeasurement(unittest.TestCase):
+    def test_combined_page_places_the_label_frame_by_translation(self):
+        page, form = _form_page(_read_b64(COMBINED_PDF_FIXTURE))
+        ((operands, _),) = [
+            (operands, operator)
+            for operands, operator in ContentStream(
+                page["/Contents"].get_object(), page.pdf
+            ).operations
+            if operator == b"cm"
+        ]
+
+        self.assertEqual(
+            [round(float(value), 5) for value in operands],
+            [1.0, 0.0, 0.0, 1.0, *FORM_ORIGIN_PT],
+        )
+        self.assertAlmostEqual(float(form["/BBox"][3]), FORM_HEIGHT_PT, places=5)
+        self.assertAlmostEqual(float(form["/BBox"][2]) / DOT_PT, 839.0, places=2)
+        self.assertAlmostEqual(FORM_HEIGHT_PT / DOT_PT, 1518.0, places=2)
+
+    def test_combined_page_landmarks_match_the_lone_cn22_form(self):
+        page, form = _form_page(_read_b64(COMBINED_PDF_FIXTURE))
+        (keyword_run,) = [run for run in _text_runs(page) if run[0] == KEYWORD]
+        rule_points = [
+            tuple(float(value) for value in operands)
+            for operands, operator in ContentStream(form, page.pdf).operations
+            if operator == b"l"
+        ]
+
+        self.assertAlmostEqual(keyword_run[1], KEYWORD_TM_PT[0], places=3)
+        self.assertAlmostEqual(keyword_run[2], KEYWORD_TM_PT[1], places=3)
+        for measured, expected in zip(_label_dots(*KEYWORD_TM_PT), (25.0, 35.0)):
+            self.assertAlmostEqual(measured, expected, places=2)
+        self.assertIn(CN22_BOX_BOTTOM_RULE_PT, [round(y, 4) for _, y in rule_points])
+        self.assertAlmostEqual(
+            _label_dots(0.0, CN22_BOX_BOTTOM_RULE_PT)[1], 695.0, places=2
+        )
+        self.assertAlmostEqual(STRIP_LABEL_DOTS[1][1], 695.0, delta=0.5)
+
+    def test_box_bottom_rule_separates_the_cn22_and_label_sections(self):
+        runs = _text_runs(_form_page(_read_b64(COMBINED_PDF_FIXTURE))[0])
+        above = {text for text, _, y in runs if y > CN22_BOX_BOTTOM_RULE_PT}
+        below = {text for text, _, y in runs if y < CN22_BOX_BOTTOM_RULE_PT}
+
+        self.assertTrue({KEYWORD, "CUSTOMS", "Sweden Post"} <= above)
+        self.assertTrue({"Brev utrikes", "Parcel ID"} <= below)
+        self.assertFalse({"Brev utrikes", "Parcel ID"} & above)
+        self.assertFalse({KEYWORD, "CUSTOMS"} & below)
+
+
+class TestLabelCn22TwoPageMeasurement(unittest.TestCase):
+    def _page(self):
+        page = _pdf_pages(_read_b64(TWO_PAGE_PDF_FIXTURE))[1]
+        form = page["/Resources"]["/XObject"]["/Form2"].get_object()
+        return page, form
+
+    def test_page_two_places_the_upright_cn22_frame_by_translation(self):
+        page, form = self._page()
+        ((operands, _),) = [
+            (operands, operator)
+            for operands, operator in ContentStream(
+                page["/Contents"].get_object(), page.pdf
+            ).operations
+            if operator == b"cm"
+        ]
+
+        self.assertEqual(
+            [round(float(value), 5) for value in operands],
+            [1.0, 0.0, 0.0, 1.0, *TWO_PAGE_FORM_ORIGIN_PT],
+        )
+        self.assertEqual(
+            [round(float(value), 5) for value in form["/BBox"]],
+            [0.0, 0.0, *TWO_PAGE_FORM_SIZE_PT],
+        )
+        self.assertAlmostEqual(TWO_PAGE_FORM_SIZE_PT[0] / DOT_PT, 839.0, places=2)
+        self.assertAlmostEqual(TWO_PAGE_FORM_SIZE_PT[1] / DOT_PT, 1318.0, places=2)
+
+    def test_page_two_landmarks(self):
+        page, form = self._page()
+        runs = _text_runs(page)
+        rule_points = {
+            tuple(round(float(value), 4) for value in operands)
+            for operands, operator in ContentStream(form, page.pdf).operations
+            if operator == b"l"
+        }
+        rules = TWO_PAGE_BOX_INNER_RULES_PT
+
+        ((_, keyword_x, keyword_y),) = [run for run in runs if run[0] == KEYWORD]
+        self.assertAlmostEqual(keyword_x, TWO_PAGE_KEYWORD_TM_PT[0], places=3)
+        self.assertAlmostEqual(keyword_y, TWO_PAGE_KEYWORD_TM_PT[1], places=3)
+        self.assertIn((rules["right"], rules["bottom"]), rule_points)
+        self.assertIn((rules["left"], rules["bottom"]), rule_points)
+        self.assertIn(
+            TWO_PAGE_CERTIFICATION_BASELINE_PT,
+            [round(y, 4) for text, _, y in runs if text.startswith("article or")],
+        )
+        # The keyword line is the last text above the bottom rule.
+        self.assertEqual(
+            min(y for _, _, y in runs if y > rules["bottom"]), keyword_y
+        )
+        baseline_mm = (
+            PAGE_HEIGHT_PT
+            - TWO_PAGE_FORM_ORIGIN_PT[1]
+            - TWO_PAGE_CERTIFICATION_BASELINE_PT
+        ) * 25.4 / 72.0
+        self.assertGreater(TWO_PAGE_CERTIFICATION_INK_MM, baseline_mm)
+        self.assertLess(TWO_PAGE_CERTIFICATION_INK_MM - baseline_mm, 1.0)
+
+
+class TestLabelCn22PdfStamp(unittest.TestCase):
+    def test_pdf_seed_resolves_to_the_measured_strip(self):
+        (x_lo, x_hi), (y_lo, y_hi) = _strip_mm()
+        placement = stamping._default_registry("postnord/label_cn22/PDF/A4")
+
+        self.assertEqual(placement.rotation, 90)
+        self.assertEqual(placement.page, 1)
+        self.assertAlmostEqual(placement.x, x_lo, places=2)
+        self.assertAlmostEqual(placement.y, y_lo, places=2)
+        # Under rotation 90 the rendered rectangle is `height` wide and
+        # `width` tall hanging down-right from the anchor.
+        self.assertAlmostEqual(placement.x + placement.height, x_hi, places=2)
+        self.assertAlmostEqual(placement.y + placement.width, y_hi, places=2)
+
+    def test_seed_is_the_reading_frame_revision(self):
+        self.assertEqual(postnord_stamping.LABEL_CN22_SEED.revision, 3)
+
+    def test_pdf_seed_does_not_leak_to_letter(self):
+        self.assertIsNone(stamping._default_registry("postnord/label_cn22/PDF/LETTER"))
+
+    def test_classified_combined_pdf_stamps_within_the_strip_on_page_one(self):
+        document = _document(COMBINED_PDF_FIXTURE, "PDF")
+        result = lib.classify_customs_composition(document, carrier="postnord")
+
+        stamped = lib.stamp_document(
+            document,
+            image=_signature_png_b64(),
+            date="2026-09-28",
+            carrier="postnord",
+            doc_type=result.doc_type,
+            page=result.page,
+        )
+
+        overlays = _overlays(stamped.base64)
+
+        self.assertEqual((result.doc_type, result.page), ("label_cn22", 1))
+        self.assertEqual(len(_pdf_pages(stamped.base64)), 1)
+        self.assertEqual(len(overlays), 2)
+        for matrix, bounds in overlays:
+            self.assertTrue(_reads_down_the_page(matrix))
+            _within(self, bounds, _rotated_strip_region())
+
+    def test_classified_two_page_pdf_stamps_page_two_in_the_free_area(self):
+        document = _document(TWO_PAGE_PDF_FIXTURE, "PDF")
+        result = lib.classify_customs_composition(document, carrier="postnord")
+
+        stamped = lib.stamp_document(
+            document,
+            image=_signature_png_b64(),
+            date="2026-09-28",
+            carrier="postnord",
+            doc_type=result.doc_type,
+            page=result.page,
+        )
+        overlays = _overlays(stamped.base64, 2)
+        original_label = _pdf_pages(document.base64)[0]
+        stamped_label = _pdf_pages(stamped.base64)[0]
+
+        self.assertEqual((result.doc_type, result.page), ("label_cn22", 2))
+        self.assertEqual(len(_pdf_pages(stamped.base64)), 2)
+        self.assertEqual(len(overlays), 2)
+        for matrix, bounds in overlays:
+            self.assertTrue(_reads_left_to_right(matrix))
+            _within(self, bounds, _two_page_free_area())
+        self.assertEqual(_overlays(stamped.base64, 1), [])
+        self.assertEqual(
+            stamped_label["/Contents"].get_object().get_data(),
+            original_label["/Contents"].get_object().get_data(),
+        )
+        self.assertEqual(_page_text(stamped.base64, 2), _page_text(document.base64, 2))
+
+    def test_stamp_leaves_the_label_section_untouched(self):
+        document = _document(COMBINED_PDF_FIXTURE, "PDF")
+        page, _ = _form_page(document.base64)
+        label_top_pt = FORM_ORIGIN_PT[1] + max(
+            y for _, _, y in _text_runs(page) if y < CN22_BOX_BOTTOM_RULE_PT
+        )
+
+        stamped = lib.stamp_document(
+            document,
+            image=_signature_png_b64(),
+            date="2026-09-28",
+            carrier="postnord",
+            doc_type="label_cn22",
+        )
+
+        self.assertGreater(
+            min(bottom for _, _, bottom, _ in _overlay_bounds(stamped.base64)),
+            label_top_pt,
+        )
+        self.assertEqual(_text_runs(_form_page(stamped.base64)[0]), _text_runs(page))
+
+
+
+class TestLabelCn22ClassifyThenStamp(unittest.TestCase):
+    """Every combined capture, classified then stamped with its page."""
+
+    def _classify_and_stamp(self, name: str, document_format: str):
+        document = _document(name, document_format)
+        result = lib.classify_customs_composition(document, carrier="postnord")
+        stamped = lib.stamp_document(
+            document,
+            image=_signature_png_b64(),
+            date="2026-09-28",
+            carrier="postnord",
+            doc_type=result.doc_type,
+            page=result.page,
+        )
+        return document, result, stamped
+
+    def test_combined_zpl_captures_stamp_at_the_signature_field(self):
+        for name in COMBINED_ZPL_FIXTURES:
+            with self.subTest(fixture=name):
+                document, result, stamped = self._classify_and_stamp(name, "ZPL")
+                ((x, y, *_),) = _grf_fields(_decode_zpl(stamped.base64))
+
+                self.assertEqual((result.doc_type, result.page), ("label_cn22", None))
+                self.assertEqual(stamped.format, document.format)
+                self.assertEqual((x, y), (7, 303))
+
+    def test_combined_pdf_captures_stamp_only_the_declaration_page(self):
+        captures = (
+            (COMBINED_PDF_FIXTURE, 1, _rotated_strip_region(), _reads_down_the_page),
+            (TWO_PAGE_PDF_FIXTURE, 2, _two_page_free_area(), _reads_left_to_right),
+        )
+        for name, page, region, oriented in captures:
+            with self.subTest(fixture=name):
+                document, result, stamped = self._classify_and_stamp(name, "PDF")
+                page_count = len(_pdf_pages(document.base64))
+
+                self.assertEqual((result.doc_type, result.page), ("label_cn22", page))
+                self.assertEqual(stamped.format, document.format)
+                self.assertEqual(len(_pdf_pages(stamped.base64)), page_count)
+                for number in range(1, page_count + 1):
+                    overlays = _overlays(stamped.base64, number)
+                    self.assertEqual(len(overlays), 2 if number == page else 0)
+                    for matrix, bounds in overlays:
+                        self.assertTrue(oriented(matrix))
+                        _within(self, bounds, region)
+
+
+if __name__ == "__main__":
+    unittest.main()
