@@ -60,7 +60,7 @@ Connection config options (under the connection's config):
 | `enable_transit_times` | `false` | Opt-in: call the Transit Time API to enrich `transit_days`/estimated delivery and filter by serviceability. Requires the key to be subscribed to the Transit Time product. |
 | `language` | `en` | Default booking locale when a shipment sets no `options.language`. Leaving it unset still books in `en` unless `locale_by_recipient` resolves a Nordic locale first; setting it outranks `locale_by_recipient`. |
 | `locale_by_recipient` | `false` | Derive the booking locale from the recipient country (`SE`→`sv`, `DK`→`da`, `NO`→`no`, `FI`→`fi`) when neither `options.language` nor `language` is set. The server also persists the derived locale on the shipment and its tracker. |
-| `postnord_standalone_customs_documents` | `false` | Connection default for the shipment option of the same name: attach the standalone customs declaration of letter (CN22) and International Parcel (91, CN23) bookings with customs data (see [Customs declarations](#customs-declarations)). |
+| `postnord_standalone_customs_documents` | `false` | Connection default for the shipment option of the same name: attach the standalone CN22 of letter and International Parcel (91) bookings with customs data (see [Customs declarations](#customs-declarations)). |
 
 ## Shipment options
 
