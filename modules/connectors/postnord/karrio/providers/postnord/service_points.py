@@ -90,7 +90,8 @@ def parse_service_points_response(
 
 def _normalize_service_point(point: dict) -> dict:
     """Normalize one ``ServicePointInformationStore`` to the connector dict shape."""
-    address = point.get("deliveryAddress") or point.get("visitingAddress") or {}
+    visiting = point.get("visitingAddress") or {}
+    delivery = point.get("deliveryAddress") or visiting
     coordinate = next(iter(point.get("coordinates") or []), {})
     point_type = point.get("type") or {}
     type_id = point_type.get("typeId")
@@ -100,23 +101,27 @@ def _normalize_service_point(point: dict) -> dict:
         str(type_id) if type_id is not None else None
     )
 
+    def _address(address: dict) -> dict:
+        return lib.to_dict(
+            {
+                "address_line1": lib.text(
+                    address.get("streetName"), address.get("streetNumber")
+                ),
+                "city": address.get("city"),
+                "postal_code": address.get("postalCode"),
+                "country_code": address.get("countryCode"),
+            }
+        ) or None
+
     return lib.to_dict(
         {
             "id": point.get("servicePointId"),
             "name": point.get("name"),
             "type": type_label,
-            "address": lib.to_dict(
-                {
-                    "address_line1": lib.text(
-                        address.get("streetName"),
-                        address.get("streetNumber"),
-                    ),
-                    "city": address.get("city"),
-                    "postal_code": address.get("postalCode"),
-                    "country_code": address.get("countryCode"),
-                }
-            )
-            or None,
+            # The deliveryAddress is the EDI/label address; the visiting
+            # address guides the customer to the point (Service Points v5 docs).
+            "address": _address(delivery),
+            "visiting_address": _address(visiting) if visiting else None,
             "coordinates": lib.to_dict(
                 {
                     "northing": coordinate.get("northing"),

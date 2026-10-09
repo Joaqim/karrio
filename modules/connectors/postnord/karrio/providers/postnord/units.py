@@ -180,11 +180,41 @@ class ShippingOption(lib.Enum):
     postnord_notify_by_phone = lib.OptionEnum("A9", bool)
     postnord_driver_notification = lib.OptionEnum("B8", bool)
 
+    # Chosen service point booking (Service Points v5 lookup + Shipping v3
+    # EDI deliveryParty): shipment/create.py pairs the id with partyIdType
+    # "156" and appends A7; the detail members mirror the dhl_freight_sweden
+    # servicepoint pattern. Their codes are not additionalServiceCode values,
+    # so SERVICE_POINT_DETAIL_OPTIONS keeps them out of the code list.
+    postnord_service_point_id = lib.OptionEnum("servicepoint", str)
+    postnord_service_point_name = lib.OptionEnum("servicepointName", str)
+    postnord_service_point_street = lib.OptionEnum("servicepointStreet", str)
+    postnord_service_point_city = lib.OptionEnum("servicepointCity", str)
+    postnord_service_point_postal_code = lib.OptionEnum(
+        "servicepointPostalCode", str
+    )
+    postnord_service_point_country_code = lib.OptionEnum(
+        "servicepointCountryCode", str
+    )
+
     """ Unified Option type mapping """
     cash_on_delivery = postnord_cod
     insurance = postnord_insurance
     sms_notification = postnord_notify_by_sms
     email_notification = postnord_notify_by_email
+
+
+# Option names whose truthy members are party data for the chosen service
+# point, not additionalServiceCode values (see shipment/create.py).
+SERVICE_POINT_DETAIL_OPTIONS = frozenset(
+    {
+        ShippingOption.postnord_service_point_id.name,
+        ShippingOption.postnord_service_point_name.name,
+        ShippingOption.postnord_service_point_street.name,
+        ShippingOption.postnord_service_point_city.name,
+        ShippingOption.postnord_service_point_postal_code.name,
+        ShippingOption.postnord_service_point_country_code.name,
+    }
+)
 
 
 class CustomsOption(lib.Enum):

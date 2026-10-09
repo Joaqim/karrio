@@ -74,8 +74,9 @@ Connection config options (under the connection's config):
 | `postnord_notify_by_letter` | bool | — | Opt in to letter notification (`A2`, consignee address). |
 | `postnord_notify_by_phone` | bool | — | Opt in to voice-call notification (`A9`, consignee `phoneNo`). |
 | `postnord_driver_notification` | bool | — | Opt in to driver notification (`B8`, consignee `phoneNo`). |
+| `postnord_service_point_id`, `postnord_service_point_name` / `_street` / `_city` / `_postal_code` / `_country_code` | string | — | Book to a chosen service point (e.g. a Service Points v5 lookup result): the six values together send the point as the EDI `deliveryParty` and append `A7`, plus `A3` on the consignee phone (see [Service points](#service-points)). An id without complete details rejects the booking with a field error naming the missing options. Never sent as additional services. |
 
-PostNord has no notification-suppress flag: the consignee is notified only when a notification additional service is booked, and channels combine freely — setting only `sms_notification` books SMS and nothing else. `false` or omitted books nothing. Per-service rules apply (documented, not enforced here); PostNord validates them at booking, not the connector:
+PostNord has no notification-suppress flag: the consignee is notified only when a notification additional service is booked, and channels combine freely — setting only `sms_notification` books SMS and nothing else. `false` or omitted books nothing, with one exception: a chosen service point appends `A3` on the consignee phone even against an explicit `sms_notification: false` (see [Service points](#service-points)), because the recipient must learn where to collect. Per-service rules apply (documented, not enforced here); PostNord validates them at booking, not the connector:
 
 | Service | PostNord rule |
 |---------|---------------|
@@ -110,7 +111,9 @@ points, messages = service_points.parse_service_points_response(
 ```
 
 Passing `northing` and `easting` instead of an address selects the coordinate lookup.
-Each point is a dict with `id`, `name`, `type`, `address`, `coordinates`, `opening_hours`, and `distance`.
+Each point is a dict with `id`, `name`, `type`, `address` (the delivery address used for EDI and labels), `visiting_address` (where the customer goes to collect, when PostNord returns one), `coordinates`, `opening_hours`, and `distance`.
+
+A chosen point books through the six `postnord_service_point_*` shipment options (see [Shipment options](#shipment-options)): the point is sent as the EDI `deliveryParty` — `partyIdentification` carrying the service point id with `partyIdType` `"156"` — plus the point's name and address, with `A7` appended automatically and `A3` following when the consignee has a phone; incomplete details reject the booking with a field error naming the missing options.
 
 ## Customs declarations
 
