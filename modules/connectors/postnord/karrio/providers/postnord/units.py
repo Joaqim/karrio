@@ -269,11 +269,15 @@ ENTRY_CODE_MAX_LENGTH = 50
 # and enforced before submission.
 CUSTOMS_DECLARATION_MAX_LINES = 13
 
-# PostNord takes a customs invoice instead of CN22/CN23 for parcel products,
-# while letters and International Parcel carry CN22/CN23. The letter set is
-# the closed group; every other service, including ones added later, is a
-# parcel product. VV (insured value) and AF (Danish delivery receipt) are
-# letter-mail variants.
+# PostNord's declaration structure splits by product group: letters carry a
+# CN22 (General Description EDI SE: "Only CN22 shall be used for
+# International Letter (UX), Varubrev international (86), PostNord Tracked
+# letter (34) and Registered Letter (RR). CN23 shall be decommissioned for
+# these services."), International Parcel carries a CN23 (postnord.se: "För
+# paketförsändelser, oberoende av värde på ditt innehåll, använder du
+# tulletikett CN 23"), and every other service, including ones added later,
+# is a parcel product taking a customs invoice. VV (insured value) and AF
+# (Danish delivery receipt) are letter-mail variants.
 LETTER_SERVICES = frozenset(
     {
         ShippingService.postnord_tracked,
@@ -364,6 +368,7 @@ class CustomsStructure(lib.StrEnum):
     """Booking customs branch, named by its ``shipmentCustomsv2`` element."""
 
     cn22 = "customsDeclarationCN22"
+    cn23 = "customsDeclarationCN23"
     customs_invoice = "customsInvoice"
 
 
@@ -388,11 +393,11 @@ class ExportReason(lib.StrEnum):
 
 def customs_structure(basic_service_code: str) -> CustomsStructure:
     """Select the booking customs branch for a basicServiceCode."""
-    if (
-        basic_service_code in LETTER_SERVICES
-        or basic_service_code == INTERNATIONAL_PARCEL_SERVICE
-    ):
+    if basic_service_code in LETTER_SERVICES:
         return CustomsStructure.cn22
+
+    if basic_service_code == INTERNATIONAL_PARCEL_SERVICE:
+        return CustomsStructure.cn23
 
     return CustomsStructure.customs_invoice
 
@@ -431,24 +436,24 @@ def resolve_eori_number(
     identifiers live on the party address still satisfies PostNord's
     registration-number rule (SACUS-BR-24062502). The federal tax
     identifier is not considered: it is reserved for the customs invoice's
-    VAT number. One resolution shared by the CN22 branch, the customs
-    invoice branch, and the CN22 registration guard so precedence cannot
-    drift between them.
+    VAT number. One resolution shared by the CN22 and CN23 branches, the
+    customs invoice branch, and the declaration registration guard so
+    precedence cannot drift between them.
     """
     return options.eori_number.state or shipper.state_tax_id or None
 
 
-def enforce_cn22_registration_numbers(
+def enforce_declaration_registration_numbers(
     options: units.CustomsOptions, shipper: units.ComputedAddress
 ) -> None:
-    """Raise a FieldError when a CN22 carries none of EORI, VOEC, or IOSS.
+    """Raise a FieldError when a declaration carries none of EORI, VOEC, IOSS.
 
     PostNord rejects such a declaration with SACUS-BR-24062502 ("Customs
     CN22/CN23 should have either EORI, VOEC, IOSS"), observed live. The
     sandbox did not apply the rule to customs invoices, so this guard is
-    scoped to the CN22 branch. The EORI check accepts the shipper's state
-    tax identifier as a fallback (``resolve_eori_number``); VOEC and IOSS
-    have no address field that could carry them.
+    scoped to the CN22 and CN23 branches. The EORI check accepts the
+    shipper's state tax identifier as a fallback (``resolve_eori_number``);
+    VOEC and IOSS have no address field that could carry them.
     """
     if any(
         options[key].state for key in CustomsOption.__members__
@@ -458,7 +463,7 @@ def enforce_cn22_registration_numbers(
     raise lib.exceptions.FieldError(
         {
             "customs.options": (
-                "a CN22 declaration requires at least one of "
+                "a customs declaration requires at least one of "
                 "eori_number, voec_number, or ioss_number, "
                 "or a shipper state_tax_id to use as the EORI"
             )

@@ -154,8 +154,9 @@ class Proxy(proxy.Proxy):
         # Bookings with embedded customs data fetch the standalone customs
         # document PostNord composed by printId so the parser can attach it
         # next to the label (the booking's own printout is left unchanged):
-        # always for customs-invoice parcel products, and for CN22-structured
-        # services only when the standalone customs documents opt-in is set.
+        # always for customs-invoice parcel products, and for
+        # declaration-structured services (CN22 letters, CN23 International
+        # Parcel) only when the standalone customs documents opt-in is set.
         structure = provider_units.customs_structure(
             request.ctx.get("basic_service_code")
         )
@@ -165,7 +166,11 @@ class Proxy(proxy.Proxy):
             and (
                 structure == provider_units.CustomsStructure.customs_invoice
                 or (
-                    structure == provider_units.CustomsStructure.cn22
+                    structure
+                    in (
+                        provider_units.CustomsStructure.cn22,
+                        provider_units.CustomsStructure.cn23,
+                    )
                     and request.ctx.get("standalone_customs_documents")
                 )
             )
