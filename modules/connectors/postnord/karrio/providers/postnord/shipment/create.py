@@ -10,8 +10,9 @@ PDF printouts carry base64 data; ZPL printouts carry raw UTF-8 ZPL text
 with ``printout.encoding`` set to ``"none"`` (observed on the live
 endpoint; the swagger documents base64 only).
 
-Parcel-product bookings that embed a customs invoice, and CN22-structured
-bookings that embed a CN22 declaration with the
+Parcel-product bookings that embed a customs invoice, and
+declaration-structured bookings (the letters' CN22, International Parcel's
+CN23) that embed a declaration with the
 ``postnord_standalone_customs_documents`` opt-in (shipment options, falling
 back to the connection config), additionally fetch the standalone customs
 document PostNord composed, keyed by the booking's printId, falling back
@@ -25,6 +26,10 @@ into the booking printout in both formats, which is returned unchanged as
 ``docs.label``. The parser verifies that composition with the SDK customs
 classifier and PostNord's ``DOCUMENT_SECTIONS``; a mismatch is a
 ``POSTNORD_UNEXPECTED_LABEL_COMPOSITION`` warning, never a booking failure.
+CN23-structured bookings are not held to that composition: whether PostNord
+composes the CN23 into the label is a pending live verification, so their
+documents pass through unstamped rather than being measured against the
+CN22 seeds.
 """
 
 import base64
@@ -427,6 +432,23 @@ def _customs_line(
     )
 
 
+def _declaration_registration(
+    options: units.CustomsOptions,
+    shipper: units.ComputedAddress,
+) -> typing.Dict[str, typing.Optional[str]]:
+    """Resolve the declaration registration trio shared by CN22 and CN23.
+
+    Per-request passthrough from ``customs.options`` converted with the
+    provider ``CustomsOption`` enum, with the EORI falling back to the
+    shipper's ``state_tax_id`` (``resolve_eori_number``).
+    """
+    return dict(
+        EORIorPersonalIdNumber=provider_units.resolve_eori_number(options, shipper),
+        voec=options.voec_number.state or None,
+        ioss=options.ioss_number.state or None,
+    )
+
+
 def _customs_declaration(
     customs: models.Customs,
     options: units.CustomsOptions,
@@ -435,22 +457,18 @@ def _customs_declaration(
 ) -> postnord_req.CustomsDeclarationCN22Type:
     """Map unified customs data onto the booking's CN22 declaration branch.
 
-    CN22 is the declaration branch whose required fields
+    CN22 is the letter declaration branch whose required fields
     (``detailedDescription``, ``totalValue``) are fully derivable from the
     unified customs model; ``content_type`` resolves to the sole
     ``categoryType`` entry through the provider CN22 vocabulary
     (``CN22CategoryType.lookup``), with unknown values passing through
-    verbatim.
-    Registration numbers are per-request passthrough from ``customs.options``
-    converted with the provider ``CustomsOption`` enum, with the EORI
-    falling back to the shipper's ``state_tax_id``
-    (``resolve_eori_number``); a declaration with none of them and no
+    verbatim. A declaration with no registration number and no address
     fallback is rejected locally, matching PostNord's SACUS-BR-24062502.
     """
     provider_units.enforce_customs_declaration_lines(
         len(customs.commodities), field="customs.commodities"
     )
-    provider_units.enforce_cn22_registration_numbers(options, shipper)
+    provider_units.enforce_declaration_registration_numbers(options, shipper)
     provider_units.enforce_customs_line_content(customs.commodities)
 
     total_gross_weight = _total_gross_weight(parcel_weight, customs.commodities)
@@ -461,9 +479,7 @@ def _customs_declaration(
     )
 
     return postnord_req.CustomsDeclarationCN22Type(
-        EORIorPersonalIdNumber=provider_units.resolve_eori_number(options, shipper),
-        voec=options.voec_number.state or None,
-        ioss=options.ioss_number.state or None,
+        **_declaration_registration(options, shipper),
         countryOfOrigin=shipper.country_code,
         categoryOfItem=lib.identity(
             postnord_req.CategoryOfItemType(categoryType=[category])
@@ -480,6 +496,62 @@ def _customs_declaration(
             else None
         ),
         totalValue=_total_value(customs.commodities),
+    )
+
+
+def _customs_declaration_cn23(
+    customs: models.Customs,
+    options: units.CustomsOptions,
+    parcel_weight: typing.Optional[float],
+    shipper: units.ComputedAddress,
+) -> postnord_req.CustomsDeclarationCN23Type:
+    """Map unified customs data onto the booking's CN23 declaration branch.
+
+    CN23 is the parcel-post declaration branch (International Parcel), built
+    from the same row mapping, totals, category resolution, and registration
+    handling as the CN22 minus CN22-only ``countryOfOrigin``. The swagger
+    additionally marks ``postalCharges`` required; the unified model carries
+    no postal charges, so the element is booked as a zero amount in the
+    ``totalValue`` currency (acceptance live-verified in the sandbox
+    follow-up). Without a derivable ``totalValue`` currency there is nothing
+    to take, and the element is omitted like every other underivable field.
+    """
+    provider_units.enforce_customs_declaration_lines(
+        len(customs.commodities), field="customs.commodities"
+    )
+    provider_units.enforce_declaration_registration_numbers(options, shipper)
+    provider_units.enforce_customs_line_content(customs.commodities)
+
+    total_gross_weight = _total_gross_weight(parcel_weight, customs.commodities)
+    total_value = _total_value(customs.commodities)
+    category = (
+        provider_units.CN22CategoryType.lookup(customs.content_type)
+        if customs.content_type
+        else None
+    )
+
+    return postnord_req.CustomsDeclarationCN23Type(
+        **_declaration_registration(options, shipper),
+        categoryOfItem=lib.identity(
+            postnord_req.CategoryOfItemType(categoryType=[category])
+            if category
+            else None
+        ),
+        detailedDescription=[
+            _customs_line(index, commodity)
+            for index, commodity in enumerate(customs.commodities)
+        ],
+        totalGrossWeight=lib.identity(
+            postnord_req.TotalGrossWeightType(value=total_gross_weight, unit="KGM")
+            if total_gross_weight
+            else None
+        ),
+        totalValue=total_value,
+        postalCharges=lib.identity(
+            postnord_req.GoodsValueType(amount=0, currency=total_value.currency)
+            if total_value and total_value.currency
+            else None
+        ),
     )
 
 
@@ -748,17 +820,18 @@ def shipment_request(
     # performed via this id (see shipment/cancel.py).
     shipment_id = payload.reference or uuid.uuid4().hex[:12].upper()
 
-    # Customs data rides the booking EDI in the shipment entry: letters and
-    # International Parcel as the CN22 branch, parcel products as the customs
-    # invoice branch; without customs data neither branch is present so the
-    # request shape is unchanged. Registration options convert through the
-    # provider CustomsOption enum so voec_number/ioss_number survive the
-    # typed-options filtering (see units.CustomsOption); commodity lines keep
-    # flowing from the raw customs model because the Products wrapper
-    # normalizes missing quantity/weight_unit and would change line emission.
-    # Callers may send customs data maximally; within the EU VAT area no
-    # customs declaration is required, so every customs structure and its
-    # fail-fast checks are dropped and the omission is reported as a warning.
+    # Customs data rides the booking EDI in the shipment entry: letters as
+    # the CN22 branch, International Parcel as the CN23 branch, and parcel
+    # products as the customs invoice branch; without customs data no branch
+    # is present so the request shape is unchanged. Registration options
+    # convert through the provider CustomsOption enum so
+    # voec_number/ioss_number survive the typed-options filtering (see
+    # units.CustomsOption); commodity lines keep flowing from the raw
+    # customs model because the Products wrapper normalizes missing
+    # quantity/weight_unit and would change line emission. Callers may send
+    # customs data maximally; within the EU VAT area no customs declaration
+    # is required, so every customs structure and its fail-fast checks are
+    # dropped and the omission is reported as a warning.
     within_eu_vat_area = all(
         provider_units.in_eu_vat_area(address.country_code, address.postal_code)
         for address in (shipper, recipient)
@@ -786,6 +859,16 @@ def shipment_request(
             shipper=shipper,
         )
         if has_customs and customs_structure == provider_units.CustomsStructure.cn22
+        else None
+    )
+    customs_declaration_cn23 = lib.identity(
+        _customs_declaration_cn23(
+            payload.customs,
+            options=customs_options,
+            parcel_weight=packages.weight.KG,
+            shipper=shipper,
+        )
+        if has_customs and customs_structure == provider_units.CustomsStructure.cn23
         else None
     )
     customs_invoice = lib.identity(
@@ -917,6 +1000,7 @@ def shipment_request(
                     for package in packages
                 ],
                 customsDeclarationCN22=customs_declaration,
+                customsDeclarationCN23=customs_declaration_cn23,
                 customsInvoice=customs_invoice,
             )
         ],
@@ -934,7 +1018,9 @@ def shipment_request(
             # resolved service code and on the declaration having been embedded.
             basic_service_code=service,
             customs_declared=(
-                customs_declaration is not None or customs_invoice is not None
+                customs_declaration is not None
+                or customs_declaration_cn23 is not None
+                or customs_invoice is not None
             ),
             standalone_customs_documents=standalone_customs_documents,
             customs_omitted=lib.identity(

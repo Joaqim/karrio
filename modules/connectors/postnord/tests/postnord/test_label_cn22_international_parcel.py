@@ -1,6 +1,11 @@
 """PostNord International Parcel (service 91) label + CN22 printouts.
 
-Both fixtures are live 2026-09-28 bookings of ``postnord_postpaket_utrikes``.
+Both fixtures are live 2026-09-28 bookings of ``postnord_postpaket_utrikes``
+made while the connector still embedded a CN22 for service 91; the booking
+path now sends a ``customsDeclarationCN23`` instead. The captures stay
+load-bearing for the ``label_cn22`` stamp seeds (the upright V2 CN22 format
+was measured here), and a phase-2 sandbox capture of a CN23 booking decides
+whether PostNord composes a CN23 into the label and what its stamping needs.
 The ZPL is two formats: the parcel label (``NORDIC_SHIPPING_LABEL``), then an
 upright CN22 (``CUSTOMS_CN22_V2``, ``^FWN``, ``^LL840``). The PDF is two A4
 pages: the parcel label, then the CN22.
