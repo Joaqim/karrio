@@ -79,7 +79,6 @@ def _extract_details(
             delivered=False,
             status="in_transit",
             info=models.TrackingInfo(carrier_tracking_link=tracking_url),
-            meta=dict(tracking_url=tracking_url),
         )
 
     status = _tracking_status(item.get("status") or item.get("eventStatus"))
@@ -123,7 +122,6 @@ def _extract_details(
             shipment_package_count=shipment.get("assessedNumberOfItems"),
             signed_by=acceptor.get("name"),
         ),
-        meta=dict(tracking_url=tracking_url),
     )
 
 

@@ -207,9 +207,6 @@ ParsedTrackingResponse = [
                 "shipment_package_count": 1,
                 "signed_by": "ANNA SVENSSON",
             },
-            "meta": {
-                "tracking_url": "https://tracking.postnord.com/se/?id=00373500454541020957",
-            },
         }
     ],
     [],
@@ -244,9 +241,6 @@ ParsedInTransitResponse = [
                 "carrier_tracking_link": "https://tracking.postnord.com/se/?id=00373500454541020957",
                 "shipment_package_count": 1,
             },
-            "meta": {
-                "tracking_url": "https://tracking.postnord.com/se/?id=00373500454541020957",
-            },
         }
     ],
     [],
@@ -262,9 +256,6 @@ ParsedErrorResponse = [
             "status": "in_transit",
             "info": {
                 "carrier_tracking_link": "https://tracking.postnord.com/se/?id=00373500454541020957",
-            },
-            "meta": {
-                "tracking_url": "https://tracking.postnord.com/se/?id=00373500454541020957",
             },
         }
     ],
