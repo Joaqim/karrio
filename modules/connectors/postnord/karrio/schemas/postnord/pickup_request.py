@@ -114,7 +114,8 @@ class PartiesType:
 
 @attr.s(auto_attribs=True)
 class ServiceType:
-    basicServiceCode: typing.Optional[int] = None
+    basicServiceCode: typing.Optional[str] = None
+    additionalServiceCode: typing.Optional[typing.List[str]] = None
 
 
 @attr.s(auto_attribs=True)
@@ -130,6 +131,7 @@ class ShipmentType:
 class PickupRequestType:
     messageDate: typing.Optional[str] = None
     messageFunction: typing.Optional[str] = None
+    messageId: typing.Optional[str] = None
     updateIndicator: typing.Optional[str] = None
     testIndicator: typing.Optional[bool] = None
     application: typing.Optional[ApplicationType] = jstruct.JStruct[ApplicationType]

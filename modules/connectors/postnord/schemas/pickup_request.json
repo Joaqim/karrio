@@ -1,6 +1,7 @@
 {
   "messageDate": "2026-06-24T10:00:00",
   "messageFunction": "PickupBooking",
+  "messageId": "6f1c2d3e-4a5b-4c6d-8e7f-901a2b3c4d5e",
   "updateIndicator": "Original",
   "testIndicator": false,
   "application": {
@@ -15,11 +16,12 @@
         "latestPickupDate": "2026-06-25T16:00:00"
       },
       "service": {
-        "basicServiceCode": "20"
+        "basicServiceCode": "CR",
+        "additionalServiceCode": ["p1"]
       },
       "freeText": [
         {
-          "usageCode": "PICKUP",
+          "usageCode": "ADS",
           "text": "Pick up at loading dock"
         }
       ],
