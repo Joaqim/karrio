@@ -191,7 +191,6 @@ ParsedPickupResponse = [
         "confirmation_number": "PICKUP-555",
         "id": "PU-1",
         "meta": {
-            "booking_id": "PICKUP-555",
             "pickup_ids": ["PU-1"],
             "references": ["ILPN0001"],
         },

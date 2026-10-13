@@ -63,7 +63,6 @@ def _extract_details(
         confirmation_number=response.bookingId,
         id=lib.identity(pickup_ids[0] if pickup_ids else None),
         meta=dict(
-            booking_id=response.bookingId,
             pickup_ids=pickup_ids or None,
             references=reference_nos or None,
         ),
