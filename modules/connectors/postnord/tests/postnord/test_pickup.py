@@ -294,7 +294,7 @@ ParsedPickupByItemIdErrorResponse = [
             "carrier_id": "postnord",
             "carrier_name": "postnord",
             "message": "Edi not found for item Id: 00370712345678901234",
-            "details": {},
+            "details": {"summary": "General client indata error"},
         }
     ],
 ]
