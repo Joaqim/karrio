@@ -100,12 +100,15 @@ The live ZPL body starts with persistent host commands (`^LL1520`, i.e. 190 mm a
 When `options.tracking_numbers` carries PostNord item ids and the pickup address country is SE, DK, or FI and equals `account_country_code`, the connector books through `POST /rest/shipment/v3/pickups/ids`, which only supports domestic pickups of items in SE, DK, and FI.
 Its body is one entry per item id with the pickup window, so the pickup address, `instruction`, `package_location`, and `options.service` are not sent on this path.
 
-Every other pickup is a collection request through `POST /rest/shipment/v3/pickups` with `messageFunction` `PickupBooking`, the pickup address as consignor and pickup party, `options.service` as the service code (default `20`), and `itemId` `"0"` so PostNord generates the item id.
-The `instruction` (or `package_location`) is sent as a freeText with usage code `ZHD` ("Handover description"); the Booking API defines no pickup-specific usage code.
-Collection requests are not verified against the sandbox: it rejected the default service code `20` for PickupBookings, and the Booking API does not list the accepted codes (PRD Q8).
+Every other pickup is a pickup booking through `POST /rest/shipment/v3/pickups`, following PostNord's pickup guide (https://guide.developer.postnord.com/, Shipment / Booking / Booking APIs v3 / Book Pickups).
+The request carries `messageFunction` `PickupBooking`, a uuid4 `messageId`, basic service code `0` (domestic/Nordic pickup), package type `PC`, and `itemId` `"0"`; the pickup address is the consignor, so no pickup party is sent.
+The `instruction` (or `package_location`) is sent as a freeText with usage code `ADS`, only when one is given.
+`options.service` may select `0` or `CR` (collection request); any other value is rejected with a field error before booking.
+Pickups from countries other than SE, FI, and DK are rejected with a field error, because a collection request needs a consignee, which a Karrio pickup request cannot carry.
 Item ids in `options.tracking_numbers` are ignored on this path, and shipment identifiers or client references are never sent as an `itemId`.
+A domestic SE pickup without a consignee was accepted by the sandbox; `CR` and `/v3/pickups/ids` have not been verified there.
 
-Both operations return a booking id, reported as `confirmation_number`.
+Both operations return a booking id, reported as `confirmation_number`; the first returned id, the pickup id on `/v3/pickups` (for example `PB015606512T`), is reported as `id`.
 PostNord has no update or cancel route for either operation, so `Pickup.update` and `Pickup.cancel` return a `not_supported` message without calling PostNord.
 
 ## Service points
@@ -206,7 +209,7 @@ Live checks found the digital endpoint's success response to be the bare `bookin
 |-----------|-------|
 | Rating | Static rates from the connection's service levels / server-side RateSheet (no carrier call by default). Optionally enriched with live transit times when `enable_transit_times` is on. |
 | Shipment | Booking + label retrieval in one call (`/rest/shipment/v3/edi/labels/pdf`, or `/labels/zpl` when the resolved label type is ZPL). |
-| Pickup | Domestic pickup by item id (`/v3/pickups/ids`) or collection request (`/v3/pickups`) via `Pickup.schedule`; see [Pickups](#pickups). |
+| Pickup | Domestic pickup by item id (`/v3/pickups/ids`) or pickup booking (`/v3/pickups`) via `Pickup.schedule`; see [Pickups](#pickups). |
 | Tracking | Event-based via Track & Trace v7 (`findByIdentifier`); degrades to link-only (tracking URL + generic status) when the key isn't authorized for the T&T product. |
 | Returns | Booked via the shipment create flow with a return service code. |
 | Service points | Connector-local lookup (`gateway.proxy.find_service_points`). |
