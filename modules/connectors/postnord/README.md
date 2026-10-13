@@ -100,7 +100,8 @@ The live ZPL body starts with persistent host commands (`^LL1520`, i.e. 190 mm a
 When `options.tracking_numbers` carries PostNord item ids and the pickup address country is SE, DK, or FI and equals `account_country_code`, the connector books through `POST /rest/shipment/v3/pickups/ids`, which only supports domestic pickups of items in SE, DK, and FI.
 Its body is one entry per item id with the pickup window, so the pickup address, `instruction`, `package_location`, and `options.service` are not sent on this path.
 
-Every other pickup is a collection request through `POST /rest/shipment/v3/pickups`, with the pickup address as consignor and pickup party, `options.service` as the service code (default `20`), and `itemId` `"0"` so PostNord generates the item id.
+Every other pickup is a collection request through `POST /rest/shipment/v3/pickups` with `messageFunction` `PickupBooking`, the pickup address as consignor and pickup party, `options.service` as the service code (default `20`), and `itemId` `"0"` so PostNord generates the item id.
+The `instruction` (or `package_location`) is sent as a freeText with usage code `ZHD` ("Handover description"); the Booking API defines no pickup-specific usage code.
 Item ids in `options.tracking_numbers` are ignored on this path, and shipment identifiers or client references are never sent as an `itemId`.
 
 Both operations return a booking id, reported as `confirmation_number`.
