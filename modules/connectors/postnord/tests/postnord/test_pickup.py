@@ -311,11 +311,7 @@ ParsedPickupResponse = [
         "id": "CR511599F",
         "meta": {
             "pickup_ids": ["CR511599F"],
-            "references": [
-                "customer referenceNo",
-                "2021-06-22T08:00:00+02:00",
-                "2021-06-22T16:00:00+02:00",
-            ],
+            "references": ["customer referenceNo"],
         },
     },
     [],

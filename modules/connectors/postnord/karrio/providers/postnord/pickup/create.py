@@ -66,6 +66,7 @@ def _extract_details(
         for info in informations
         for ref in (getattr(info.references, "shipment", None) or [])
         if ref.referenceNo
+        and ref.referenceType not in provider_units.PICKUP_WINDOW_REFERENCE_TYPES
     ]
 
     return models.PickupDetails(

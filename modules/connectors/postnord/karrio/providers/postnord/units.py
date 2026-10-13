@@ -740,6 +740,11 @@ PICKUP_COUNTRIES = ["SE", "FI", "DK"]
 # Guide: "Supported Package Type Code: Parcel (PC)" for both pickup services.
 PICKUP_PACKAGE_TYPE_CODE = "PC"
 
+# Pickup booking response shipment references whose values are the pickup
+# window timestamps (ZET earliest, ZLT latest in the guide's 201 example), not
+# references identifying the booking.
+PICKUP_WINDOW_REFERENCE_TYPES = ["ZET", "ZLT"]
+
 
 # Booking API /v3/pickups/ids: "Only supports domestic pickups of items in SE,
 # DK, FI".
