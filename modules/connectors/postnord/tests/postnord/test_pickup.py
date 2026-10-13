@@ -77,7 +77,7 @@ class TestPostNordPickup(unittest.TestCase):
             )
 
     def test_create_pickup_request_ignores_item_ids_outside_account_country(self):
-        for country_code in ["DK", "NO"]:
+        for country_code in ["DK", "FI"]:
             with self.subTest(country_code=country_code):
                 payload = {
                     **PickupByItemIdPayload,
@@ -91,6 +91,44 @@ class TestPostNordPickup(unittest.TestCase):
                     serialized["shipment"][0]["goodsItem"],
                     [{"items": [{"itemIdentification": {"itemId": "0"}}]}],
                 )
+
+    def test_create_pickup_request_collection_request_service_override(self):
+        request = gateway.mapper.create_pickup_request(
+            models.PickupRequest(**{**PickupPayload, "options": {"service": "CR"}})
+        )
+        self.assertEqual(
+            lib.to_dict(request.serialize())["shipment"][0]["service"],
+            {"basicServiceCode": "CR"},
+        )
+
+    def test_schedule_pickup_outside_nordic_pickup_countries_rejected(self):
+        payload = {
+            **PickupPayload,
+            "address": {**PickupPayload["address"], "country_code": "NO"},
+        }
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            parsed_response = (
+                karrio.Pickup.schedule(models.PickupRequest(**payload))
+                .from_(gateway)
+                .parse()
+            )
+            mock.assert_not_called()
+        self.assertListEqual(
+            lib.to_dict(parsed_response), ParsedPickupCountryErrorResponse
+        )
+
+    def test_schedule_pickup_unknown_service_rejected(self):
+        payload = {**PickupPayload, "options": {"service": "20"}}
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            parsed_response = (
+                karrio.Pickup.schedule(models.PickupRequest(**payload))
+                .from_(gateway)
+                .parse()
+            )
+            mock.assert_not_called()
+        self.assertListEqual(
+            lib.to_dict(parsed_response), ParsedPickupServiceErrorResponse
+        )
 
     def test_cancel_pickup_unsupported(self):
         # PostNord has no pickup cancel endpoint: cancellation issues no HTTP
@@ -151,7 +189,7 @@ PickupRequest = {
                 "earliestPickupDate": "2026-06-25T08:00:00",
                 "latestPickupDate": "2026-06-25T16:00:00",
             },
-            "service": {"basicServiceCode": "20"},
+            "service": {"basicServiceCode": "0"},
             "freeText": [
                 {"usageCode": "ADS", "text": "Pickup instruction"}
             ],
@@ -302,6 +340,43 @@ ParsedErrorResponse = [
             "code": "PNCS-409",
             "message": "No pickup slot available",
             "details": {"summary": "Unable to book pickup"},
+        }
+    ],
+]
+
+ParsedPickupCountryErrorResponse = [
+    None,
+    [
+        {
+            "carrier_id": "postnord",
+            "carrier_name": "postnord",
+            "code": "SHIPPING_SDK_FIELD_ERROR",
+            "message": ANY,
+            "details": {
+                "address.country_code": (
+                    "PostNord pickups are booked from SE, FI or DK only; "
+                    "a collection request from NO needs a consignee, which is "
+                    "not supported"
+                ),
+            },
+        }
+    ],
+]
+
+ParsedPickupServiceErrorResponse = [
+    None,
+    [
+        {
+            "carrier_id": "postnord",
+            "carrier_name": "postnord",
+            "code": "SHIPPING_SDK_FIELD_ERROR",
+            "message": ANY,
+            "details": {
+                "options.service": (
+                    "PostNord pickup service must be 0 (pickup) or CR "
+                    "(collection request), got 20"
+                ),
+            },
         }
     ],
 ]

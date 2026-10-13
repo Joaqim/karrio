@@ -719,6 +719,25 @@ def is_service_available(service_code: str, issuer_code: str) -> bool:
     )
 
 
+class PickupService(lib.StrEnum):
+    """Pickup booking basicServiceCode values for /v3/pickups.
+
+    PostNord's guide (https://guide.developer.postnord.com/, Booking APIs v3 /
+    Book Pickups): "BasicServiceCode should always be set as "0" or for
+    Collection Request Pickup "CR"." These are not shipping products, so they
+    stay out of ShippingService and DEFAULT_SERVICES.
+    """
+
+    postnord_pickup = "0"
+    postnord_collection_request = "CR"
+
+
+# Guide, "Domestic/Nordic Pickup (0)": "Only avaliable pickup from SE, FI and
+# DK." A collection request ("CR") from elsewhere requires a consignee party,
+# which PickupRequest cannot carry.
+PICKUP_COUNTRIES = ["SE", "FI", "DK"]
+
+
 # Booking API /v3/pickups/ids: "Only supports domestic pickups of items in SE,
 # DK, FI".
 PICKUP_BY_ITEM_ID_COUNTRIES = ["SE", "DK", "FI"]

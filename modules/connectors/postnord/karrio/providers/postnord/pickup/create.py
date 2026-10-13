@@ -91,7 +91,7 @@ def pickup_request(
     if by_item_id:
         return _pickup_by_item_id_request(payload, item_ids)
 
-    service = options.get("service") or provider_units.ShippingService.postnord_return_pickup.value
+    service = _pickup_service(address.country_code, options.get("service"))
 
     # itemId is a PostNord item reference (SSCC, S10, ...); shipment
     # identifiers and client references are rejected as an undeterminable id
@@ -170,6 +170,30 @@ def pickup_request(
     )
 
     return lib.Serializable(request, lib.to_dict, dict(by_item_id=False))
+
+
+def _pickup_service(country_code: typing.Optional[str], service: typing.Optional[str]) -> str:
+    if country_code not in provider_units.PICKUP_COUNTRIES:
+        raise lib.exceptions.FieldError(
+            {
+                "address.country_code": (
+                    "PostNord pickups are booked from SE, FI or DK only; "
+                    f"a collection request from {country_code} needs a consignee, "
+                    "which is not supported"
+                )
+            }
+        )
+    if service and service not in [_.value for _ in provider_units.PickupService]:
+        raise lib.exceptions.FieldError(
+            {
+                "options.service": (
+                    "PostNord pickup service must be 0 (pickup) or CR "
+                    f"(collection request), got {service}"
+                )
+            }
+        )
+
+    return service or provider_units.PickupService.postnord_pickup.value
 
 
 def _pickup_by_item_id_request(
