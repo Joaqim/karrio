@@ -125,6 +125,7 @@ def pickup_request(
 
     request = postnord_req.PickupRequestType(
         messageDate=datetime.datetime.now().isoformat(timespec="seconds"),
+        messageFunction="PickupBooking",
         updateIndicator="Original",
         testIndicator=settings.test_mode,
         application=postnord_req.ApplicationType(

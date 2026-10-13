@@ -142,6 +142,7 @@ PickupCancelPayload = {
 PickupRequest = {
     "application": {"name": "Karrio", "applicationId": 2458},
     "messageDate": ANY,
+    "messageFunction": "PickupBooking",
     "testIndicator": True,
     "updateIndicator": "Original",
     "shipment": [
