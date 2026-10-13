@@ -54,7 +54,7 @@ PostNord publishes no money-rate API and no end-of-day manifest, so rating and m
 | Rating from the rate sheet, opt-in transit-time enrichment, export-letter issuer scoping | Live money-rate quoting (no PostNord API) |
 | Booking with PDF/ZPL labels, label size, returns via return service codes | Shipment cancellation (no documented REST endpoint) |
 | Track & Trace v7 events with link-only fallback | End-of-day manifest documents (no PostNord endpoint) |
-| Pickup scheduling (`/v3/pickups`) | Pickup update and cancel (no PostNord route) |
+| Pickup scheduling (`/v3/pickups` collection request, `/v3/pickups/ids` by item id) | Pickup update and cancel (no PostNord route) |
 | Service-point lookup (connector-local) | A unified Karrio service-point contract |
 | Booking locale, recipient-country locale, entry code, notification options | Karrio-native notification pipeline |
 | CN22 customs at booking, standalone customs document, post-booking declarations | Automatic CN23 and customs-invoice embedding; NVIT data set (see [Future Work](#future-work)) |
@@ -72,6 +72,7 @@ PostNord publishes no money-rate API and no end-of-day manifest, so rating and m
 | Q3 | Should Åland (`AX`, Swedish-speaking) map to `sv` in `CountryLocale`? | The mapping covers SE, DK, NO, FI only | Deferred |
 | Q4 | NVIT declaration branch, net-weight modeling, per-parcel linkage | See [Future Work](#future-work) | Pending PostNord confirmation |
 | Q5 | How should MyPack Collect (19) receive its delivery service point? | PostNord requires a service-point party (`partyIdType 156`, service point id) supplied by the merchant; the connector sends only the consignor customer number (`partyIdType "160"`) and has no input for a service point id | Pending |
+| Q6 | Must `/v3/pickups` carry a consignee? | The `/v3/pickups` description says "This first version of the API however only supports the booking of Collection Request" and defines CONSIGNEE as "The party defining the delivery address. Only mandatory with collection request". The connector sends no consignee (D15), on the strength of the 2026-06-24 conformance note "swagger-confirmed no-consignee courier-collection" (`docs/notes/postnord/conformance-ralph-report.md` on `docs-openspec`, commit `4a4ed7411`). The same note lists live pickup re-validation as an open follow-up, while the Success Criteria row "Live verification" (added 2026-09-24, commit `423a9015a`) lists pickup as verified against the sandbox; no committed evidence of a pickup booking exists. The spec also limits a collection request to package type PC with a pickup country outside the Nordics or a consignor country different from the pickup country, which a domestic pickup does not meet | Open finding; `PickupRequest` has no destination field to source a consignee from |
 
 ### Resolved Decisions
 
@@ -86,12 +87,12 @@ PostNord publishes no money-rate API and no end-of-day manifest, so rating and m
 | D7 | Transit not-found | An entry with `isSupported=false` (or a "Requested service …" message) keeps the static rate with no message; a route rejection drops the rate with an info `service_not_bookable` message | "Requested service 'SE-37' not found." marks services absent from the transit system (37, 48, 49, 51), not route verdicts |
 | D8 | Letter services | Tracked Letter (34), Export Letter (UX), and the other bookable letter and registered-mail products are in the default catalog with no opt-in; UX requires issuer `Z12`, filtered in `settings.shipping_services` | PostNord's booking API is the gate; the connector withholds a service only by its own explicit criteria |
 | D9 | Issuer code | `issuer_code` stays a user-set connection setting (Z11–Z14) | It encodes the merchant's market agreement and drives letter gating, so it cannot be derived from a shipment's origin |
-| D10 | Booking ids | `itemId="0"` lets PostNord allocate the parcel id (the tracking number); `shipmentId` is the caller reference or a generated id | An arbitrary item id fails with "unable to determine id type"; the client shipment id makes bookings searchable in Track & Trace |
+| D10 | Booking ids | `itemId="0"` lets PostNord allocate the parcel id (the tracking number); `shipmentId` is the caller reference or a generated id; shipment identifiers and client references are never sent as an `itemId`, in bookings or pickups | An arbitrary item id fails with "unable to determine id type"; the client shipment id makes bookings searchable in Track & Trace |
 | D11 | Partial bookings | Any item with allocated ids yields shipment details; inline per-item faults surface as messages alongside them | PostNord reports mixed item outcomes inside a 200/201 body |
 | D12 | Label format | `label_type` resolves payload → connection `label_type` → `PDF` and selects `/labels/pdf` or `/labels/zpl`; `label_size` (`standard`/`small`/`ste`) is the `labelType` query parameter, omitted when unset | PostNord selects the file format only by endpoint path |
 | D13 | Label encoding | Printouts with `encoding` `base64` or absent pass through; any other encoding is raw text and is base64-encoded | ZPL printouts arrive as raw UTF-8 with `encoding: "none"`, which the swagger does not document; Karrio's label pipeline expects base64 |
 | D14 | Tracking | Track & Trace v7 `findByIdentifier` keyed by the tracking number; 13 `ItemStatus` values map onto `TrackerStatus` (unknown → `in_transit`); no usable item degrades to a link-only result | The v7 `id` accepts the allocated item id; per-product authorization means T&T can 403 while booking works |
-| D15 | Pickup vs manifest | `Pickup.schedule` → `POST /v3/pickups` with a consignor-only body; `Manifest.create`, `Pickup.update`, and `Pickup.cancel` return `not_supported` without an HTTP call | `/v3/pickups` is a courier collection, not a scan form; pickups support only `Original` |
+| D15 | Pickup vs manifest | `Pickup.schedule` → `POST /v3/pickups` with a consignor-only body and `itemId="0"` unless D26 routes it to `/v3/pickups/ids`; `Manifest.create`, `Pickup.update`, and `Pickup.cancel` return `not_supported` without an HTTP call, for bookings made through either operation | `/v3/pickups` is a courier collection, not a scan form; pickups support only `Original`, and the spec has no update or delete route for either pickup operation; the consignee question is open (Q6) |
 | D16 | Service points | Connector-local `find_service_points` proxy method over Service Points v5 (`byaddress`, or `bycoordinates` when northing/easting are given), parsed into plain dicts | Karrio has no unified service-point contract; the duck-typed proxy-method pattern needs no core change |
 | D17 | Booking locale | Locale resolves request `options.language` > `config.language` > recipient country (with `locale_by_recipient`) > `en`; sent lowercase as the `locale` query parameter and uppercase as the body `language` element | The query `locale` sets SMS/e-mail language; the body `language` sets label text; `en` matches the Track & Trace default. PostNord's documented booking default is `sv`, so Swedish-market connections that rely on carrier-side SMS/e-mail language should set `config.language=sv` |
 | D18 | Recipient-country locale | `CountryLocale` maps SE→sv, DK→da, NO→no, FI→fi; `Settings.recipient_locale` returns it when `locale_by_recipient` is on and `config.language` is unset | The server persists the derived locale on the shipment and its tracker through the carrier-neutral hook, so polls keep it |
@@ -101,6 +102,7 @@ PostNord publishes no money-rate API and no end-of-day manifest, so rating and m
 | D22 | Misplaced registration numbers | `eori_number`/`voec_number`/`ioss_number` under shipment `options` reject a customs booking with a field error | Unknown shipment options are dropped silently, and PostNord rejects a CN22 without any of them (`SACUS-BR-24062502`) |
 | D23 | Line limit | At most 13 `detailedDescription` lines per declaration, enforced by one shared guard at booking and in the declaration builder | Documented in PostNord's Booking Customs Information; the swagger has no `maxItems` |
 | D24 | Standalone customs document | Export-letter bookings with an embedded declaration fetch `POST /v3/labels/ids/{pdf,zpl}?definePrintout=onlyCustomsDeclarations` keyed by `printId` (item id as fallback) and attach results to `docs.extra_documents`; failures are messages, never booking failures | Merged booking printouts carry composition counts without page ranges; the by-id endpoint resolves `printId`, not the item id (verified live) |
+| D26 | Pickup by item id | `Pickup.schedule` → `POST /v3/pickups/ids` with one `pickupIdInfo` (item id, `earliestPickupDate`, `latestPickupDate`) per id when `options.tracking_numbers` carries item ids and the pickup address country is SE, DK, or FI and equals `account_country_code`; otherwise the item ids are ignored and D15 applies. The address, `instruction`/`package_location`, and `options.service` are not sent on this path. The response is the same `bookingResponse` and is parsed as for `/v3/pickups` | The operation "Only supports domestic pickups of items in SE, DK, FI", and its body has no address, instruction, or service; the server passes the linked shipments' item ids in `options.tracking_numbers`, while `shipment_identifiers` are shipment ids, not item ids |
 | D25 | Post-booking declaration | `create_customs_declaration` and `create_customs_declaration_pdf` proxy methods take a caller-built declaration (one id, one branch); Karrio builds the envelope, submits, and reports | The caller owns branch, ids, and update semantics; Karrio does not reconcile or retract declarations |
 
 ---
@@ -248,7 +250,8 @@ config.label_size ─────> ?labelType=standard|small|ste (omitted when u
 | POST | `/rest/shipment/v3/edi/labels/{pdf,zpl}` | `create_shipment`, returns |
 | POST | `/rest/shipment/v3/labels/ids/{pdf,zpl}` | standalone customs document (export letters) |
 | POST | `/rest/shipment/v3/edi` | `cancel_shipment` placeholder body `{ids:[{id}]}`, rejected by PostNord |
-| POST | `/rest/shipment/v3/pickups` | `schedule_pickup` |
+| POST | `/rest/shipment/v3/pickups` | `schedule_pickup` (collection request) |
+| POST | `/rest/shipment/v3/pickups/ids` | `schedule_pickup` (domestic pickup by item id, D26) |
 | GET | `/rest/shipment/v7/trackandtrace/id/{id}/public` | `get_tracking` |
 | GET | `/rest/businesslocation/v5/servicepoints/nearest/{byaddress,bycoordinates}` | `find_service_points` (connector-local) |
 | POST | `/rest/shipment/v3/customs/declaration[/pdf]` | `create_customs_declaration[_pdf]` (connector-local) |
@@ -344,7 +347,7 @@ Tests use `unittest`, mock `karrio.mappers.postnord.proxy.lib.request`, and asse
 | `test_rate.py` | Static rates, zone misses, cross-border catalog, transit enrichment, variants, not-found, degrade, letter availability |
 | `test_shipment.py` | Booking request, label routing and encoding, locale tiers and `recipient_locale`, entry code, notifications, customs mapping and limits, by-id customs fetch fail-open paths, cancel, partial and auth errors |
 | `test_tracking.py` | Delivered and in-transit events, link-only degrade |
-| `test_pickup.py`, `test_manifest.py` | Pickup booking and unsupported operations |
+| `test_pickup.py`, `test_manifest.py` | Collection request and by-item-id pickup routing, requests, and parsing; unsupported operations |
 | `test_servicepoints.py` | Address and coordinate lookups, parsing, faults |
 | `test_customs_declaration.py` | Envelope validation, PDF parameters, wrapped and bare responses, rejections |
 

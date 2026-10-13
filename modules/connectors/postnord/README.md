@@ -93,6 +93,19 @@ The Booking API swagger documents `printout.encoding` as base64 only, but the ZP
 The connector passes base64 printouts (or printouts without `encoding`) through and base64-encodes any other encoding, so `docs.label` is always base64; a missing `labelFormat` falls back to the requested label type.
 The live ZPL body starts with persistent host commands (`^LL1520`, i.e. 190 mm at 8 dots/mm, and `^CI28` for UTF-8) followed by `^CW` font aliases for printer-memory fonts, all preserved verbatim.
 
+## Pickups
+
+`Pickup.schedule` uses one of two PostNord Booking API operations.
+
+When `options.tracking_numbers` carries PostNord item ids and the pickup address country is SE, DK, or FI and equals `account_country_code`, the connector books through `POST /rest/shipment/v3/pickups/ids`, which only supports domestic pickups of items in SE, DK, and FI.
+Its body is one entry per item id with the pickup window, so the pickup address, `instruction`, `package_location`, and `options.service` are not sent on this path.
+
+Every other pickup is a collection request through `POST /rest/shipment/v3/pickups`, with the pickup address as consignor and pickup party, `options.service` as the service code (default `20`), and `itemId` `"0"` so PostNord generates the item id.
+Item ids in `options.tracking_numbers` are ignored on this path, and shipment identifiers or client references are never sent as an `itemId`.
+
+Both operations return a booking id, reported as `confirmation_number`.
+PostNord has no update or cancel route for either operation, so `Pickup.update` and `Pickup.cancel` return a `not_supported` message without calling PostNord.
+
 ## Service points
 
 Service-point lookup (Service Points v5) is connector-local: Karrio has no unified service-point operation, so it is reached through the gateway proxy.
@@ -191,7 +204,7 @@ Live checks found the digital endpoint's success response to be the bare `bookin
 |-----------|-------|
 | Rating | Static rates from the connection's service levels / server-side RateSheet (no carrier call by default). Optionally enriched with live transit times when `enable_transit_times` is on. |
 | Shipment | Booking + label retrieval in one call (`/rest/shipment/v3/edi/labels/pdf`, or `/labels/zpl` when the resolved label type is ZPL). |
-| Pickup | Courier collection booking (`Pickup.schedule`). |
+| Pickup | Domestic pickup by item id (`/v3/pickups/ids`) or collection request (`/v3/pickups`) via `Pickup.schedule`; see [Pickups](#pickups). |
 | Tracking | Event-based via Track & Trace v7 (`findByIdentifier`); degrades to link-only (tracking URL + generic status) when the key isn't authorized for the T&T product. |
 | Returns | Booked via the shipment create flow with a return service code. |
 | Service points | Connector-local lookup (`gateway.proxy.find_service_points`). |
