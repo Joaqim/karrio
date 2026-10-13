@@ -146,7 +146,7 @@ karrio.Pickup.schedule(pickup_request).from_(gateway)   # courier collection
 | Rate, shipment, tracking, pickup tests | Request, proxy, parse, and error paths covered | Must-have |
 | Unsupported operations | Explicit messages, never false success | Must-have |
 | Generated files | `mapper.py` and `karrio/schemas/postnord/*.py` never hand-edited | Must-have |
-| Live verification | Booking, label, tracking, and pickup verified against the sandbox; customs declaration verified on a production booking | Done |
+| Live verification | Booking, label, and tracking verified against the sandbox; customs declaration verified on a production booking; pickup: not verified; see Q6 | Done |
 
 ---
 
