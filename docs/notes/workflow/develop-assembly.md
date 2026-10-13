@@ -11,14 +11,12 @@ The layout dates from the 2026-09-24 history rework; the previous linear `develo
 
 ## Branches
 
-The upstream-bound branches are `fix-core-small`, `fix-fedex-state-code-countries` (upstream pull request #1143), `fix-state-code-normalization` (upstream pull request #1141, on `fix-fedex-state-code-countries`), `fix-dashboard-carrier-options`, `fix-dashboard-address-template-fields`, `chore-sdk-pypdf`, `fix-flocaltime-ampm`, `feat-tracker-locale` (on `fix-flocaltime-ampm`), `feat-shipment-advisors` (on `upstream/main`), `feat-dhl-freight-se-connector`, `docs-vendored-carrier-specs`, `feat-document-stamping` (on `chore-sdk-pypdf`), `feat-postnord-connector` (on `feat-tracker-locale`), `feat-dhl-freight-se-customs` (on `feat-dhl-freight-se-connector`) and `feat-postnord-customs-invoice` (on `feat-postnord-connector`).
-Open their upstream pull requests in dependency order: `chore-sdk-pypdf` before `feat-document-stamping`, `fix-flocaltime-ampm` before `feat-tracker-locale` before `feat-postnord-connector` before `feat-postnord-customs-invoice`, and `feat-dhl-freight-se-connector` before `feat-dhl-freight-se-customs`.
-`feat-postnord-connector` is listed in `BRANCHES` before `feat-postnord-cn22-stamping`, which contains it, so the PostNord stack is merged into `develop` explicitly rather than only transitively.
+The upstream-bound branches are `fix-core-small`, `fix-fedex-state-code-countries` (upstream pull request #1143), `fix-state-code-normalization` (upstream pull request #1141, on `fix-fedex-state-code-countries`), `fix-dashboard-carrier-options`, `fix-dashboard-address-template-fields`, `chore-sdk-pypdf`, `fix-flocaltime-ampm`, `feat-tracker-locale` (on `fix-flocaltime-ampm`), `feat-shipment-advisors` (on `upstream/main`), `docs-vendored-carrier-specs` and `feat-document-stamping` (on `chore-sdk-pypdf`).
+Open their upstream pull requests in dependency order: `chore-sdk-pypdf` before `feat-document-stamping`, and `fix-flocaltime-ampm` before `feat-tracker-locale`.
+The PostNord connector family left `BRANCHES` in the 2026-10-13 extraction; the connector lives at `PrimePack-AB/karrio-postnord`, as DHL Freight Sweden has lived at `PrimePack-AB/karrio-dhl-freight-sweden` since its 2026-10-03 extraction.
 `fix-fedex-smartpost-declared-value` (#1142) was closed unmerged on 2026-09-25; its FedEx failure is fixed by `fix-fedex-state-code-countries` (#1143).
 
-The fork-only branches are `feat-postnord-cn22-stamping`, `dev-nix-flake` and `docs-openspec`.
-`feat-postnord-cn22-stamping` is the PostNord connector merged with stamping, plus the CN22 seed registration.
-It stays on the fork until both parents land upstream.
+The fork-only branches are `dev-nix-flake` and `docs-openspec`.
 `dev-nix-flake` provides the nix dev shell and is based on `chore-sdk-pypdf`.
 `docs-openspec` holds the openspec corpus, working notes and this workflow.
 
@@ -33,7 +31,7 @@ It stays on the fork until both parents land upstream.
 5. Regenerate develop with `rebuild-develop.sh`, then push; see the agent workflow below.
    The scripts read `BRANCHES` from the committed tip of `docs-openspec`, so an uncommitted edit to the list has no effect.
 
-A change that touches independent stacks, such as the PostNord and DHL Freight Sweden connectors, is split into one commit per stack, each landing on the branch that owns that code, or deferred.
+A change that touches independent stacks is split into one commit per stack, each landing on the branch that owns that code, or deferred.
 A shared SDK abstraction spanning stacks goes on its own branch off `upstream/main` only when upstream will plausibly accept it.
 
 A merge conflict during assembly means two feature branches disagree.

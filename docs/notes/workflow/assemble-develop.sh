@@ -45,16 +45,6 @@ BRANCHES=(
   feat-shipment-advisors
   docs-vendored-carrier-specs
   feat-document-stamping
-  feat-postnord-connector
-  fix-postnord-meta-conventions
-  feat-postnord-pickup-by-item-id
-  postnord-service-point-booking
-  feat-postnord-cn22-stamping
-  feat-postnord-customs-invoice
-  fix-postnord-eu-vat-territories
-  fix-postnord-customs-line-content
-  feat-postnord-eori-vat-fallback
-  fix-postnord-cn23-international-parcel
   dev-nix-flake
   docs-openspec
 )
