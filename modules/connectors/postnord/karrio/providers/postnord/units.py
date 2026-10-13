@@ -246,11 +246,12 @@ class CN22CategoryType:
 # unverified.
 ENTRY_CODE_USAGE_CODE = "ZDC"
 
-# Booking freeText usage code carrying the pickup instruction and package
-# location. The swagger's freeText.usageCode list (exactly 3 characters,
-# required) defines no pickup-specific code; ZHD "Handover description" is the
-# closest fit. The sandbox rejected the former 6-character "PICKUP".
-PICKUP_INSTRUCTION_USAGE_CODE = "ZHD"
+# Pickup booking freeText usage code carrying the pickup instruction and
+# package location. PostNord's guide (https://guide.developer.postnord.com/,
+# Booking APIs v3 / Book Pickups): "In the freeText-array it is mandatory to
+# set attribute "usageCode" to "ADS" and "text" with pickup instructions."
+# The swagger's general freeText.usageCode list does not include ADS.
+PICKUP_INSTRUCTION_USAGE_CODE = "ADS"
 
 # 50 chars is generous for door codes and stays within address-line and
 # full-name limits; longer values reject the booking before it is sent.
