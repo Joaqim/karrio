@@ -100,10 +100,7 @@ PickupRequest = {
             ],
             "goodsItem": [
                 {
-                    "items": [
-                        {"itemIdentification": {"itemId": "SHIP-0001"}},
-                        {"itemIdentification": {"itemId": "SHIP-0002"}},
-                    ],
+                    "items": [{"itemIdentification": {"itemId": "0"}}],
                 }
             ],
             "parties": {

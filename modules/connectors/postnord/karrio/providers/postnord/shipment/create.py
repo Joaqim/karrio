@@ -90,8 +90,7 @@ def _extract_details(
     tracking_url = next(
         (url.url for url in urls if (url.type or "").upper() == "TRACKING"), None
     )
-    # The booking id is left out: cancel and pickup never send it, and the
-    # server forwards shipment_identifiers to the pickup request as item ids.
+    # The booking id is left out: neither cancel nor pickup sends it.
     shipment_identifiers = list(
         dict.fromkeys(
             [

@@ -75,17 +75,12 @@ def pickup_request(
 ) -> lib.Serializable:
     address = lib.to_address(payload.address)
     options = payload.options or {}
-    identifiers = payload.shipment_identifiers or []
     service = options.get("service") or provider_units.ShippingService.postnord_return_pickup.value
 
-    # The booked parcels to be collected map to goodsItem items keyed by their
-    # parcel/tracking id; absent any identifier, PostNord allocates from "0".
+    # itemId is a PostNord item reference (SSCC, S10, ...); shipment
+    # identifiers and client references are rejected as an undeterminable id
+    # type, while "0" makes PostNord generate the item id.
     items = [
-        postnord_req.ItemType(
-            itemIdentification=postnord_req.ItemIdentificationType(itemId=identifier),
-        )
-        for identifier in identifiers
-    ] or [
         postnord_req.ItemType(
             itemIdentification=postnord_req.ItemIdentificationType(itemId="0"),
         )
