@@ -46,6 +46,7 @@ BRANCHES=(
   feat-document-stamping
   feat-postnord-connector
   fix-postnord-meta-conventions
+  feat-postnord-pickup-by-item-id
   postnord-service-point-booking
   feat-postnord-cn22-stamping
   feat-postnord-customs-invoice
