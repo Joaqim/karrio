@@ -66,6 +66,16 @@ class TestPostNordPickup(unittest.TestCase):
             )
             self.assertListEqual(lib.to_dict(parsed_response), ParsedPickupResponse)
 
+    def test_parse_pickup_by_item_id_error_response(self):
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = PickupByItemIdErrorResponse
+            parsed_response = (
+                karrio.Pickup.schedule(self.PickupByItemIdRequest).from_(gateway).parse()
+            )
+            self.assertListEqual(
+                lib.to_dict(parsed_response), ParsedPickupByItemIdErrorResponse
+            )
+
     def test_create_pickup_request_ignores_item_ids_outside_account_country(self):
         for country_code in ["DK", "NO"]:
             with self.subTest(country_code=country_code):
@@ -240,6 +250,15 @@ ErrorResponse = """{
   }
 }"""
 
+PickupByItemIdErrorResponse = """{
+  "message": "General client indata error",
+  "compositeFault": {
+    "faults": [
+      {"explanationText": "Edi not found for item Id: 00370712345678901234"}
+    ]
+  }
+}"""
+
 ParsedPickupResponse = [
     {
         "carrier_id": "postnord",
@@ -262,6 +281,18 @@ ParsedErrorResponse = [
             "carrier_name": "postnord",
             "code": "PNCS-409",
             "message": "No pickup slot available",
+            "details": {},
+        }
+    ],
+]
+
+ParsedPickupByItemIdErrorResponse = [
+    None,
+    [
+        {
+            "carrier_id": "postnord",
+            "carrier_name": "postnord",
+            "message": "Edi not found for item Id: 00370712345678901234",
             "details": {},
         }
     ],
