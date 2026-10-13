@@ -113,17 +113,17 @@ PickupPayload = {
     "pickup_date": "2026-06-25",
     "ready_time": "08:00:00",
     "closing_time": "16:00:00",
-    "instruction": "Pick up at loading dock",
+    "instruction": "Pickup instruction",
     "shipment_identifiers": ["SHIP-0001", "SHIP-0002"],
     "address": {
-        "address_line1": "Sandhamnsgatan 61",
+        "address_line1": "Testgatan 1",
         "city": "Stockholm",
-        "postal_code": "11528",
+        "postal_code": "11759",
         "country_code": "SE",
-        "person_name": "John Sender",
-        "company_name": "ACME Sender AB",
-        "phone_number": "+46701234567",
-        "email": "sender@example.com",
+        "person_name": "Klaus Consignor",
+        "company_name": "Consignor AB",
+        "phone_number": "+467011111",
+        "email": "me@orderingparty.com",
     },
 }
 
@@ -153,7 +153,7 @@ PickupRequest = {
             },
             "service": {"basicServiceCode": "20"},
             "freeText": [
-                {"usageCode": "ZHD", "text": "Pick up at loading dock"}
+                {"usageCode": "ZHD", "text": "Pickup instruction"}
             ],
             "goodsItem": [
                 {
@@ -169,40 +169,40 @@ PickupRequest = {
                     },
                     "party": {
                         "nameIdentification": {
-                            "name": "John Sender",
-                            "companyName": "ACME Sender AB",
+                            "name": "Klaus Consignor",
+                            "companyName": "Consignor AB",
                         },
                         "address": {
-                            "streets": ["Sandhamnsgatan 61"],
-                            "postalCode": "11528",
+                            "streets": ["Testgatan 1"],
+                            "postalCode": "11759",
                             "city": "Stockholm",
                             "countryCode": "SE",
                         },
                         "contact": {
-                            "contactName": "John Sender",
-                            "emailAddress": "sender@example.com",
-                            "phoneNo": "+46701234567",
-                            "smsNo": "+46701234567",
+                            "contactName": "Klaus Consignor",
+                            "emailAddress": "me@orderingparty.com",
+                            "phoneNo": "+467011111",
+                            "smsNo": "+467011111",
                         },
                     },
                 },
                 "pickupParty": {
                     "party": {
                         "nameIdentification": {
-                            "name": "John Sender",
-                            "companyName": "ACME Sender AB",
+                            "name": "Klaus Consignor",
+                            "companyName": "Consignor AB",
                         },
                         "address": {
-                            "streets": ["Sandhamnsgatan 61"],
-                            "postalCode": "11528",
+                            "streets": ["Testgatan 1"],
+                            "postalCode": "11759",
                             "city": "Stockholm",
                             "countryCode": "SE",
                         },
                         "contact": {
-                            "contactName": "John Sender",
-                            "emailAddress": "sender@example.com",
-                            "phoneNo": "+46701234567",
-                            "smsNo": "+46701234567",
+                            "contactName": "Klaus Consignor",
+                            "emailAddress": "me@orderingparty.com",
+                            "phoneNo": "+467011111",
+                            "smsNo": "+467011111",
                         },
                     }
                 },
@@ -224,17 +224,32 @@ PickupByItemIdRequest = [
     },
 ]
 
+# Documented 201 of the "Book Pickups SE_Minimum requirements" example in
+# PostNord's guide (https://guide.developer.postnord.com/, Shipment / Booking /
+# Booking APIs v3 / Book Pickups).
 PickupResponse = """{
-  "bookingId": "PICKUP-555",
+  "bookingId": "3SBZN5EWG327PSQHXBYV5X4GLQLJMF",
   "idInformation": [
     {
       "status": "OK",
       "references": {
+        "item": [
+          {"referenceNo": "CR511599F", "referenceType": "ZGI"},
+          {"referenceNo": "511599", "referenceType": "ZDI"}
+        ],
         "shipment": [
-          {"referenceType": "IL", "referenceNo": "ILPN0001"}
+          {"referenceNo": "customer referenceNo", "referenceType": "CU"},
+          {"referenceType": "ZET", "referenceNo": "2021-06-22T08:00:00+02:00"},
+          {"referenceType": "ZLT", "referenceNo": "2021-06-22T16:00:00+02:00"}
         ]
       },
-      "ids": [{"idType": "pickupId", "value": "PU-1"}]
+      "ids": [{"idType": "pickupId", "value": "CR511599F"}],
+      "urls": [
+        {
+          "type": "TRACKING",
+          "url": "https://atapi2.postnord.com/rest/shipment/v5/trackandtrace/findByIdentifier.json?id=CR511599F&apikey=undefined"
+        }
+      ]
     }
   ]
 }"""
@@ -264,11 +279,15 @@ ParsedPickupResponse = [
     {
         "carrier_id": "postnord",
         "carrier_name": "postnord",
-        "confirmation_number": "PICKUP-555",
-        "id": "PU-1",
+        "confirmation_number": "3SBZN5EWG327PSQHXBYV5X4GLQLJMF",
+        "id": "CR511599F",
         "meta": {
-            "pickup_ids": ["PU-1"],
-            "references": ["ILPN0001"],
+            "pickup_ids": ["CR511599F"],
+            "references": [
+                "customer referenceNo",
+                "2021-06-22T08:00:00+02:00",
+                "2021-06-22T16:00:00+02:00",
+            ],
         },
     },
     [],
