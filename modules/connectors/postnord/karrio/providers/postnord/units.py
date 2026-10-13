@@ -737,6 +737,9 @@ class PickupService(lib.StrEnum):
 # which PickupRequest cannot carry.
 PICKUP_COUNTRIES = ["SE", "FI", "DK"]
 
+# Guide: "Supported Package Type Code: Parcel (PC)" for both pickup services.
+PICKUP_PACKAGE_TYPE_CODE = "PC"
+
 
 # Booking API /v3/pickups/ids: "Only supports domestic pickups of items in SE,
 # DK, FI".

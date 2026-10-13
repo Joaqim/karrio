@@ -20,6 +20,7 @@ ids/references.
 """
 
 import datetime
+import uuid
 import karrio.schemas.postnord.pickup_ids_request as postnord_ids_req
 import karrio.schemas.postnord.pickup_request as postnord_req
 import karrio.schemas.postnord.pickup_response as postnord_res
@@ -126,6 +127,7 @@ def pickup_request(
     request = postnord_req.PickupRequestType(
         messageDate=datetime.datetime.now().isoformat(timespec="seconds"),
         messageFunction="PickupBooking",
+        messageId=str(uuid.uuid4()),
         updateIndicator="Original",
         testIndicator=settings.test_mode,
         application=postnord_req.ApplicationType(
@@ -149,7 +151,12 @@ def pickup_request(
                     if instruction
                     else None
                 ),
-                goodsItem=[postnord_req.GoodsItemType(items=items)],
+                goodsItem=[
+                    postnord_req.GoodsItemType(
+                        packageTypeCode=provider_units.PICKUP_PACKAGE_TYPE_CODE,
+                        items=items,
+                    )
+                ],
                 parties=postnord_req.PartiesType(
                     consignor=postnord_req.ConsignorType(
                         issuerCode=settings.issuer_code,

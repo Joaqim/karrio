@@ -1,6 +1,7 @@
 """PostNord carrier pickup tests."""
 
 import unittest
+import uuid
 from unittest.mock import patch, ANY
 from .fixture import gateway
 
@@ -18,7 +19,9 @@ class TestPostNordPickup(unittest.TestCase):
 
     def test_create_pickup_request(self):
         request = gateway.mapper.create_pickup_request(self.PickupRequest)
-        self.assertEqual(lib.to_dict(request.serialize()), PickupRequest)
+        serialized = lib.to_dict(request.serialize())
+        self.assertEqual(serialized, PickupRequest)
+        self.assertEqual(uuid.UUID(serialized["messageId"]).version, 4)
 
     def test_schedule_pickup(self):
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
@@ -89,7 +92,12 @@ class TestPostNordPickup(unittest.TestCase):
                 serialized = lib.to_dict(request.serialize())
                 self.assertEqual(
                     serialized["shipment"][0]["goodsItem"],
-                    [{"items": [{"itemIdentification": {"itemId": "0"}}]}],
+                    [
+                        {
+                            "packageTypeCode": "PC",
+                            "items": [{"itemIdentification": {"itemId": "0"}}],
+                        }
+                    ],
                 )
 
     def test_create_pickup_request_collection_request_service_override(self):
@@ -181,6 +189,7 @@ PickupRequest = {
     "application": {"name": "Karrio", "applicationId": 2458},
     "messageDate": ANY,
     "messageFunction": "PickupBooking",
+    "messageId": ANY,
     "testIndicator": True,
     "updateIndicator": "Original",
     "shipment": [
@@ -195,6 +204,7 @@ PickupRequest = {
             ],
             "goodsItem": [
                 {
+                    "packageTypeCode": "PC",
                     "items": [{"itemIdentification": {"itemId": "0"}}],
                 }
             ],
