@@ -81,7 +81,7 @@ def bulk_save_tracing_records(tracer: lib.Tracer, context=None):
 
     records = []
 
-    for record in tracer.records:
+    for record in tracer.drain_records():
         logger.debug("Processing tracing record", record_key=record.key, metadata=record.metadata)
         records.append(
             models.TracingRecord(
