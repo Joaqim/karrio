@@ -139,7 +139,12 @@ def pickup_request(
                 ),
                 service=postnord_req.ServiceType(basicServiceCode=service),
                 freeText=lib.identity(
-                    [postnord_req.FreeTextType(usageCode="PICKUP", text=instruction)]
+                    [
+                        postnord_req.FreeTextType(
+                            usageCode=provider_units.PICKUP_INSTRUCTION_USAGE_CODE,
+                            text=instruction,
+                        )
+                    ]
                     if instruction
                     else None
                 ),

@@ -152,7 +152,7 @@ PickupRequest = {
             },
             "service": {"basicServiceCode": "20"},
             "freeText": [
-                {"usageCode": "PICKUP", "text": "Pick up at loading dock"}
+                {"usageCode": "ZHD", "text": "Pick up at loading dock"}
             ],
             "goodsItem": [
                 {

@@ -246,6 +246,12 @@ class CN22CategoryType:
 # unverified.
 ENTRY_CODE_USAGE_CODE = "ZDC"
 
+# Booking freeText usage code carrying the pickup instruction and package
+# location. The swagger's freeText.usageCode list (exactly 3 characters,
+# required) defines no pickup-specific code; ZHD "Handover description" is the
+# closest fit. The sandbox rejected the former 6-character "PICKUP".
+PICKUP_INSTRUCTION_USAGE_CODE = "ZHD"
+
 # 50 chars is generous for door codes and stays within address-line and
 # full-name limits; longer values reject the booking before it is sent.
 ENTRY_CODE_MAX_LENGTH = 50
