@@ -45,6 +45,7 @@ BRANCHES=(
   docs-vendored-carrier-specs
   feat-document-stamping
   feat-postnord-connector
+  fix-postnord-meta-conventions
   postnord-service-point-booking
   feat-postnord-cn22-stamping
   feat-postnord-customs-invoice
