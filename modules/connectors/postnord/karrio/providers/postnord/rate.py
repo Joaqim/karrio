@@ -48,7 +48,7 @@ def parse_rate_response(
     (PostNord ``basicServiceCode``); when it is disabled the ctx is empty and
     rates pass through unchanged with their static ``transit_days``. For each
     rate we override ``transit_days`` from the matching transit result, record
-    the estimated delivery date in ``meta["estimated_delivery"]``, and drop any
+    the estimated delivery date in ``estimated_delivery``, and drop any
     rate whose matching transit result is ``isBookable == false`` — except
     services the transit system does not know at all (``no_transit_data``),
     which keep their static rate unchanged. When the transit lookup degraded,
@@ -112,17 +112,17 @@ def parse_rate_response(
         transit_days = transit.get("transit_days")
         estimated_delivery = transit.get("estimated_delivery")
 
-        meta = {**(rate.meta or {})}
-        if estimated_delivery is not None:
-            meta["estimated_delivery"] = estimated_delivery
-
         enriched.append(
             attr.evolve(
                 rate,
                 transit_days=(
                     transit_days if transit_days is not None else rate.transit_days
                 ),
-                meta=meta,
+                estimated_delivery=(
+                    estimated_delivery
+                    if estimated_delivery is not None
+                    else rate.estimated_delivery
+                ),
             )
         )
 

@@ -205,7 +205,7 @@ class TestPostNordRating(unittest.TestCase):
 
         tompall = next(r for r in rates if r.service == "postnord_tompallsdistribution")
         self.assertEqual(tompall.transit_days, 3)
-        self.assertNotIn("estimated_delivery", tompall.meta)
+        self.assertIsNone(tompall.estimated_delivery)
         self.assertNotIn("service_not_bookable", [m.code for m in messages])
         self.assertFalse(any("not found" in (m.message or "") for m in messages))
 
@@ -424,6 +424,7 @@ EnrichedParsedRateResponse = [
             "service": "postnord_parcel",
             "total_charge": 89.0,
             "transit_days": 1,
+            "estimated_delivery": "2024-08-24",
             "extra_charges": [
                 {
                     "amount": 89.0,
@@ -436,7 +437,6 @@ EnrichedParsedRateResponse = [
                 "service_name": "PostNord Parcel",
                 "shipping_charges": 89.0,
                 "shipping_currency": "SEK",
-                "estimated_delivery": "2024-08-24",
             },
         }
     ],
