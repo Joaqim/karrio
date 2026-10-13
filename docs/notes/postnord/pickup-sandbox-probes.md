@@ -1,11 +1,11 @@
 # PostNord pickup sandbox probes
 
 Record of the sandbox probes for the `feat-postnord-pickup-by-item-id` branch, all run on 2026-10-13 against the `atapi2.postnord.com` test host.
-The probe script and the redacted captures live in `~/.local/state/agent-logs/karrio/postnord-pickup-probe/` (`probe.py`, `booking-*.json`, `p1-*.json`, `p2-*.json`).
+The probe script and the redacted captures live in `~/.local/state/agent-logs/karrio/postnord-pickup-probe/` (`probe.py`, `booking-*.json`, `p1-*.json`, `p2-*.json`, `p2b-*.json`).
 Request bodies were built by the branch connector (`feat-postnord-pickup-by-item-id` at `3f51434fd`) and POSTed by the script so the HTTP status is observable; responses were parsed with the branch's `parse_pickup_response`.
 Credentials are referenced by environment variable name only (`POSTNORD_APIKEY` and `POSTNORD_CUSTOMER_NUMBER`, loaded through the repository's direnv environment); no application id was sent.
 Every capture was checked against the values of all `POSTNORD_*` credential variables before writing; matches are replaced with `<redacted>`.
-Each step ran once, and no rejected step was retried.
+Each step ran once, and no rejected step was retried; P2b is a separate step against a changed connector, not a retry of P2.
 
 ## Booking for an item id
 
@@ -45,9 +45,24 @@ The sandbox rejected the freeText usage code, which the booking swagger limits t
 No fault mentioned the consignee, so the sandbox gave no verdict on the missing consignee: validation stopped at the usage code.
 The fault body parsed into one message with code `USAGE_CODE`.
 
+## P2b: collection request with the usage code and messageFunction fixes
+
+After P2 the connector was changed to send the pickup instruction under freeText usage code `ZHD` ("Handover description", the closest fit in the swagger's list) and to send `messageFunction` `PickupBooking`, which the swagger documents for "a pickup or a DPD Collection Request" (the default is `Instruction`).
+`POST /rest/shipment/v3/pickups` with the branch connector at `45f31f9a1` (service 20, `itemId` `"0"`, `testIndicator` `true`, consignor and pickup party at the Stockholm address, no consignee, window 2026-10-14 08:00 to 16:00) returned HTTP 400:
+
+```
+{"message":"General client indata error","compositeFault":{"faults":[{"explanationText":"Service code is not valid for PickupBookings: 20"}]}}
+```
+
+The sandbox raised no usage-code fault and referred to the request as a PickupBooking.
+It rejected basic service code 20 (`postnord_return_pickup`, the connector's default pickup service) for PickupBookings.
+No fault mentioned the consignee, so the sandbox again gave no verdict on the missing consignee.
+The fault body parsed into one message with the explanation text and no code.
+
 ## Consequences
 
 Pickup remains unverified against the sandbox.
-The connector sends the `PICKUP` freeText whenever a pickup carries an instruction or package location, and the sandbox rejected that usage code.
-Whether the sandbox requires a consignee on a collection request remains open; a collection-request probe without the freeText would be needed to learn it.
+The sandbox accepted the `ZHD` usage code and the `PickupBooking` message function far enough to reach service validation, and rejected service code 20 for PickupBookings.
+The swagger does not list which basic service codes PickupBookings accept.
+Whether the sandbox requires a consignee on a collection request remains open; it would need a collection request with a service code the sandbox accepts for PickupBookings.
 The sandbox did not find an item id from a test-mode booking, so the `/v3/pickups/ids` success path needs an item id from a booking sent with `testIndicator` `false`.
