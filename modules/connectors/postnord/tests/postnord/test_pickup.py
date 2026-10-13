@@ -40,6 +40,16 @@ class TestPostNordPickup(unittest.TestCase):
             )
             self.assertListEqual(lib.to_dict(parsed_response), ParsedPickupResponse)
 
+    def test_parse_pickup_response_without_identifying_references(self):
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = PickupWindowOnlyResponse
+            parsed_response = (
+                karrio.Pickup.schedule(self.PickupRequest).from_(gateway).parse()
+            )
+            self.assertListEqual(
+                lib.to_dict(parsed_response), ParsedPickupWindowOnlyResponse
+            )
+
     def test_parse_error_response(self):
         with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
             mock.return_value = ErrorResponse
@@ -282,6 +292,31 @@ PickupResponse = """{
   ]
 }"""
 
+# Shape of the sandbox's 201 to a domestic pickup booking (basicServiceCode 0)
+# on 2026-10-13: only the pickup window as shipment references.
+PickupWindowOnlyResponse = """{
+  "bookingId": "ILPN0010L40WFRAAETQQOHAHWWWHHK",
+  "idInformation": [
+    {
+      "status": "OK",
+      "references": {
+        "item": [{"referenceNo": "PB015606512T", "referenceType": "ZGI"}],
+        "shipment": [
+          {"referenceType": "ZET", "referenceNo": "2026-10-14T08:00:00+02:00"},
+          {"referenceType": "ZLT", "referenceNo": "2026-10-14T16:00:00+02:00"}
+        ]
+      },
+      "ids": [{"idType": "pickupId", "value": "PB015606512T"}],
+      "urls": [
+        {
+          "type": "TRACKING",
+          "url": "https://atmypickups.postnord.com/tracking/PB015606512T?lang=sv"
+        }
+      ]
+    }
+  ]
+}"""
+
 ErrorResponse = """{
   "errorResponse": {
     "message": "Unable to book pickup",
@@ -313,6 +348,17 @@ ParsedPickupResponse = [
             "pickup_ids": ["CR511599F"],
             "references": ["customer referenceNo"],
         },
+    },
+    [],
+]
+
+ParsedPickupWindowOnlyResponse = [
+    {
+        "carrier_id": "postnord",
+        "carrier_name": "postnord",
+        "confirmation_number": "ILPN0010L40WFRAAETQQOHAHWWWHHK",
+        "id": "PB015606512T",
+        "meta": {"pickup_ids": ["PB015606512T"]},
     },
     [],
 ]
