@@ -8,11 +8,14 @@ PostNord books pickups through two Booking API operations:
   ``account_country_code`` (the operation only supports domestic pickups in
   those countries). Its body is a ``pickupIdInfo`` array of item id and pickup
   window, so the pickup address, instruction, and service are not sent.
-- ``POST /rest/shipment/v3/pickups`` books a collection request for every other
-  pickup. It reuses the booking schema (``pickupBooking`` wrapping a
-  ``shipmentCustomsv2`` array) with ``itemId="0"``, which makes PostNord
-  generate the item id; the ``PickupRequest.address`` maps to both
-  ``consignor.party`` and ``pickupParty.party``.
+- ``POST /rest/shipment/v3/pickups`` books every other pickup as a
+  ``PickupBooking`` with basicServiceCode ``0`` (pickup from SE, FI, or DK) or,
+  when ``options.service`` selects it, ``CR`` (collection request). It reuses
+  the booking schema (``pickupBooking`` wrapping a ``shipmentCustomsv2``
+  array) with ``itemId="0"``, which makes PostNord generate the item id; the ``PickupRequest.address`` maps to
+  ``consignor.party``. No ``pickupParty`` is sent: PostNord's guide uses it
+  only for a pickup address other than the consignor's, and the request
+  carries a single address.
 
 Both operations answer with a ``bookingResponse``: ``bookingId`` becomes the
 Karrio ``confirmation_number`` and ``idInformation[]`` carries per-item
@@ -170,7 +173,6 @@ def pickup_request(
                         ),
                         party=party,
                     ),
-                    pickupParty=postnord_req.PickupPartyType(party=party),
                 ),
             )
         ],

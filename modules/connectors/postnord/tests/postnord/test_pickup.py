@@ -234,26 +234,6 @@ PickupRequest = {
                         },
                     },
                 },
-                "pickupParty": {
-                    "party": {
-                        "nameIdentification": {
-                            "name": "Klaus Consignor",
-                            "companyName": "Consignor AB",
-                        },
-                        "address": {
-                            "streets": ["Testgatan 1"],
-                            "postalCode": "11759",
-                            "city": "Stockholm",
-                            "countryCode": "SE",
-                        },
-                        "contact": {
-                            "contactName": "Klaus Consignor",
-                            "emailAddress": "me@orderingparty.com",
-                            "phoneNo": "+467011111",
-                            "smsNo": "+467011111",
-                        },
-                    }
-                },
             },
         }
     ],
