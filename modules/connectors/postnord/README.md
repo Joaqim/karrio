@@ -102,6 +102,7 @@ Its body is one entry per item id with the pickup window, so the pickup address,
 
 Every other pickup is a collection request through `POST /rest/shipment/v3/pickups` with `messageFunction` `PickupBooking`, the pickup address as consignor and pickup party, `options.service` as the service code (default `20`), and `itemId` `"0"` so PostNord generates the item id.
 The `instruction` (or `package_location`) is sent as a freeText with usage code `ZHD` ("Handover description"); the Booking API defines no pickup-specific usage code.
+Collection requests are not verified against the sandbox: it rejected the default service code `20` for PickupBookings, and the Booking API does not list the accepted codes (PRD Q8).
 Item ids in `options.tracking_numbers` are ignored on this path, and shipment identifiers or client references are never sent as an `itemId`.
 
 Both operations return a booking id, reported as `confirmation_number`.
