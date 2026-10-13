@@ -273,9 +273,13 @@ class Proxy(proxy.Proxy):
         return lib.Deserializable("{}", lib.to_dict)
 
     def schedule_pickup(self, request: lib.Serializable) -> lib.Deserializable[str]:
-        # Courier collection booking: POST /v3/pickups (pickupBooking).
+        path = lib.identity(
+            "/rest/shipment/v3/pickups/ids"
+            if request.ctx.get("by_item_id")
+            else "/rest/shipment/v3/pickups"
+        )
         response = lib.request(
-            url=self._url("/rest/shipment/v3/pickups"),
+            url=self._url(path),
             data=lib.to_json(request.serialize()),
             trace=self.trace_as("json"),
             method="POST",

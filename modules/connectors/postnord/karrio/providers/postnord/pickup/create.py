@@ -1,19 +1,26 @@
 """Karrio PostNord pickup scheduling implementation.
 
-PostNord books a courier collection through ``POST /rest/shipment/v3/pickups``.
-The pickups endpoint reuses the booking schema (``pickupBooking`` wrapping a
-``shipmentCustomsv2`` array), but only ``consignor`` is a required party, so a
-pickup is modeled as the courier-collection it is: the ``PickupRequest.address``
-is the collection location, mapped to both ``consignor.party`` and
-``pickupParty.party``. No consignee/destination is sent — a pickup carries a
-pickup address and a time window, not a route.
+PostNord books pickups through two Booking API operations:
 
-The response (``PickupResponseType``) carries a ``bookingId`` (used as the
-Karrio ``confirmation_number``) and per-item ids/references under
-``idInformation[]``.
+- ``POST /rest/shipment/v3/pickups/ids`` books a pickup of already-booked items
+  by item id. It is used when ``options.tracking_numbers`` carries item ids and
+  the pickup address country is SE, DK, or FI and equals the connection's
+  ``account_country_code`` (the operation only supports domestic pickups in
+  those countries). Its body is a ``pickupIdInfo`` array of item id and pickup
+  window, so the pickup address, instruction, and service are not sent.
+- ``POST /rest/shipment/v3/pickups`` books a collection request for every other
+  pickup. It reuses the booking schema (``pickupBooking`` wrapping a
+  ``shipmentCustomsv2`` array) with ``itemId="0"``, which makes PostNord
+  generate the item id; the ``PickupRequest.address`` maps to both
+  ``consignor.party`` and ``pickupParty.party``.
+
+Both operations answer with a ``bookingResponse``: ``bookingId`` becomes the
+Karrio ``confirmation_number`` and ``idInformation[]`` carries per-item
+ids/references.
 """
 
 import datetime
+import karrio.schemas.postnord.pickup_ids_request as postnord_ids_req
 import karrio.schemas.postnord.pickup_request as postnord_req
 import karrio.schemas.postnord.pickup_response as postnord_res
 
@@ -75,6 +82,15 @@ def pickup_request(
 ) -> lib.Serializable:
     address = lib.to_address(payload.address)
     options = payload.options or {}
+    item_ids = list(dict.fromkeys(_ for _ in (options.get("tracking_numbers") or []) if _))
+    by_item_id = bool(item_ids) and (
+        address.country_code in provider_units.PICKUP_BY_ITEM_ID_COUNTRIES
+        and address.country_code == (settings.account_country_code or "SE").upper()
+    )
+
+    if by_item_id:
+        return _pickup_by_item_id_request(payload, item_ids)
+
     service = options.get("service") or provider_units.ShippingService.postnord_return_pickup.value
 
     # itemId is a PostNord item reference (SSCC, S10, ...); shipment
@@ -147,7 +163,23 @@ def pickup_request(
         ],
     )
 
-    return lib.Serializable(request, lib.to_dict)
+    return lib.Serializable(request, lib.to_dict, dict(by_item_id=False))
+
+
+def _pickup_by_item_id_request(
+    payload: models.PickupRequest,
+    item_ids: typing.List[str],
+) -> lib.Serializable:
+    request = [
+        postnord_ids_req.PickupIDSRequestElementType(
+            itemId=item_id,
+            earliestPickupDate=_window(payload.pickup_date, payload.ready_time),
+            latestPickupDate=_window(payload.pickup_date, payload.closing_time),
+        )
+        for item_id in item_ids
+    ]
+
+    return lib.Serializable(request, lib.to_dict, dict(by_item_id=True))
 
 
 def _window(date: typing.Optional[str], time: typing.Optional[str]) -> typing.Optional[str]:

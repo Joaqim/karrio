@@ -710,3 +710,8 @@ def is_service_available(service_code: str, issuer_code: str) -> bool:
         rule.allowed_issuer_codes is None
         or issuer_code in rule.allowed_issuer_codes
     )
+
+
+# Booking API /v3/pickups/ids: "Only supports domestic pickups of items in SE,
+# DK, FI".
+PICKUP_BY_ITEM_ID_COUNTRIES = ["SE", "DK", "FI"]

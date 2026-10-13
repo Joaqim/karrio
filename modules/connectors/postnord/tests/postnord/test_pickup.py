@@ -13,6 +13,7 @@ class TestPostNordPickup(unittest.TestCase):
     def setUp(self):
         self.maxDiff = None
         self.PickupRequest = models.PickupRequest(**PickupPayload)
+        self.PickupByItemIdRequest = models.PickupRequest(**PickupByItemIdPayload)
         self.PickupCancelRequest = models.PickupCancelRequest(**PickupCancelPayload)
 
     def test_create_pickup_request(self):
@@ -43,6 +44,43 @@ class TestPostNordPickup(unittest.TestCase):
                 karrio.Pickup.schedule(self.PickupRequest).from_(gateway).parse()
             )
             self.assertListEqual(lib.to_dict(parsed_response), ParsedErrorResponse)
+
+    def test_create_pickup_by_item_id_request(self):
+        request = gateway.mapper.create_pickup_request(self.PickupByItemIdRequest)
+        self.assertEqual(lib.to_dict(request.serialize()), PickupByItemIdRequest)
+
+    def test_schedule_pickup_by_item_id(self):
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = "{}"
+            karrio.Pickup.schedule(self.PickupByItemIdRequest).from_(gateway)
+            self.assertEqual(
+                mock.call_args[1]["url"],
+                f"{gateway.settings.server_url}/rest/shipment/v3/pickups/ids?apikey=TEST_API_KEY",
+            )
+
+    def test_parse_pickup_by_item_id_response(self):
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = PickupResponse
+            parsed_response = (
+                karrio.Pickup.schedule(self.PickupByItemIdRequest).from_(gateway).parse()
+            )
+            self.assertListEqual(lib.to_dict(parsed_response), ParsedPickupResponse)
+
+    def test_create_pickup_request_ignores_item_ids_outside_account_country(self):
+        for country_code in ["DK", "NO"]:
+            with self.subTest(country_code=country_code):
+                payload = {
+                    **PickupByItemIdPayload,
+                    "address": {**PickupByItemIdPayload["address"], "country_code": country_code},
+                }
+                request = gateway.mapper.create_pickup_request(
+                    models.PickupRequest(**payload)
+                )
+                serialized = lib.to_dict(request.serialize())
+                self.assertEqual(
+                    serialized["shipment"][0]["goodsItem"],
+                    [{"items": [{"itemIdentification": {"itemId": "0"}}]}],
+                )
 
     def test_cancel_pickup_unsupported(self):
         # PostNord has no pickup cancel endpoint: cancellation issues no HTTP
@@ -76,6 +114,14 @@ PickupPayload = {
         "company_name": "ACME Sender AB",
         "phone_number": "+46701234567",
         "email": "sender@example.com",
+    },
+}
+
+PickupByItemIdPayload = {
+    **PickupPayload,
+    "options": {
+        "shipment_identifiers": ["SHIP-0001", "SHIP-0002"],
+        "tracking_numbers": ["00370712345678901234", "00370712345678905678"],
     },
 }
 
@@ -153,6 +199,19 @@ PickupRequest = {
         }
     ],
 }
+
+PickupByItemIdRequest = [
+    {
+        "itemId": "00370712345678901234",
+        "earliestPickupDate": "2026-06-25T08:00:00",
+        "latestPickupDate": "2026-06-25T16:00:00",
+    },
+    {
+        "itemId": "00370712345678905678",
+        "earliestPickupDate": "2026-06-25T08:00:00",
+        "latestPickupDate": "2026-06-25T16:00:00",
+    },
+]
 
 PickupResponse = """{
   "bookingId": "PICKUP-555",
