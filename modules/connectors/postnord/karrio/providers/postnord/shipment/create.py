@@ -77,6 +77,9 @@ def _extract_details(
     ids = _assigned_ids(booking)
     urls = [url for info in informations for url in (info.urls or [])]
 
+    tracking_numbers = list(
+        dict.fromkeys(_id.value for _id in ids if _id.idType == "itemId" and _id.value)
+    )
     tracking_number = _first_item_id(booking)
     shipment_identifier = lib.identity(
         ctx.get("shipment_id")
@@ -86,6 +89,16 @@ def _extract_details(
     )
     tracking_url = next(
         (url.url for url in urls if (url.type or "").upper() == "TRACKING"), None
+    )
+    # The booking id is left out: cancel and pickup never send it, and the
+    # server forwards shipment_identifiers to the pickup request as item ids.
+    shipment_identifiers = list(
+        dict.fromkeys(
+            [
+                shipment_identifier,
+                *(_id.value for _id in ids if _id.idType == "shipmentId" and _id.value),
+            ]
+        )
     )
 
     printouts = response.labelPrintout or []
@@ -127,9 +140,9 @@ def _extract_details(
             **({"extra_documents": customs_documents} if customs_documents else {}),
         ),
         meta=dict(
-            booking_id=booking.bookingId,
-            tracking_url=tracking_url,
             carrier_tracking_link=tracking_url,
+            tracking_numbers=tracking_numbers,
+            shipment_identifiers=shipment_identifiers,
             **({"printout_composition": composed_kinds} if composed_kinds else {}),
         ),
     )

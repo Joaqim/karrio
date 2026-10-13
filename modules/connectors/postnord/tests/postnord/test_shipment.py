@@ -598,6 +598,25 @@ class TestPostNordShipment(unittest.TestCase):
                 lib.to_dict(parsed_response), ParsedPartialFailureResponse
             )
 
+    def test_parse_multi_parcel_shipment_response_meta(self):
+        # Every allocated itemId is a parcel tracking id; the booking id is
+        # not a shipment identifier karrio consumes and stays out of meta.
+        with patch("karrio.mappers.postnord.proxy.lib.request") as mock:
+            mock.return_value = MultiParcelShipmentResponse
+            details, messages = (
+                karrio.Shipment.create(self.ShipmentRequest).from_(gateway).parse()
+            )
+        self.assertEqual(messages, [])
+        self.assertEqual(details.tracking_number, "00373500454541020957")
+        self.assertDictEqual(
+            details.meta,
+            {
+                "carrier_tracking_link": "https://tracking.postnord.com/se/?id=00373500454541020957",
+                "tracking_numbers": ["00373500454541020957", "00373500454541020964"],
+                "shipment_identifiers": ["ORDER-7788"],
+            },
+        )
+
     def test_parse_authorization_error(self):
         # PostNord's API-gateway 403 envelope must surface a clear authorization
         # error (the key is not authorized for this product), not a silent
@@ -1578,6 +1597,28 @@ ShipmentResponse = """{
 
 ShipmentCancelResponse = "{}"
 
+MultiParcelShipmentResponse = """{
+  "bookingResponse": {
+    "bookingId": "BOOK-321",
+    "idInformation": [{
+      "status": "OK",
+      "ids": [
+        {"idType": "itemId", "value": "00373500454541020957", "printId": "P1"},
+        {"idType": "itemId", "value": "00373500454541020964", "printId": "P2"},
+        {"idType": "shipmentId", "value": "ORDER-7788", "printId": "P3"}
+      ],
+      "urls": [
+        {"type": "TRACKING", "url": "https://tracking.postnord.com/se/?id=00373500454541020957"}
+      ],
+      "errorResponse": null
+    }]
+  },
+  "labelPrintout": [{
+    "printout": {"type": "LABEL", "labelFormat": "PDF", "encoding": "base64", "data": "JVBERi0xLjQK"}
+  }]
+}"""
+
+
 ErrorResponse = """{
   "message": "Invalid indata object EdiInstruction",
   "compositeFault": {
@@ -1609,9 +1650,9 @@ ParsedShipmentResponse = [
         "label_type": "PDF",
         "docs": {"label": "JVBERi0xLjQK"},
         "meta": {
-            "booking_id": "BOOK-123",
-            "tracking_url": "https://tracking.postnord.com/se/?id=00373500454541020957",
             "carrier_tracking_link": "https://tracking.postnord.com/se/?id=00373500454541020957",
+            "tracking_numbers": ["00373500454541020957"],
+            "shipment_identifiers": ["ORDER-7788", "SHIP-0001"],
         },
     },
     [],
@@ -1737,9 +1778,9 @@ ParsedPartialFailureResponse = [
         "label_type": "PDF",
         "docs": {"label": "JVBERi0xLjQK"},
         "meta": {
-            "booking_id": "BOOK-456",
-            "tracking_url": "https://tracking.postnord.com/se/?id=00373500454541020958",
             "carrier_tracking_link": "https://tracking.postnord.com/se/?id=00373500454541020958",
+            "tracking_numbers": ["00373500454541020958"],
+            "shipment_identifiers": ["ORDER-7788"],
         },
     },
     [
