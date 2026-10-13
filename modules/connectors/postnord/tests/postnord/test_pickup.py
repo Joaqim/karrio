@@ -287,18 +287,6 @@ ParsedErrorResponse = [
     ],
 ]
 
-ParsedPickupByItemIdErrorResponse = [
-    None,
-    [
-        {
-            "carrier_id": "postnord",
-            "carrier_name": "postnord",
-            "message": "Edi not found for item Id: 00370712345678901234",
-            "details": {"summary": "General client indata error"},
-        }
-    ],
-]
-
 ParsedCancelPickupResponse = [
     None,
     [
@@ -307,6 +295,18 @@ ParsedCancelPickupResponse = [
             "carrier_name": "postnord",
             "code": "not_supported",
             "message": "PostNord has no pickup cancel endpoint; pickup bookings support only 'Original'.",
+        }
+    ],
+]
+
+ParsedPickupByItemIdErrorResponse = [
+    None,
+    [
+        {
+            "carrier_id": "postnord",
+            "carrier_name": "postnord",
+            "message": "Edi not found for item Id: 00370712345678901234",
+            "details": {"summary": "General client indata error"},
         }
     ],
 ]
