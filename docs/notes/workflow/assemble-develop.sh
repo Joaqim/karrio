@@ -38,6 +38,7 @@ BRANCHES=(
   fix-state-code-normalization
   fix-dashboard-carrier-options
   fix-dashboard-address-template-fields
+  fix-commodity-value-amount-input
   chore-sdk-pypdf
   chore-submodule-update-none
   fix-flocaltime-ampm

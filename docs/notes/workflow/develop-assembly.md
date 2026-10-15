@@ -11,7 +11,7 @@ The layout dates from the 2026-09-24 history rework; the previous linear `develo
 
 ## Branches
 
-The upstream-bound branches are `fix-core-small`, `fix-fedex-state-code-countries` (upstream pull request #1143), `fix-state-code-normalization` (upstream pull request #1141, on `fix-fedex-state-code-countries`), `fix-dashboard-carrier-options`, `fix-dashboard-address-template-fields`, `chore-sdk-pypdf`, `fix-flocaltime-ampm`, `feat-tracker-locale` (on `fix-flocaltime-ampm`), `feat-shipment-advisors` (on `upstream/main`), `docs-vendored-carrier-specs` and `feat-document-stamping` (on `chore-sdk-pypdf`).
+The upstream-bound branches are `fix-core-small`, `fix-fedex-state-code-countries` (upstream pull request #1143), `fix-state-code-normalization` (upstream pull request #1141, on `fix-fedex-state-code-countries`), `fix-dashboard-carrier-options`, `fix-dashboard-address-template-fields`, `fix-commodity-value-amount-input`, `chore-sdk-pypdf`, `fix-flocaltime-ampm`, `feat-tracker-locale` (on `fix-flocaltime-ampm`), `feat-shipment-advisors` (on `upstream/main`), `docs-vendored-carrier-specs` and `feat-document-stamping` (on `chore-sdk-pypdf`).
 Open their upstream pull requests in dependency order: `chore-sdk-pypdf` before `feat-document-stamping`, and `fix-flocaltime-ampm` before `feat-tracker-locale`.
 The PostNord connector family left `BRANCHES` in the 2026-10-13 extraction; the connector lives at `PrimePack-AB/karrio-postnord`, as DHL Freight Sweden has lived at `PrimePack-AB/karrio-dhl-freight-sweden` since its 2026-10-03 extraction.
 `fix-fedex-smartpost-declared-value` (#1142) was closed unmerged on 2026-09-25; its FedEx failure is fixed by `fix-fedex-state-code-countries` (#1143).
