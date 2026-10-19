@@ -12,13 +12,15 @@
 # karrio imports resolve into that worktree, run the test suite of every
 # connector that differs from upstream/main, then ./bin/run-sdk-tests; check
 # that develop-next contains every BRANCHES tip; move local develop to it when
-# the main checkout is clean. The worktree and develop-next are removed on
-# success and kept for inspection on failure. Nothing is pushed; the push
-# commands are printed at the end.
+# the main checkout is clean; tag the promoted develop with snapshot-tag.sh
+# when it differs from origin/develop. The worktree and develop-next are
+# removed on success and kept for inspection on failure. Nothing is pushed;
+# the push commands are printed at the end.
 set -euo pipefail
 
 owner=docs-openspec
 assembler=docs/notes/workflow/assemble-develop.sh
+snapshotter=docs/notes/workflow/snapshot-tag.sh
 target=develop-next
 promote=1
 sdk=1
@@ -65,8 +67,10 @@ fail() {
 }
 
 script=$(mktemp)
-trap 'rm -f "$script"' EXIT
+snapshot_script=$(mktemp)
+trap 'rm -f "$script" "$snapshot_script"' EXIT
 g show "$owner:$assembler" >"$script"
+g show "$owner:$snapshotter" >"$snapshot_script"
 mapfile -t BRANCHES < <(sed -n '/^BRANCHES=(/,/^)/p' "$script" | sed '1d;$d' | tr -d ' \t' | grep -v '^$')
 echo "assembler: $owner@$(g rev-parse --short "$owner"), ${#BRANCHES[@]} branches"
 
@@ -150,9 +154,18 @@ else
 fi
 cleanup
 
+deploy=0
+if ((promote)) && [[ "$(g rev-parse develop)" != "$(g rev-parse origin/develop)" ]]; then
+  deploy=1
+  snapshot=$(bash "$snapshot_script" -r "$repo" develop) || snapshot=
+fi
+
 echo
 echo "push commands (not run):"
-if ((promote)) && [[ "$(g rev-parse develop)" != "$(g rev-parse origin/develop)" ]]; then
+if ((deploy)) && [[ -n "$snapshot" ]]; then
+  echo "  git push --atomic --force-with-lease=develop:$(g rev-parse origin/develop) origin develop $snapshot"
+elif ((deploy)); then
+  echo "  (snapshot tag not created; run $snapshotter develop, then push develop and the tag together)"
   echo "  git push --force-with-lease=develop:$(g rev-parse origin/develop) origin develop"
 fi
 for b in "${BRANCHES[@]}"; do

@@ -57,6 +57,23 @@ The scripts live in `docs/notes/workflow/` on `develop` and `docs-openspec`; fro
    The log goes to `$XDG_STATE_HOME/agent-logs/karrio/`, because `logs/` is not ignored in this repository.
 6. Pushing is the user's decision.
    `rebuild-develop.sh` prints the push commands, with `--force-with-lease` pinned to the current `origin/develop`, and never runs them.
+   The `develop` push includes the new snapshot tag; see [Snapshot tags](#snapshot-tags).
+
+## Snapshot tags
+
+Each regeneration of `develop` makes the commits it previously pointed at unreachable, yet downstream consumers pin those commits by sha.
+Every deployed `develop` tip therefore gets an annotated tag `snapshot-YYYY.MM.DD.N`, where the date is the UTC committer date of the tagged commit and `N` starts at 1 and increments past the existing `snapshot-<date>.*` tags, local and on `origin`.
+`snapshot-tag.sh [rev]` creates the tag locally, defaulting to `develop`, and prints its name.
+If the commit already carries a `snapshot-*` tag, locally or on `origin`, it creates nothing and prints the existing name, so rerunning it on an identical rebuild is harmless.
+It never pushes.
+
+`rebuild-develop.sh` runs it after promoting a `develop` that differs from `origin/develop`, and prints one atomic push for both, `git push --atomic --force-with-lease=develop:<old-tip> origin develop <tag>`.
+When deploying by hand, run `snapshot-tag.sh develop` first and push the tag together with `develop` in the same way.
+
+A snapshot tag is transient, not a release: no GitHub Release is created for it, and its message says it may be deleted once nothing references it.
+That is the case once neither the jqpkgs pin in `/home/joaqim/projects/jqpkgs/pkgs/ka/karrio/package.nix` nor the `[tool.primepack] karrio-ref` of any release of `PrimePack-AB/karrio-postnord`, `PrimePack-AB/karrio-dhl-freight-sweden` or `PrimePack-AB/karrio-advisor-nordic-conventions`, in their `pyproject.toml`, refers to its commit.
+Deletion is manual and never automated: check those references, then delete the tag locally and with `git push origin :refs/tags/<tag>`.
+Long-lived pins for other consumers keep using the protected `pin/*` tags described below.
 
 ## When upstream merges a pull request
 
