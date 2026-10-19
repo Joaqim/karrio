@@ -1,0 +1,33 @@
+# DHL Freight Sweden zone coverage — review gate
+
+Branch: dhl-freight-sweden-zone-coverage. Scope: dcd1112e7..HEAD (one fix, one docs commit) against PRD v1.5 Resolved decision #17. Fresh-context review of the rate-sheet zone replacement for the four international parcel services in `units.DEFAULT_SERVICES` and the lane tests that pin it.
+
+## Review summary
+
+### Status: PASS
+
+### Verification performed
+
+- Connector suite: 39/39 tests pass (`source bin/activate-env && python -m unittest discover -v -f modules/connectors/dhl_freight_sweden/tests`), re-run green after the mutation probe below.
+- Mechanical three-way cross-check: a script extracted each country list from `units.py`, the `test_services.py` mirrors, and the PRD decision #17 row and compared them as ordered lists; set relations (112 = 109 minus FR; 232 = 109 minus HR plus CH/GB/GR) were computed, not eyeballed.
+- Mutation test of the drift guard: `PARCEL_CONNECT_B2C_COUNTRIES` was edited in `units.py` (SK replaced by XX), the suite run (FAILED, failures=1 in `test_zone_partition`), and the file restored via `git checkout`; the working tree was clean afterwards.
+- SDK gate inspection: `karrio.api.interface.Rating.fetch` (interface.py:327-344) and `Gateway.check` (gateway.py:40-69) read line-by-line to confirm the origin-gate claim and what the test helper bypasses; the connection-level `karrio.Rating.resolve` path (interface.py:383-434) and the server pre-filter (`karrio.server.core.utils.filter_rate_carrier_compatible_gateways`, utils.py:435-468) inspected for the residual statement.
+- Mixin semantics: `rating_proxy.py` `is_domicile`/`is_international` computation and `get_available_rates` flag logic traced for each of the five lane scenarios.
+
+### Findings
+
+1. [PASS] PRD compliance, decision #17. The PRD-recorded footprints match the `units.py` constants exactly: 109 carries 24 countries (AT BE BG CZ DE DK EE ES FI FR HR HU IE IT LT LU LV NL NO PL PT RO SI SK), 112 the same 23 minus FR, 232 26 countries adding CH/GB/GR and dropping HR, and 107 a Sweden-only zone. The 107 reverse-lane rationale (zone matches the recipient; domicile flag surfaces it because the mixin classifies delivery in the account country as domicile) and the postalCodeExcludes-not-expressible note are both present in the decision row and restated in the technical design section. Scope is exactly `units.py`, the two test files, and the PRD; no other file appears in the range.
+2. [PASS] Test coverage. The five lane tests assert what their comments claim, verified against the mixin: SE->PL and SE->DK expect the three outbound parcels plus the unrestricted freight products; SE->CH expects 232 only (CH is absent from both Parcel Connect footprints); SE->SE expects the 11 domestic products plus 107 with all three outbound parcels excluded; PL->SE expects the same domicile-classified set via the direct pipeline. The suite is unittest throughout with no pytest usage, and the connector's 39 tests all pass.
+3. [PASS] Code quality. The footprints are named module-level constants referenced by the service levels; the only duplicated literals are the deliberate test mirrors, which carry a comment stating why they are not imported from `units`. Fixtures stay module-level constants per the repo pattern, `karrio.lib` is used, no auto-generated file is touched, and no magic values appear beyond the mirrored lists.
+4. [PASS] Migration safety. Not applicable; the diff touches no migration and no file outside the connector's units/tests and the PRD.
+5. [PASS] Security. Hermetic only: the rating pipeline issues no HTTP call (re-confirmed by the no-http test), the fixture credentials are the pre-existing `TEST_CLIENT_KEY` placeholder, and no secret or network access was added.
+6. [PASS] Three-copy consistency. The units constants, the test mirrors, and the PRD token list for 109 are identical as ordered sequences, with no duplicates or stray entries; counts are 24/23/26 as recorded.
+7. [PASS] HR asymmetry. HR is present in the 109 and 112 lists and absent from 232, and 232 is exactly the 109 set minus HR plus CH, GB, and GR — matching the PRD-recorded catalog data rather than a transcription slip.
+8. [PASS] PL->SE bypass soundness. `Rating.fetch` runs `Gateway.check` (which appends `SHIPPING_SDK_ORIGIN_NOT_SERVICED_ERROR` when shipper country differs from `account_country_code="SE"`) and then exactly the three pipeline calls the helper makes: `mapper.create_rate_request`, `proxy.get_rates`, `mapper.parse_rate_response`. The connection-level `Rating.resolve` path builds `RatingMixinProxy` from settings directly with no origin gate, so the helper exercises the same code both reachable pipelines run. The residual is recorded honestly inside decision #17, and if anything conservatively: the server `Rates.fetch` additionally pre-filters gateways by shipper country when no explicit carrier ids are given, so the ordinary REST path is doubly gated. Minor note, not a defect: the unified path also applies `filter_rates` (connection-config service restriction) and `fail_safe` wrapping, both no-ops for the fixture gateway.
+9. [PASS] Drift guard efficacy, empirically confirmed. The guard is an order-sensitive `assertEqual` between each service's flattened zone country codes and a mirror literal that deliberately does not import from `units`, so any add, remove, reorder, or typo on either side fails the suite. A live mutation of the 109 list (SK to XX) in `units.py` failed the suite; the file was restored and the suite returned to green.
+10. [PASS] Domicile semantics sanity check. `rating_proxy.py` computes `is_domicile` as shipper country == recipient country or `account_country_code` == recipient country, so PL->SE classifies as domicile through the account-country clause exactly as the lane test and decision #17 describe. For the both-flags services (107/109/112/232) `cover_all_destination` is true, making the zone list the effective gate, while the freight products' `international=True` excludes them from the PL->SE lane and the domestic products' `domicile=True` includes them — the test's expected set is the mixin's documented behavior, not a claim that every domestic product is a real PL->SE return lane.
+11. [WARN] Mirror placement in `test_services.py`. The three catalog mirrors are defined below the `if __name__ == "__main__": unittest.main()` block, so executing the file directly would invoke `unittest.main()` before the constants are defined and fail with a NameError. Discovery, the documented invocation, imports the module fully and is unaffected; moving the mirrors above the test class would remove the trap.
+
+### Required actions
+
+None. The warning in finding 11 is an optional cleanup, not a merge blocker.
