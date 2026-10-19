@@ -4,7 +4,7 @@ title: Connector impact of fix-core-pickup-shipment-ids
 
 # Connector impact of fix-core-pickup-shipment-ids
 
-Notes for the deferred upstream pull request from branch `fix-core-pickup-shipment-ids` (commits `a9ec855d2` and `2013eef17`, based on `upstream/main` at `deea10f85`).
+Notes for upstream draft pull request #1149 from branch `fix-core-pickup-shipment-ids` (commits `a9ec855d2` and `2013eef17`, based on `upstream/main` at `deea10f85`).
 
 ## Change summary
 
@@ -30,6 +30,6 @@ No connector reads `options["tracking_numbers"]` for pickups, and no connector w
 
 ## Open verification
 
-dpd_meta `shipmentNumbers` must be checked to accept karrio shipment identifiers before the pull request is opened.
+Whether dpd_meta `shipmentNumbers` accepts karrio shipment identifiers is unverified; draft pull request #1149 carries this, and the teleship question below, as an open question for upstream review.
 The dpd_meta shipment mapper stores `shipment.shipmentId` as `shipment_identifier` (`shipment/create.py:57`), and it is not yet confirmed against the DPD META-API specification that the pickup endpoint's `shipmentNumbers` expects that value rather than a different shipment or parcel number.
 Teleship stores `shipment.shipmentId` likewise (`shipment/create.py:68`) and sends it as `shipmentIds`, which matches by name but is also unverified against the API.
