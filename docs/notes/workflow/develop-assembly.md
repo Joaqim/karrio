@@ -11,10 +11,11 @@ The layout dates from the 2026-09-24 history rework; the previous linear `develo
 
 ## Branches
 
-The upstream-bound branches are `fix-core-small`, `fix-core-pickup-shipment-ids` (upstream draft pull request #1149), `fix-fedex-state-code-countries` (upstream pull request #1143), `fix-state-code-normalization` (upstream pull request #1141, on `fix-fedex-state-code-countries`), `fix-dashboard-carrier-options`, `fix-dashboard-address-template-fields`, `fix-commodity-value-amount-input`, `chore-sdk-pypdf`, `fix-flocaltime-ampm`, `feat-tracker-locale` (on `fix-flocaltime-ampm`), `feat-shipment-advisors` (on `upstream/main`) and `feat-document-stamping` (on `chore-sdk-pypdf`).
+The upstream-bound branches are `fix-core-small` (upstream draft pull request #1152), `fix-core-pickup-shipment-ids` (upstream draft pull request #1149), `fix-fedex-state-code-countries` (upstream pull request #1143), `fix-state-code-normalization` (upstream pull request #1141, on `fix-fedex-state-code-countries`), `fix-dashboard-carrier-options`, `fix-dashboard-address-template-fields`, `fix-dashboard-notifier-carrier-id` (upstream draft pull request #1151), `fix-commodity-value-amount-input`, `chore-sdk-pypdf`, `fix-flocaltime-ampm`, `feat-tracker-locale` (on `fix-flocaltime-ampm`), `feat-shipment-advisors` (upstream draft pull request #1150, on `upstream/main`) and `feat-document-stamping` (on `chore-sdk-pypdf`).
 Open their upstream pull requests in dependency order: `chore-sdk-pypdf` before `feat-document-stamping`, and `fix-flocaltime-ampm` before `feat-tracker-locale`.
 The PostNord connector family left `BRANCHES` in the 2026-10-13 extraction; the connector lives at `PrimePack-AB/karrio-postnord`, as DHL Freight Sweden has lived at `PrimePack-AB/karrio-dhl-freight-sweden` since its 2026-10-03 extraction.
 `docs-vendored-carrier-specs` left `BRANCHES` on 2026-10-19, since the two extractions had removed its vendored specs and left it with no net diff against `upstream/main`.
+`fix-dashboard-notifier-carrier-id` was split out of `fix-core-small` on 2026-10-19, so that each upstream pull request covers one fix.
 `fix-fedex-smartpost-declared-value` (#1142) was closed unmerged on 2026-09-25; its FedEx failure is fixed by `fix-fedex-state-code-countries` (#1143).
 
 The fork-only branches are `chore-submodule-update-none`, `dev-nix-flake` and `docs-openspec`.
