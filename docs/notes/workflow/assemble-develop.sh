@@ -44,7 +44,6 @@ BRANCHES=(
   fix-flocaltime-ampm
   feat-tracker-locale
   feat-shipment-advisors
-  docs-vendored-carrier-specs
   feat-document-stamping
   dev-nix-flake
   docs-openspec
