@@ -34,6 +34,7 @@ force=0
 BRANCHES=(
   fix-core-small
   fix-core-pickup-shipment-ids
+  fix-pickup-cancel-capability-gate
   fix-fedex-state-code-countries
   fix-state-code-normalization
   fix-dashboard-carrier-options
