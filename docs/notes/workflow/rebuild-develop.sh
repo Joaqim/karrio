@@ -8,14 +8,16 @@
 #   -r repo       any checkout of the repository (default: the current directory)
 #
 # Steps: assemble develop-next with the assemble-develop.sh committed on
-# docs-openspec; detach its worktree; inside the nix dev shell, check that
-# karrio imports resolve into that worktree, run the test suite of every
-# connector that differs from upstream/main, then ./bin/run-sdk-tests; check
-# that develop-next contains every BRANCHES tip; move local develop to it when
-# the main checkout is clean; tag the promoted develop with snapshot-tag.sh
-# when it differs from origin/develop. The worktree and develop-next are
-# removed on success and kept for inspection on failure. Nothing is pushed;
-# the push commands are printed at the end.
+# docs-openspec; detach its worktree; stamp the prospective snapshot
+# version into the [project] table of every modules/*/pyproject.toml as one
+# commit; inside the nix dev shell, check that karrio imports resolve into
+# that worktree, run the test suite of every connector that differs from
+# upstream/main, then ./bin/run-sdk-tests; check that develop-next contains
+# every BRANCHES tip; move local develop to it when the main checkout is
+# clean; tag the promoted develop with snapshot-tag.sh when it differs from
+# origin/develop, asserting the tag matches the stamped version. The
+# worktree and develop-next are removed on success and kept for inspection
+# on failure. Nothing is pushed; the push commands are printed at the end.
 set -euo pipefail
 
 owner=docs-openspec
@@ -33,8 +35,8 @@ while (($#)); do
   --skip-sdk) sdk=0 ;;
   --shell) shell=${2:?--shell needs a name}; shift ;;
   -r) start=${2:?-r needs a path}; shift ;;
-  -h | --help) sed -n '2,18p' "$0"; exit 0 ;;
-  *) sed -n '2,18p' "$0" >&2; exit 2 ;;
+  -h | --help) sed -n '2,20p' "$0"; exit 0 ;;
+  *) sed -n '2,20p' "$0" >&2; exit 2 ;;
   esac
   shift
 done
@@ -77,6 +79,72 @@ echo "assembler: $owner@$(g rev-parse --short "$owner"), ${#BRANCHES[@]} branche
 bash "$script" -r "$repo" -t "$target" -w "$worktree" -f || fail "assembly"
 gw checkout -q --detach
 next=$(gw rev-parse HEAD)
+
+# Stamp the prospective snapshot version into every module pyproject so the
+# deployed tree and its tag agree: nixpkgs' pythonMetadataCheckPhase fails a
+# derivation whose version differs from the wheel METADATA version, and the
+# snapshot tag name is the derivation version (jqpkgs fetches
+# tag = "snapshot-${version}"). The stamp commit's dates are pinned to
+# 00:00:00 UTC of the current UTC day, so a rebuild of unchanged inputs on
+# the same day reproduces the identical commit.
+today=$(date -u +%Y.%m.%d)
+n=$(
+  {
+    g for-each-ref --format='%(refname:short)' "refs/tags/snapshot-$today.*"
+    g ls-remote --tags origin "refs/tags/snapshot-$today.*" |
+      sed -e 's#.*refs/tags/##' -e 's/\^{}$//'
+  } | awk -v p="snapshot-$today." '$0 ~ "^" p "[0-9]+$" { v = substr($0, length(p) + 1) + 0; if (v > m) m = v } END { print m + 1 }'
+) || fail "cannot list snapshot tags for $today"
+version=$today.$n
+expected_tag=snapshot-$version
+
+# Restamping an unchanged assembly would mint a new number for an identical
+# tree; when develop already stamps exactly the assembled commits, keep it.
+restamp=1
+if g rev-parse --verify -q refs/heads/develop >/dev/null &&
+  [[ "$(g log -1 --format=%s develop)" == "chore: stamp module versions for snapshot-"* ]] &&
+  [[ "$(g rev-parse develop~1)" == "$next" ]]; then
+  restamp=0
+fi
+
+if ((restamp)); then
+  stamp_date=$(date -u +%Y-%m-%dT00:00:00+00:00)
+  (
+    cd "$worktree"
+    shopt -s nullglob
+    files=(modules/*/pyproject.toml)
+    ((${#files[@]})) || { echo "no modules/*/pyproject.toml in $worktree" >&2; exit 1; }
+    for f in "${files[@]}"; do
+      awk -v v="$version" '
+        /^\[/ { inproj = 0 }
+        /^\[project\]$/ { inproj = 1 }
+        inproj && !done && /^version = / { print "version = \"" v "\""; done = 1; next }
+        { print }
+      ' "$f" >"$f.stamp" && mv "$f.stamp" "$f"
+    done
+    for f in "${files[@]}"; do
+      awk -v v="$version" '
+        /^\[/ { inproj = 0 }
+        /^\[project\]$/ { inproj = 1 }
+        inproj && $0 == "version = \"" v "\"" { ok = 1 }
+        END { exit ok ? 0 : 1 }
+      ' "$f" || { echo "no [project] version = \"$version\" in $f" >&2; exit 1; }
+    done
+    git -c submodule.recurse=false add -- "${files[@]}"
+    GIT_AUTHOR_DATE=$stamp_date GIT_COMMITTER_DATE=$stamp_date \
+      git -c submodule.recurse=false commit -q \
+      -m "chore: stamp module versions for snapshot-$version" \
+      -m "Signed-off-by: Joaqim Planstedt <mail@joaqim.xyz>"
+  ) || fail "version stamp"
+  echo "stamped $expected_tag on $(gw rev-parse --short HEAD)"
+  next=$(gw rev-parse HEAD)
+else
+  echo "skip   stamp (develop already stamps this assembly)"
+  expected_tag=
+  version=
+  gw reset -q --hard develop
+  next=$(gw rev-parse HEAD)
+fi
 
 mapfile -t connectors < <(
   g diff --name-only upstream/main "$next" -- modules/connectors/ | cut -d/ -f3 | sort -u
@@ -140,7 +208,7 @@ echo "contains all ${#BRANCHES[@]} BRANCHES tips"
 
 old=$(g rev-parse develop)
 if ((promote)); then
-  if [[ -n "$(git -C "$repo" status --porcelain)" ]]; then
+  if [[ -n "$(git -C "$repo" status --porcelain --untracked-files=no)" ]]; then
     fail "main checkout is dirty; develop not promoted"
   fi
   if [[ "$(g symbolic-ref -q --short HEAD)" == develop ]]; then
@@ -157,7 +225,14 @@ cleanup
 deploy=0
 if ((promote)) && [[ "$(g rev-parse develop)" != "$(g rev-parse origin/develop)" ]]; then
   deploy=1
-  snapshot=$(bash "$snapshot_script" -r "$repo" develop) || snapshot=
+  if [[ -n "$expected_tag" ]]; then
+    snapshot=$(bash "$snapshot_script" -r "$repo" develop) ||
+      fail "snapshot-tag.sh failed; develop carries stamp $version"
+    [[ "$snapshot" == "$expected_tag" ]] ||
+      fail "snapshot tag $snapshot does not match the stamped $expected_tag"
+  else
+    snapshot=$(bash "$snapshot_script" -r "$repo" develop) || snapshot=
+  fi
 fi
 
 echo

@@ -52,7 +52,7 @@ The scripts live in `docs/notes/workflow/` on `develop` and `docs-openspec`; fro
 3. Put working notes, openspec changes and this workflow on `docs-openspec`, and dev tooling, the nix flake and agent skills on `dev-nix-flake`.
 4. Never commit to `develop` or `main`.
 5. After committing to any `BRANCHES` member, including `docs-openspec` and `dev-nix-flake`, run `rebuild-develop.sh` from the main checkout.
-   It assembles `develop-next`, runs the touched connector suites and `./bin/run-sdk-tests` in the nix dev shell inside a detached worktree, checks that every `BRANCHES` tip is contained, and moves local `develop` only if the main checkout is clean and every check passed.
+   It assembles `develop-next`, stamps the prospective snapshot version into every `modules/*/pyproject.toml` as one commit, runs the touched connector suites and `./bin/run-sdk-tests` in the nix dev shell inside a detached worktree, checks that every `BRANCHES` tip is contained, and moves local `develop` only if the main checkout has no tracked modifications (untracked files, such as `.worktrees/`, do not block promotion) and every check passed.
    `--no-promote` stops after verification and `--skip-sdk` skips the full SDK run.
    The log goes to `$XDG_STATE_HOME/agent-logs/karrio/`, because `logs/` is not ignored in this repository.
 6. Pushing is the user's decision.
@@ -69,6 +69,11 @@ It never pushes.
 
 `rebuild-develop.sh` runs it after promoting a `develop` that differs from `origin/develop`, and prints one atomic push for both, `git push --atomic --force-with-lease=develop:<old-tip> origin develop <tag>`.
 When deploying by hand, run `snapshot-tag.sh develop` first and push the tag together with `develop` in the same way.
+
+Before verification, `rebuild-develop.sh` stamps the version into the `[project]` table of every `modules/*/pyproject.toml` as a single commit, `chore: stamp module versions for snapshot-<version>`, where `<version>` is the prospective tag name minus the `snapshot-` prefix.
+The stamp commit's dates are pinned to 00:00:00 UTC of that day, so rebuilding unchanged inputs on the same day reproduces the identical commit and mints no new tag; when `develop` already stamps exactly the assembled commits, the stamp is skipped and `develop` stays where it is.
+This keeps the tree and its tag self-consistent for jqpkgs, whose karrio package fetches `tag = "snapshot-${version}"`: the wheel METADATA version in the tagged tree equals the derivation version, as nixpkgs' `pythonMetadataCheckPhase` requires.
+After promoting, the script asserts that the tag `snapshot-tag.sh` created or found is the one it stamped, and aborts when they differ.
 
 A snapshot tag is transient, not a release: no GitHub Release is created for it, and its message says it may be deleted once nothing references it.
 That is the case once neither the jqpkgs pin in `/home/joaqim/projects/jqpkgs/pkgs/ka/karrio/package.nix` nor the `[tool.primepack] karrio-ref` of any release of `PrimePack-AB/karrio-postnord`, `PrimePack-AB/karrio-dhl-freight-sweden` or `PrimePack-AB/karrio-advisor-nordic-conventions`, in their `pyproject.toml`, refers to its commit.
