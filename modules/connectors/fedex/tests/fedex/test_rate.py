@@ -55,6 +55,24 @@ class TestFedExRating(unittest.TestCase):
 
         self.assertEqual(request.serialize(), RateStateCodeCountriesRequest)
 
+    def test_create_rate_request_with_state_names(self):
+        request = gateway.mapper.create_rate_request(
+            models.RateRequest(
+                **{
+                    **RatePayload,
+                    "shipper": {**RatePayload["shipper"], "state_code": "Québec"},
+                    "recipient": {
+                        "city": "New York",
+                        "postal_code": "10001",
+                        "country_code": "US",
+                        "state_code": "New York",
+                    },
+                }
+            )
+        )
+
+        self.assertEqual(request.serialize(), RateStateNamesRequest)
+
     def test_get_rate(self):
         with patch("karrio.mappers.fedex.proxy.lib.request") as mock:
             mock.return_value = "{}"
@@ -408,6 +426,30 @@ RateStateCodeCountriesRequest = {
                 "countryCode": "SE",
                 "postalCode": "11122",
                 "residential": False,
+            }
+        },
+    },
+}
+
+RateStateNamesRequest = {
+    **RateRequest,
+    "requestedShipment": {
+        **RateRequest["requestedShipment"],
+        "recipient": {
+            "address": {
+                "city": "New York",
+                "countryCode": "US",
+                "postalCode": "10001",
+                "residential": False,
+                "stateOrProvinceCode": "NY",
+            }
+        },
+        "shipper": {
+            "address": {
+                "countryCode": "CA",
+                "postalCode": "H3N1S4",
+                "residential": False,
+                "stateOrProvinceCode": "PQ",
             }
         },
     },
