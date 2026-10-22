@@ -41,6 +41,7 @@ BRANCHES=(
   fix-dashboard-address-template-fields
   fix-dashboard-notifier-carrier-id
   fix-commodity-value-amount-input
+  feat-connection-config-enum-list
   chore-sdk-pypdf
   chore-submodule-update-none
   fix-flocaltime-ampm
