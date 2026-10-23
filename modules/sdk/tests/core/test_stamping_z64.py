@@ -133,6 +133,9 @@ class TestZ64Compression(unittest.TestCase):
 
 
 class TestLibForwarding(unittest.TestCase):
+    def test_accepted_compressions_are_exported(self):
+        self.assertEqual(lib.STAMP_COMPRESSIONS, ("z64",))
+
     def test_lib_stamp_document_takes_every_stamping_parameter(self):
         self.assertEqual(
             list(inspect.signature(lib.stamp_document).parameters),

@@ -43,6 +43,7 @@ sort_events = utils.sort_events_chronologically
 StampPlacement = stamping.StampPlacement
 StampSeed = stamping.StampSeed
 STAMP_UNITS = stamping.STAMP_UNITS
+STAMP_COMPRESSIONS = stamping.STAMP_COMPRESSIONS
 CustomsClassification = stamping.CustomsClassification
 CustomsComposition = stamping.CustomsComposition
 AnyOf = stamping.AnyOf
