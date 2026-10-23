@@ -110,6 +110,7 @@ The utility composites pixels only: it stores nothing and asserts nothing about 
 | D29 | Keyword offsets | With a keyword, a consumer placement's `x` and `y` are optional offsets from the located anchor, each defaulting to 0, in the placement's unit; both may be given | A consumer measuring from the carrier's own text needs offsets without going through the registry |
 | D30 | Date strip | The date strip is drawn at its rendered aspect into its share and is not fitted; only the signature is fitted | The date renders at the strip's own size, so fitting it would only shift it by rounding |
 | D31 | Exports | `lib` exports `STAMP_UNITS`, `STAMP_COMPRESSIONS`, `DECLARATION_KINDS` and `COMBINED_DOC_TYPES` | Consumers and the endpoint validate against the same accepted values |
+| D32 | Endpoint validation errors | A 400 body carries `"details"` (the serializer `e.detail`) beside the generic message | Callers can see which placement field is missing or invalid; the generic message alone cannot name it. Call this out in the upstream PR description as a response-shape addition |
 
 ---
 
