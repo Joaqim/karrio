@@ -101,12 +101,15 @@ The utility composites pixels only: it stores nothing and asserts nothing about 
 | D20 | ZPL compression | Opt-in `compression="z64"`, emitting `^GFA,total,total,bpr,:Z64:<base64(zlib)>:<crc16>`, and with `graphic_name` the same Z64 data in `~DY<name>,A,G,total,bpr,:Z64:<base64(zlib)>:<crc16>`; the default stays byte-identical hex | A string leaves room for `:B64:` or ACS encodings without a second flag; the default keeps existing output stable; both Z64 paths are checked once on Labelary or a printer |
 | D21 | ZPL page | `placement.page` and the `page` argument select the Nth `^XA`...`^XZ` format, one-based; page 1 is the first format | One page vocabulary for both formats; the last-format default stamped the wrong label of a multi-format stream |
 | D22 | Shared PDF resources | The stamped page gets a private copy of its resources before the merge | pypdf merges into the page's resources in place, so pages sharing one `/Resources` object all received the image |
-| D23 | Paper detection | Measured on the stamped page when known before the key is composed (the `page` argument, or the page a consumer PDF keyword is found on), else page 1; re-detecting on the page a seed resolves to is a follow-up | A mixed-size document resolved the seed of its first page; a seed names its page only after the lookup |
+| D23 | Paper detection | Measured on the stamped page when known before the key is composed (the `page` argument, or the page a consumer PDF keyword is found on), else page 1; a PDF `page` argument is checked against the page count before the key is composed; re-detecting on the page a seed resolves to is a follow-up | A mixed-size document resolved the seed of its first page; a seed names its page only after the lookup; an out-of-range page measures no paper, and the resulting key miss would otherwise mask the page error |
 | D24 | `cn23` | A second carrier-neutral declaration kind, combined type `label_cn23`; a document with both kinds raises naming both | Carriers print CN23 for higher-value consignments; preferring one kind would make the anchor depend on which form the carrier printed |
-| D25 | Endpoint fields | `unit`, `keyword` and `compression` are accepted; `x`/`y` are optional, and a placement with one of them, or with neither and no keyword, answers 400 | Resolves the former Q2; keyword stamping was unreachable over REST |
-| D26 | Partial placement geometry | `stamp_document` raises `ValueError` for a placement with only one of `x`/`y`, or with neither and no keyword, naming the missing field or keyword | Both previously fell back to the registry silently and stamped where the caller did not ask |
+| D25 | Endpoint fields | `unit`, `keyword` and `compression` are accepted; `x`/`y` are optional, and without a keyword a placement with one of them, or with neither, answers 400 | Resolves the former Q2; keyword stamping was unreachable over REST |
+| D26 | Partial placement geometry | Without a keyword, `stamp_document` raises `ValueError` for a placement with only one of `x`/`y`, or with neither, naming the missing field or the keyword | Both previously fell back to the registry silently and stamped where the caller did not ask |
 | D27 | ZPL without `^LL` | Only the 0-32000 dot operand range is checked | No label length is known to check against |
-| D28 | Resources copy | A private copy whenever the stamped page's resources are indirect or inherited, not only when another page shares them | Keeps the rule local to the stamped page |
+| D28 | Resources copy | The stamped page always receives a private copy of its effective resources, whether they are its own, indirect or inherited | Keeps the rule local to the stamped page; a copy of resources the page already owns is harmless |
+| D29 | Keyword offsets | With a keyword, a consumer placement's `x` and `y` are optional offsets from the located anchor, each defaulting to 0, in the placement's unit; both may be given | A consumer measuring from the carrier's own text needs offsets without going through the registry |
+| D30 | Date strip | The date strip is drawn at its rendered aspect into its share and is not fitted; only the signature is fitted | The date renders at the strip's own size, so fitting it would only shift it by rounding |
+| D31 | Exports | `lib` exports `STAMP_UNITS`, `STAMP_COMPRESSIONS`, `DECLARATION_KINDS` and `COMBINED_DOC_TYPES` | Consumers and the endpoint validate against the same accepted values |
 
 ---
 
@@ -256,7 +259,7 @@ POST /v1/documents/stamp
 ```
 
 `image` and `document` are required, and inside `placement` so are `width` and `height`.
-`x` and `y` are given together or not at all; a placement without them is keyword geometry and needs `keyword`, and `keyword` with a placement carrying `x`/`y` answers 400.
+Without `keyword`, `x` and `y` are given together, and a placement with one of them or neither answers 400; with `keyword`, `x` and `y` are optional offsets from the located keyword, each defaulting to 0.
 
 ```json
 POST /v1/documents/stamp
@@ -286,17 +289,17 @@ The date strip takes the leading half `d` of the primary axis; both halves are p
 |-------|-----------|
 | PNG or unrecognized document bytes | `ValueError` naming the format |
 | No placement, no keyword, no seed for the key | `ValueError` naming `carrier/doc_type/FORMAT/paper` |
-| Keyword with a fully anchored placement | `ValueError`: two contradictory anchors |
+| Keyword with a placement carrying `x`/`y` | Offsets from the located keyword (D29) |
 | Keyword matching no `^FD` text, or no text run on the target PDF page | `ValueError` naming the keyword |
 | Keyword on a PDF whose target page carries no extractable text | `ValueError`: the keyword cannot be located without page text |
 | PDF keyword text not turned by a multiple of 90 degrees, skewed or mirrored | `ValueError` naming the keyword |
-| Negative `x`/`y`, non-positive `width`/`height` | `ValueError` naming the field |
+| Negative resolved `x`/`y`, non-positive `width`/`height` | `ValueError` naming the field |
 | `page` outside `1..page_count`, or beyond the ZPL format count | `ValueError` naming `StampPlacement.page` |
 | Unknown `unit` or `compression` | `ValueError` naming the accepted values |
 | PDF extent, rotated or not, leaving the mediabox | `ValueError` naming the edge |
 | ZPL extent past the `^LL` length or the `^PW` width | `ValueError` naming the bound, raised before the raster is built |
 | `compression="z64"` with `graphic_name` | `~DY` download carries the Z64 data; `^XG` recall unchanged |
-| Placement with only one of `x`/`y`, or neither without a keyword | `ValueError` naming the missing field or keyword; no registry fallback |
+| Placement without a keyword carrying only one of `x`/`y`, or neither | `ValueError` naming the missing field or keyword; no registry fallback |
 | Classification of a document with both `cn22` and `cn23` markers | `ValueError` naming both (D24) |
 | ZPL origin or extent outside 0-32000 dots | `ValueError`, raised before the raster is built |
 | PDF date strip above 20 000 px per side | `ValueError`, raised before rendering |
@@ -661,10 +664,10 @@ The image preparation itself (RGBA conversion, alpha trim, white flattening, the
       spliced before the selected format's ^XZ
 ```
 
-Units: `x`, `y`, `width` and `height` are converted to millimetres (`pt`: `v * 25.4 / 72`; `px`: `v * 25.4 / dpi`) at each entry point, idempotently, and an unknown unit raises.
+Units: `x`, `y`, `width` and `height` are converted to millimetres (`pt`: `v * 25.4 / 72`; `px`: `v * 25.4 / dpi`) at each entry point, idempotently, and an unknown unit raises; a consumer's keyword offsets are converted the same way.
 For ZPL, a `px` value at the placement's own `dpi` maps back to the same whole dot count, so a 400 x 140 `px` placement emits a 400 x 140-dot graphic.
 
-Fit: the trimmed image `(iw, ih)` scales by `s = min(bw / iw, bh / ih)` into its box `(bw, bh)`, which is the signature half when a date is set, and sits at `(0, (bh - ih * s) / 2)` in the box's pre-rotation frame.
+Fit: the trimmed image `(iw, ih)` scales by `s = min(bw / iw, bh / ih)` into its box `(bw, bh)`, which is the signature half when a date is set, and sits at `(0, (bh - ih * s) / 2)` in the box's pre-rotation frame; the date strip itself is not fitted (D30).
 The PDF merge uses one scale factor on both axes; the ZPL canvas stays box-sized, so the `^GFA` dimensions are unchanged.
 
 ZPL pages: the formats of a stream are the segments ending at each `^XZ`, plus a trailing segment only when it contains `^XA`, so `^FX` text between or after formats and a nested header `^XA` survive byte-identically and are never counted.
@@ -676,19 +679,21 @@ Without `^PW` only the length is checked, and without `^LL` only the 0-32000 ope
 Compression: `compression="z64"` emits `^GFA,{total},{total},{bpr},:Z64:{data}:{crc}`, where `data` is the padded standard base64 of `zlib.compress` over the packed rows and `crc` the CRC-16/XMODEM (polynomial 0x1021, initial value 0) of `data` as four uppercase hex digits; `None`, the default, emits the existing hex byte-identically, and other values raise.
 With `graphic_name`, the `~DY` download carries the same data as `~DY{name},A,G,{total},{bpr},:Z64:{data}:{crc}`, format `A` covering ASCII-encoded data, Z64 included, and the `^XG` recall is unchanged.
 
-Resources: before merging, the stamped page's effective resources (its own or inherited) are replaced by a direct copy of the top-level dictionary and the subdictionaries the merge writes into, so no other page changes.
+Resources: before every merge, the stamped page's effective resources (its own or inherited) are replaced by a direct copy of the top-level dictionary and the subdictionaries the merge writes into, so no other page changes (D28).
 
 Paper: the registry key's paper segment is measured on the `page` argument's page when given, else on the page a consumer PDF keyword is found on, else on page 1, since a seed names its page only after the lookup.
+A PDF `page` argument is validated against the page count before the key is composed, so an out-of-range page raises the page error rather than a registry miss for a `*` paper segment.
 Re-detecting the paper on the page a seed resolves to, and re-resolving when it differs, is a follow-up outside this section.
 
-Partial geometry: `stamp_document` raises before resolution for a placement with only one of `x`/`y` (naming the missing field) or with neither and no keyword (naming the keyword), beside the keyword-contradiction check, instead of falling back to the registry.
+Partial geometry: without a keyword, `stamp_document` raises before resolution for a placement with only one of `x`/`y` (naming the missing field) or with neither (naming the keyword), instead of falling back to the registry.
+Keyword offsets: with a keyword, the placement's `x` and `y` are optional offsets from the located anchor, each defaulting to 0, in label axes for ZPL and in the keyword's reading frame for PDF (D29).
 
 `cn23`: the classifier's declaration kinds are `cn22` and `cn23`, giving `cn23` or `label_cn23`; a document with both raises.
-`DECLARATION_KIND` and `COMBINED_DOC_TYPE` keep their `cn22` values.
+`DECLARATION_KIND` and `COMBINED_DOC_TYPE` keep their `cn22` values; `DECLARATION_KINDS` and `COMBINED_DOC_TYPES` list both kinds and are exported through `lib` with `STAMP_UNITS` and `STAMP_COMPRESSIONS` (D31).
 
-Endpoint: `StampPlacementData` gains `unit` and optional `x`/`y`, and `StampData` gains `keyword` and `compression`; one of `x`/`y`, or neither without a keyword, answers 400.
+Endpoint: `StampPlacementData` gains `unit` and optional `x`/`y`, and `StampData` gains `keyword` and `compression`; without a keyword, one of `x`/`y` or neither answers 400.
 
-Behaviour changes: a ZPL coordinate placement without a page stamps the first format instead of the last; images are no longer stretched; unrotated PDF placements past the mediabox and ZPL placements past `^LL`/`^PW` raise; partial placements that fell back to the registry raise.
+Behaviour changes: a ZPL coordinate placement without a page stamps the first format instead of the last; images are no longer stretched; unrotated PDF placements past the mediabox and ZPL placements past `^LL`/`^PW` raise; partial placements without a keyword that fell back to the registry raise; a keyword with a placement carrying `x`/`y` offsets the keyword instead of raising.
 
 ### Implementation plan
 
@@ -703,6 +708,8 @@ Behaviour changes: a ZPL coordinate placement without a page stamps the first fo
 | 8.6 | `fix(sdk): keep a stamp on its page when pdf pages share resources` | `stamping.py` (`stamp_pdf`), `stamping_helpers.py`, `modules/sdk/tests/core/test_stamping_pdf.py` |
 | 8.7 | `fix(sdk): detect the stamp paper variant on the stamped page` | `stamping.py` (`_detect_paper_variant`, `stamp_document`), `modules/sdk/tests/core/test_stamping_resolution.py` |
 | 8.8 | `feat(sdk): classify cn23 customs declarations` | `stamping.py` (declaration kinds), `modules/sdk/karrio/lib.py`, `modules/sdk/tests/core/test_stamping_classification.py` |
+| 8.4c | `feat(sdk): accept consumer offsets alongside a stamp keyword` | `stamping.py` (`stamp_document`), `modules/sdk/tests/core/test_stamping_resolution.py` |
+| 8.8b | `feat(sdk): export the accepted stamp compressions` | `modules/sdk/karrio/lib.py`, `modules/sdk/tests/core/test_stamping_z64.py` |
 | 8.9 | `feat(documents): accept stamp units, keywords and compression over rest` | `modules/documents/karrio/server/documents/serializers/base.py`, `views/stamping.py`, `tests/test_stamping.py` |
 
 Each commit is test-first: the new tests fail against the previous commit and pass with it.
@@ -729,9 +736,10 @@ Oracles are independent literals: `^FO` operands, `^GFA` headers, `cm` matrices,
 | Stamp page 2 of a shared-resources PDF | page 1 resources unchanged |
 | A4 page 1, letter page 2, `page=2` | letter seed |
 | Lone CN23; label plus CN23 on page 2; CN22 and CN23 | `cn23`; `label_cn23`, page 2; `ValueError` |
-| SDK placement with only `x`, only `y`, or neither without keyword, with a seed registered | `ValueError`; seed unused |
+| SDK placement without a keyword with only `x`, only `y`, or neither, with a seed registered | `ValueError`; seed unused |
+| Keyword with `x` only, with `x` and `y`, and with `px` offsets | offsets from the located `^FO` in each case |
 | `z64` with `graphic_name` | `~DY` Z64 data inflating to the hex golden's bytes; `^XG` unchanged |
-| REST keyword with a width/height-only placement; one of `x`/`y`; neither without keyword | 201; 400; 400 |
+| REST keyword with a width/height-only placement; one of `x`/`y` without keyword; neither without keyword | 201; 400; 400 |
 
 ```bash
 python -m unittest discover -v -f modules/sdk/tests
