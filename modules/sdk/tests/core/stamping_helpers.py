@@ -170,15 +170,20 @@ def _numbers(values) -> str:
     return " ".join(f"{float(value):.5f}" for value in values)
 
 
-def text_runs_pdf_b64(*pages: typing.Sequence[TextRun]) -> str:
-    """An A4 PDF whose pages set each run at an explicit text matrix.
+def text_runs_pdf_b64(
+    *pages: typing.Sequence[TextRun],
+    sizes: typing.Sequence[typing.Tuple[float, float]] = (),
+) -> str:
+    """A PDF whose pages set each run at an explicit text matrix.
 
-    Text is standard-14 Helvetica at 10 pt. A page given no runs carries no
-    content stream at all, so it yields no extractable text.
+    Pages are A4 unless ``sizes`` gives a page's ``(width, height)`` in
+    points. Text is standard-14 Helvetica at 10 pt. A page given no runs
+    carries no content stream at all, so it yields no extractable text.
     """
     writer = pypdf.PdfWriter()
-    for runs in pages:
-        page = writer.add_blank_page(width=595, height=842)
+    for page_index, runs in enumerate(pages):
+        width, height = sizes[page_index] if page_index < len(sizes) else (595, 842)
+        page = writer.add_blank_page(width=width, height=height)
         if not runs:
             continue
 

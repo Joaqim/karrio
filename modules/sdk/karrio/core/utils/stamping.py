@@ -587,6 +587,14 @@ def _clone_pdf(document_b64: str) -> "pypdf.PdfWriter":
     return writer
 
 
+def _pdf_page_count(document_b64: str) -> int:
+    """Return a base64 PDF's page count; an unparseable PDF raises."""
+    try:
+        return len(pypdf.PdfReader(helpers.to_buffer(document_b64)).pages)
+    except pypdf.errors.PyPdfError as error:
+        raise ValueError(f"The PDF document could not be parsed: {error}") from error
+
+
 def _validate_page(page: int, page_count: int) -> int:
     """Return the zero-based index of a one-based placement page.
 
@@ -1157,23 +1165,52 @@ def _nearest_paper_variant(width_pt: float, height_pt: float) -> str:
     return best[0] if best is not None else "*"
 
 
-def _detect_paper_variant(document_b64: str, document_format: str) -> str:
-    """Detect the paper-variant key segment from a document's first page.
+def _detect_paper_variant(
+    document_b64: str,
+    document_format: str,
+    page: typing.Optional[int] = None,
+    keyword: typing.Optional[str] = None,
+) -> str:
+    """Detect the paper-variant key segment from the page a stamp lands on.
 
-    Only the PDF backend carries a mediabox to measure; any other format, and
-    any first page that fails to parse, is inconclusive and yields ``*``
-    rather than raising, so paper detection never blocks a stamp.
+    The measured page is the one-based ``page`` when given, else the first
+    page whose text contains ``keyword`` when one is given and found, else
+    the first page. Only the PDF backend carries a mediabox to measure; any
+    other format, a page outside the document and a page that fails to parse
+    are inconclusive and yield ``*`` rather than raising, so paper detection
+    never blocks a stamp and the page validation that follows reports the
+    fault.
     """
     if document_format != "PDF":
         return "*"
 
     try:
-        page = pypdf.PdfReader(helpers.to_buffer(document_b64)).pages[0]
-    except (pypdf.errors.PdfReadError, IndexError):
+        pages = pypdf.PdfReader(helpers.to_buffer(document_b64)).pages
+        if page is not None:
+            if not 1 <= page <= len(pages):
+                return "*"
+            index = page - 1
+        elif keyword:
+            needle = _normalize_whitespace(keyword)
+            index = next(
+                (
+                    index
+                    for index, candidate in enumerate(pages)
+                    if any(
+                        needle in _normalize_whitespace(text)
+                        for text, _ in _page_text_runs(candidate)
+                    )
+                ),
+                0,
+            )
+        else:
+            index = 0
+        measured = pages[index]
+    except (pypdf.errors.PyPdfError, IndexError):
         return "*"
 
     return _nearest_paper_variant(
-        float(page.mediabox.width), float(page.mediabox.height)
+        float(measured.mediabox.width), float(measured.mediabox.height)
     )
 
 
@@ -1742,6 +1779,12 @@ def stamp_document(
             "(both x and y set); set the page on the placement instead"
         )
 
+    if page is not None and document_format == "PDF":
+        # Checked before the registry key is composed: an out-of-range page
+        # measures no paper, and the resulting key miss would otherwise mask
+        # the page fault.
+        _validate_page(page, _pdf_page_count(document.base64))
+
     if fully_anchored:
         resolved = placement
     elif keyword:
@@ -1751,7 +1794,9 @@ def stamp_document(
                 carrier,
                 doc_type,
                 document_format,
-                _detect_paper_variant(document.base64, document_format),
+                _detect_paper_variant(
+                    document.base64, document_format, page=page, keyword=keyword
+                ),
             )
             if registry is None:
                 geometry, frame = _seed_keyword_geometry(
@@ -1777,7 +1822,7 @@ def stamp_document(
             frame,
         )
     else:
-        paper = _detect_paper_variant(document.base64, document_format)
+        paper = _detect_paper_variant(document.base64, document_format, page=page)
         key = _registry_key(carrier, doc_type, document_format, paper)
         resolved = None
         if registry is None:

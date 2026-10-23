@@ -16,6 +16,7 @@ from .stamping_helpers import (
     LINE_KEYWORD_STREAM,
     MULTILINE_FD_STREAM,
     TWICE_KEYWORD_STREAM,
+    TextRun,
     b64,
     blank_pdf_b64,
     cms_in_y_band,
@@ -25,12 +26,15 @@ from .stamping_helpers import (
     form_pdf_b64,
     grf_fields,
     keyword_zpl_document,
+    overlay_cms,
     pdf_document,
     placement,
     providers,
     real_signature_b64,
     seeded_provider,
     signature_png_b64,
+    solid_black_png_b64,
+    text_runs_pdf_b64,
     zpl_placement,
 )
 
@@ -574,6 +578,79 @@ class TestKeywordSeeds(unittest.TestCase):
             )
 
         self.assertEqual(stamped.format, "PDF")
+
+
+class TestPaperDetectedOnTheStampedPage(unittest.TestCase):
+    """Page 1 is A4 and page 2 letter; the seeds differ per paper variant.
+
+    The A4 seed anchors at (40, 200) mm and its keyword geometry 5 mm along
+    the text; the letter seed at (20, 100) mm and 10 mm along. The images
+    match each box's aspect, so the leading cm is the box itself.
+    """
+
+    KEYWORD = "Sender signature"
+
+    def _seeds(self):
+        def seed(x, y, along):
+            return stamping.StampSeed(
+                placement=stamping.StampPlacement(x=x, y=y, width=60.0, height=20.0),
+                pdf_keyword_placement=stamping.StampPlacement(
+                    x=along, y=2.0, width=40.0, height=10.0
+                ),
+            )
+
+        return providers(
+            seeded_provider(
+                {
+                    "label_cn22/PDF/A4": seed(40.0, 200.0, 5.0),
+                    "label_cn22/PDF/LETTER": seed(20.0, 100.0, 10.0),
+                }
+            )
+        )
+
+    def _stamp(self, image, **kwargs):
+        document = models.ShippingDocument(
+            category="label",
+            format="PDF",
+            base64=text_runs_pdf_b64(
+                [TextRun("Tracked letter", (1, 0, 0, 1, 100, 700))],
+                [TextRun(self.KEYWORD, (1, 0, 0, 1, 100, 500))],
+                sizes=((595, 842), (612, 792)),
+            ),
+        )
+        with self._seeds():
+            return lib.stamp_document(
+                document,
+                image=image,
+                carrier="acme",
+                doc_type="label_cn22",
+                **kwargs,
+            ).base64
+
+    def test_page_argument_resolves_the_letter_seed(self):
+        stamped = self._stamp(solid_black_png_b64(600, 200), page=2)
+
+        # (20, 100) mm on the 792 pt letter page: bottom-left (56.693, 451.843).
+        self.assertEqual(overlay_cms(stamped, page_index=0), [])
+        ((_, _, _, _, e, f),) = overlay_cms(stamped, page_index=1)
+        self.assertAlmostEqual(e, 56.693, places=2)
+        self.assertAlmostEqual(f, 451.843, places=2)
+
+    def test_keyword_page_resolves_the_letter_geometry(self):
+        stamped = self._stamp(solid_black_png_b64(400, 100), keyword=self.KEYWORD)
+
+        # 10 mm (28.346 pt) along the keyword run starting at x 100 pt.
+        ((_, _, _, _, e, _),) = overlay_cms(stamped, page_index=1)
+        self.assertAlmostEqual(e, 128.346, places=2)
+
+    def test_without_either_the_first_page_resolves_the_a4_seed(self):
+        stamped = self._stamp(solid_black_png_b64(600, 200))
+
+        # (40, 200) mm on the 842 pt A4 page: bottom-left (113.386, 218.378).
+        ((_, _, _, _, e, f),) = overlay_cms(stamped, page_index=0)
+        self.assertAlmostEqual(e, 113.386, places=2)
+        self.assertAlmostEqual(f, 218.378, places=2)
+        self.assertEqual(overlay_cms(stamped, page_index=1), [])
 
 
 if __name__ == "__main__":
