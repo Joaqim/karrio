@@ -417,3 +417,140 @@ class TestDocumentStamper(APITestCase):
             response.status_code,
             (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN),
         )
+
+
+# A ZPL label whose keyword field sits at ^FO160,240.
+KEYWORD_ZPL_BASE64 = _zpl_doc_b64("^XA^FO160,240^FDSender signature^FS^XZ")
+# Two ZPL formats; the second opens just after the first ^XZ.
+TWO_FORMAT_ZPL = "^XA^FO10,10^GB100,100,2^FS^XZ^XA^FO20,20^GB50,50,1^FS^XZ"
+
+
+def _decoded(response) -> str:
+    return base64.b64decode(response.data["doc_file"]).decode("utf-8")
+
+
+class TestDocumentStamperGeometryFields(APITestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.url = reverse("karrio.server.documents:document-stamper")
+
+    def _post(self, **data):
+        return self.client.post(
+            self.url,
+            {"image": SIGNATURE_PNG_BASE64, **data},
+            format="json",
+        )
+
+    def test_keyword_with_an_extent_only_placement_stamps_zpl(self):
+        response = self._post(
+            document=KEYWORD_ZPL_BASE64,
+            keyword="Sender signature",
+            placement={"width": 60.0, "height": 20.0, "rotation": 0},
+        )
+
+        self.assertResponseNoErrors(response)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertDictEqual(
+            dict(response.data), {"doc_file": mock.ANY, "format": "ZPL"}
+        )
+        self.assertIn("^FO160,240^GFA,", _decoded(response))
+
+    def test_keyword_offsets_the_located_field(self):
+        # 10 mm and 5 mm at 203 dpi are 80 and 40 dots from ^FO160,240.
+        response = self._post(
+            document=KEYWORD_ZPL_BASE64,
+            keyword="Sender signature",
+            placement={"x": 10.0, "y": 5.0, "width": 60.0, "height": 20.0},
+        )
+
+        self.assertResponseNoErrors(response)
+        self.assertIn("^FO240,280^GFA,", _decoded(response))
+
+    def test_pixel_units_and_z64_compression(self):
+        response = self._post(
+            document=ZPL_DOCUMENT_BASE64,
+            placement={
+                "unit": "px",
+                "x": 40,
+                "y": 60,
+                "width": 400,
+                "height": 140,
+                "dpi": 203,
+            },
+            compression="z64",
+        )
+
+        self.assertResponseNoErrors(response)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn("^FO40,60^GFA,7000,7000,50,:Z64:", _decoded(response))
+
+    def test_page_two_stamps_the_second_zpl_format(self):
+        response = self._post(
+            document=_zpl_doc_b64(TWO_FORMAT_ZPL),
+            placement={**ZPL_PLACEMENT, "page": 2},
+        )
+
+        self.assertResponseNoErrors(response)
+        zpl = _decoded(response)
+        first_format = "^XA^FO10,10^GB100,100,2^FS^XZ"
+        self.assertTrue(zpl.startswith(first_format + "^XA^FO20,20^GB50,50,1^FS"))
+        self.assertGreater(zpl.index("^GFA,"), len(first_format))
+
+    def test_one_anchor_without_a_keyword_returns_400(self):
+        response = self._post(
+            document=A4_PDF_BASE64,
+            placement={"x": 40.0, "width": 60.0, "height": 20.0},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertDictEqual(
+            response.json(),
+            {
+                "errors": [
+                    {
+                        "message": "Invalid input data",
+                        "details": {
+                            "placement": [
+                                "StampPlacement.y is required with "
+                                "StampPlacement.x unless a keyword is supplied"
+                            ]
+                        },
+                    }
+                ]
+            },
+        )
+
+    def test_no_anchor_without_a_keyword_returns_400_naming_the_keyword(self):
+        response = self._post(
+            document=A4_PDF_BASE64,
+            placement={"width": 60.0, "height": 20.0},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertDictEqual(
+            response.json(),
+            {
+                "errors": [
+                    {
+                        "message": "Invalid input data",
+                        "details": {
+                            "placement": [
+                                "A placement without x and y needs a keyword "
+                                "to locate it"
+                            ]
+                        },
+                    }
+                ]
+            },
+        )
+
+    def test_unknown_unit_or_compression_returns_400(self):
+        for field, data in (
+            ("placement", {"placement": {**PDF_PLACEMENT, "unit": "in"}}),
+            ("compression", {"placement": PDF_PLACEMENT, "compression": "gzip"}),
+        ):
+            with self.subTest(field=field):
+                response = self._post(document=A4_PDF_BASE64, **data)
+
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertIn(field, response.json()["errors"][0]["details"])

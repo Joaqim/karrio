@@ -95,15 +95,36 @@ class StampPlacementData(serializers.Serializer):
         required=False,
         default=1,
         min_value=1,
-        help_text="1-based page index",
+        help_text="1-based PDF page or ZPL ^XA...^XZ format index",
     )
-    x = serializers.FloatField(help_text="Millimetres from the page top-left")
-    y = serializers.FloatField(help_text="Millimetres from the page top-left")
+    unit = serializers.ChoiceField(
+        choices=lib.STAMP_UNITS,
+        required=False,
+        default="mm",
+        help_text=(
+            "Unit of x, y, width and height: mm, pt (1/72 in), or px (printer "
+            "dots at dpi for ZPL, pixels of the page rendered at dpi for PDF)"
+        ),
+    )
+    x = serializers.FloatField(
+        required=False,
+        help_text=(
+            "Offset from the page top-left, or from the located keyword when "
+            "a keyword is supplied; required with y otherwise"
+        ),
+    )
+    y = serializers.FloatField(
+        required=False,
+        help_text=(
+            "Offset from the page top-left, or from the located keyword when "
+            "a keyword is supplied; required with x otherwise"
+        ),
+    )
     width = serializers.FloatField(
-        help_text="Draw width in millimetres before rotation",
+        help_text="Box width before rotation; the image is fitted inside it",
     )
     height = serializers.FloatField(
-        help_text="Draw height in millimetres before rotation",
+        help_text="Box height before rotation; the image is fitted inside it",
     )
     rotation = serializers.FloatField(
         required=False,
@@ -116,7 +137,7 @@ class StampPlacementData(serializers.Serializer):
     dpi = serializers.IntegerField(
         required=False,
         default=203,
-        help_text="ZPL target density; ignored by the PDF backend",
+        help_text="ZPL target density, and the render density of px on PDF",
     )
 
 
@@ -129,7 +150,18 @@ class StampData(serializers.Serializer):
     )
     placement = StampPlacementData(
         required=False,
-        help_text="Anchor rectangle; omit only when a carrier/doc_type seed exists",
+        help_text=(
+            "Anchor rectangle, or the keyword geometry when a keyword is "
+            "supplied; omit only when a keyword or a carrier/doc_type seed "
+            "resolves it"
+        ),
+    )
+    keyword = serializers.CharField(
+        required=False,
+        help_text=(
+            "Text printed on the carrier document that the stamp is anchored "
+            "to; the placement's x and y become offsets from it"
+        ),
     )
     layer = serializers.ChoiceField(
         choices=["overlay", "underlay"],
@@ -165,10 +197,41 @@ class StampData(serializers.Serializer):
         required=False,
         min_value=1,
         help_text=(
-            "One-based PDF page on which the carrier/doc_type seed is applied "
-            "instead of the seed's own page; rejected with a placement or ZPL"
+            "One-based PDF page or ZPL format on which the seed or keyword is "
+            "applied; rejected with a placement carrying x and y and no keyword"
         ),
     )
+    compression = serializers.ChoiceField(
+        choices=lib.STAMP_COMPRESSIONS,
+        required=False,
+        help_text="ZPL graphic compression; omit for uncompressed hex",
+    )
+
+    def validate(self, data):
+        placement = data.get("placement")
+        if placement is None or data.get("keyword"):
+            return data
+
+        anchors = [field for field in ("x", "y") if placement.get(field) is not None]
+        if len(anchors) == 1:
+            (given,) = anchors
+            missing = "y" if given == "x" else "x"
+            raise serializers.ValidationError(
+                {
+                    "placement": (
+                        f"StampPlacement.{missing} is required with "
+                        f"StampPlacement.{given} unless a keyword is supplied"
+                    )
+                }
+            )
+        if not anchors:
+            raise serializers.ValidationError(
+                {
+                    "placement": "A placement without x and y needs a keyword to locate it"
+                }
+            )
+
+        return data
 
 
 class StampedDocument(serializers.Serializer):

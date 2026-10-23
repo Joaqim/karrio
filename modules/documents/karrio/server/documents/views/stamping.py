@@ -71,7 +71,9 @@ class DocumentStamper(api.BaseAPIView):
                     doc_type=data.get("doc_type"),
                     date=data.get("date"),
                     graphic_name=data.get("graphic_name"),
+                    keyword=data.get("keyword"),
                     page=data.get("page"),
+                    compression=data.get("compression"),
                 )
 
                 result = serializers.StampedDocument.map(
@@ -95,7 +97,7 @@ class DocumentStamper(api.BaseAPIView):
         except serializers.ValidationError as e:
             logger.error("Document stamp validation error", error=str(e))
             return Response(
-                {"errors": [{"message": "Invalid input data"}]},
+                {"errors": [{"message": "Invalid input data", "details": e.detail}]},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         except Exception as e:
