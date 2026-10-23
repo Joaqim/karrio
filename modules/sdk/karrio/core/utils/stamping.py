@@ -61,6 +61,10 @@ DocumentSections = typing.Mapping[str, typing.Mapping[str, SectionMarkers]]
 MM_PER_INCH: float = 25.4
 POINTS_PER_INCH: float = 72.0
 
+# Units a placement's x, y, width and height may be given in: millimetres,
+# PDF points (1/72 in) and pixels at the placement's dpi.
+STAMP_UNITS: typing.Tuple[str, ...] = ("mm", "pt", "px")
+
 # ZPL ^FO and graphic operands are valid from 0 to 32000 dots, so any placement
 # whose rotated origin or extent resolves outside that range is rejected rather
 # than emitted as out-of-spec ZPL that printers interpret inconsistently.
@@ -112,12 +116,15 @@ PAPER_VARIANT_TOLERANCE_MM: float = 3.0
 class StampPlacement:
     """Anchor rectangle for compositing an image onto a document page.
 
-    Coordinates are millimetres measured from the top-left of a one-based
-    ``page`` index. ``width`` and ``height`` are the image's dimensions before
-    rotation; a nonzero ``rotation`` (degrees clockwise) rotates the image and
-    anchors the rotated extent's top-left corner at ``(x, y)``, so the anchor
-    means the same thing rotated or upright. ``dpi`` is the ZPL target density
-    and is ignored by the PDF backend.
+    Coordinates are measured in ``unit`` from the top-left of a one-based
+    ``page`` index. ``unit`` is one of ``STAMP_UNITS``: ``mm`` (the default),
+    ``pt`` (1/72 in) or ``px``, which means printer dots at ``dpi`` for ZPL and
+    pixels of the PDF page rendered at ``dpi`` for PDF. ``width`` and
+    ``height`` are the image's dimensions before rotation; a nonzero
+    ``rotation`` (degrees clockwise) rotates the image and anchors the rotated
+    extent's top-left corner at ``(x, y)``, so the anchor means the same thing
+    rotated or upright. ``dpi`` is the ZPL target density, and the PDF backend
+    reads it only to convert ``px``.
     """
 
     page: int = 1
@@ -127,6 +134,7 @@ class StampPlacement:
     height: float = None
     rotation: float = 0
     dpi: int = 203
+    unit: str = "mm"
 
 
 @attr.s(auto_attribs=True)
@@ -212,6 +220,49 @@ def dots_to_mm(value: float, dpi: int) -> float:
     rounds back to whole dots inside the ZPL backend.
     """
     return value * MM_PER_INCH / dpi
+
+
+def _normalize_units(
+    placement: typing.Optional[StampPlacement],
+) -> typing.Optional[StampPlacement]:
+    """Return ``placement`` with its measures converted to millimetres.
+
+    ``x``, ``y``, ``width`` and ``height`` convert from the placement's unit
+    (``pt``: ``v * 25.4 / 72``; ``px``: ``v * 25.4 / dpi``) and the result
+    carries ``unit="mm"``, so normalizing twice is a no-op; ``None`` measures,
+    ``page``, ``rotation`` and ``dpi`` are left as they are. An unknown unit,
+    or ``px`` without a positive ``dpi``, raises ``ValueError``.
+    """
+    if placement is None or placement.unit == "mm":
+        return placement
+
+    if placement.unit not in STAMP_UNITS:
+        raise ValueError(
+            f"StampPlacement.unit must be one of {', '.join(STAMP_UNITS)} "
+            f"(got {placement.unit!r})"
+        )
+
+    if placement.unit == "px" and not (placement.dpi and placement.dpi > 0):
+        raise ValueError(
+            "StampPlacement.dpi must be a positive density to convert px "
+            f"measures (got {placement.dpi})"
+        )
+
+    per_unit = MM_PER_INCH / (
+        POINTS_PER_INCH if placement.unit == "pt" else placement.dpi
+    )
+
+    return attr.evolve(
+        placement,
+        unit="mm",
+        **{
+            field: None if value is None else value * per_unit
+            for field, value in (
+                (field, getattr(placement, field))
+                for field in ("x", "y", "width", "height")
+            )
+        },
+    )
 
 
 def placement_to_pdf_rect(
@@ -499,7 +550,7 @@ def stamp_pdf(document_b64: str, request: StampRequest) -> str:
     (un-rotated) axis and the signature the remainder; both are parts of the
     one rotated rectangle. The page count is invariant.
     """
-    placement = request.placement
+    placement = _normalize_units(request.placement)
     _validate_anchor(placement)
     writer = _clone_pdf(document_b64)
 
@@ -818,6 +869,7 @@ def stamp_zpl(document_b64: str, request: StampRequest) -> str:
     if request.graphic_name:
         _validate_graphic_name(request.graphic_name)
 
+    request = attr.evolve(request, placement=_normalize_units(request.placement))
     placement = request.placement
     _validate_anchor(placement)
     x_dots = mm_to_dots(placement.x, placement.dpi)
@@ -1418,6 +1470,7 @@ def stamp_document(
             "only a PDF document has pages to select"
         )
 
+    placement = _normalize_units(placement)
     fully_anchored = (
         placement is not None and placement.x is not None and placement.y is not None
     )
@@ -1462,7 +1515,12 @@ def stamp_document(
                     f"'{key}'"
                 )
         resolved, zpl_format = _resolve_keyword(
-            document_format, document.base64, keyword, geometry, page, frame
+            document_format,
+            document.base64,
+            keyword,
+            _normalize_units(geometry),
+            page,
+            frame,
         )
     else:
         paper = _detect_paper_variant(document.base64, document_format)
@@ -1476,14 +1534,14 @@ def stamp_document(
                     document_format,
                     document.base64,
                     seed.keyword,
-                    geometry,
+                    _normalize_units(geometry),
                     page,
                     frame,
                 )
             elif seed is not None and document_format != "ZPL":
-                resolved = seed.placement
+                resolved = _normalize_units(seed.placement)
         else:
-            resolved = registry(key)
+            resolved = _normalize_units(registry(key))
         if resolved is None:
             raise ValueError(
                 "No stamp placement was supplied and no registry seed "
