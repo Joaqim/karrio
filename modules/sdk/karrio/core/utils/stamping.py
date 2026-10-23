@@ -40,8 +40,10 @@ import io
 import re
 import enum
 import math
+import zlib
 import base64
 import typing
+import binascii
 
 import attr
 import pypdf
@@ -64,6 +66,10 @@ POINTS_PER_INCH: float = 72.0
 # Units a placement's x, y, width and height may be given in: millimetres,
 # PDF points (1/72 in) and pixels at the placement's dpi.
 STAMP_UNITS: typing.Tuple[str, ...] = ("mm", "pt", "px")
+
+# Encodings the ZPL backend may compress its graphic data with; None, the
+# default, emits uncompressed hex.
+STAMP_COMPRESSIONS: typing.Tuple[str, ...] = ("z64",)
 
 # ZPL ^FO and graphic operands are valid from 0 to 32000 dots, so any placement
 # whose rotated origin or extent resolves outside that range is rejected rather
@@ -155,7 +161,9 @@ class StampRequest:
     label with ``^XG`` instead of inlining ``^GFA``; the PDF backend ignores it.
     The placement's ``page`` names the PDF page or, for ZPL, the one-based
     ``^XA``...``^XZ`` format the field is spliced into (see
-    :func:`_zpl_formats`).
+    :func:`_zpl_formats`). ``compression`` is ``None`` for uncompressed hex
+    graphic data or one of ``STAMP_COMPRESSIONS`` (see :func:`_zpl_graphic_data`);
+    the PDF backend ignores it.
     """
 
     image: str = None
@@ -163,6 +171,7 @@ class StampRequest:
     layer: str = "overlay"
     date: str = None
     graphic_name: str = None
+    compression: typing.Optional[str] = None
 
 
 @attr.s(auto_attribs=True)
@@ -703,6 +712,33 @@ def _encode_grf(image: "PIL.Image.Image") -> typing.Tuple[str, int, int]:
     return "".join(rows), bytes_per_row * height, bytes_per_row
 
 
+def _validate_compression(compression: typing.Optional[str]) -> None:
+    """Reject a ZPL graphic compression other than ``None`` or a known one."""
+    if compression is not None and compression not in STAMP_COMPRESSIONS:
+        raise ValueError(
+            f"The stamp compression must be omitted or one of "
+            f"{', '.join(STAMP_COMPRESSIONS)} (got {compression!r})"
+        )
+
+
+def _zpl_graphic_data(hexdata: str, compression: typing.Optional[str]) -> str:
+    """Return the data operand of a ``^GFA`` or ``~DY`` graphic.
+
+    Without ``compression`` it is the uppercase hex itself. With ``z64`` it is
+    ``:Z64:<data>:<crc>``, where ``<data>`` is the padded standard base64 of
+    the zlib-compressed packed rows and ``<crc>`` the CRC-16/XMODEM
+    (polynomial 0x1021, initial value 0) of ``<data>`` as four uppercase hex
+    digits; the command's byte counts stay the uncompressed ones.
+    """
+    if compression is None:
+        return hexdata
+
+    data = base64.b64encode(zlib.compress(bytes.fromhex(hexdata))).decode("ascii")
+    crc = binascii.crc_hqx(data.encode("ascii"), 0)
+
+    return f":Z64:{data}:{crc:04X}"
+
+
 ZPL_FORMAT_CLOSE: str = "^XZ"
 
 
@@ -989,7 +1025,9 @@ def stamp_zpl(document_b64: str, request: StampRequest) -> str:
     ``request.date`` is composited into the same raster preceding the
     signature. The field is spliced into the format the placement's ``page``
     selects, the first by default (see :func:`_splice_zpl_field`).
-    ``request.graphic_name`` opts into the ``~DY`` / ``^XG`` send-once cache. ZPL has no z-order, so an ``underlay`` layer (letterhead)
+    ``request.graphic_name`` opts into the ``~DY`` / ``^XG`` send-once cache,
+    and ``request.compression`` into Z64 graphic data for the inline graphic
+    or the download alike. ZPL has no z-order, so an ``underlay`` layer (letterhead)
     is out of practical scope and is rejected.
     """
     if request.layer == "underlay":
@@ -1001,6 +1039,7 @@ def stamp_zpl(document_b64: str, request: StampRequest) -> str:
     if request.graphic_name:
         _validate_graphic_name(request.graphic_name)
 
+    _validate_compression(request.compression)
     request = attr.evolve(request, placement=_normalize_units(request.placement))
     placement = request.placement
     _validate_anchor(placement)
@@ -1024,14 +1063,15 @@ def stamp_zpl(document_b64: str, request: StampRequest) -> str:
     _validate_zpl_operands(x_dots, y_dots, *raster.size)
     _validate_zpl_label((x_dots, y_dots), raster.size, label, page)
     hexdata, total, bytes_per_row = _encode_grf(raster)
+    data = _zpl_graphic_data(hexdata, request.compression)
 
     if request.graphic_name:
-        download = f"~DY{request.graphic_name},A,G,{total},{bytes_per_row},{hexdata}"
+        download = f"~DY{request.graphic_name},A,G,{total},{bytes_per_row},{data}"
         field = f"^FO{x_dots},{y_dots}^XG{request.graphic_name},1,1^FS"
         result = f"{download}\n{_splice_zpl_field(stream, field, placement.page)}"
     else:
         field = (
-            f"^FO{x_dots},{y_dots}^GFA,{total},{total}," f"{bytes_per_row},{hexdata}^FS"
+            f"^FO{x_dots},{y_dots}^GFA,{total},{total}," f"{bytes_per_row},{data}^FS"
         )
         result = _splice_zpl_field(stream, field, placement.page)
 
@@ -1548,6 +1588,7 @@ def stamp_document(
     graphic_name: str = None,
     keyword: str = None,
     page: int = None,
+    compression: str = None,
 ) -> models.ShippingDocument:
     """Composite a base64 PNG onto a returned carrier document.
 
@@ -1596,6 +1637,10 @@ def stamp_document(
     raises. Combined with a fully anchored placement, which already names its
     page, it raises as a second, contradictory anchor.
 
+    ``compression`` selects the ZPL graphic encoding, ``None`` for
+    uncompressed hex or ``z64`` (see :class:`StampRequest`); any other value
+    raises, whatever the document's format.
+
     The utility composites pixels only: it stores nothing and makes no
     assertion about the legal validity or signature semantics of the result.
     """
@@ -1611,6 +1656,7 @@ def stamp_document(
             f"'{document_format}' format; the document cannot be stamped"
         )
 
+    _validate_compression(compression)
     placement = _normalize_units(placement)
     fully_anchored = (
         placement is not None and placement.x is not None and placement.y is not None
@@ -1718,6 +1764,7 @@ def stamp_document(
         layer=layer,
         date=date,
         graphic_name=graphic_name,
+        compression=compression,
     )
     stamped = _BACKENDS[document_format](document.base64, request)
 

@@ -637,3 +637,13 @@ def stamp_field(zpl: str) -> str:
     """Return the one inline stamp field ``^FO..^GFA..^FS`` in a stream."""
     (field,) = re.findall(r"\^FO\d+,\d+\^GFA,[^^]*\^FS", zpl)
     return field
+
+
+def rows_png_b64(rows: typing.Sequence[str]) -> str:
+    """An opaque PNG whose pixel rows are drawn from ``#`` (ink) and ``.``."""
+    image = PIL.Image.new("RGBA", (len(rows[0]), len(rows)), (255, 255, 255, 255))
+    for y, row in enumerate(rows):
+        for x, cell in enumerate(row):
+            if cell == "#":
+                image.putpixel((x, y), (0, 0, 0, 255))
+    return _png_b64(image)
