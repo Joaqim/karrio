@@ -29,13 +29,14 @@ The geometry around that raster is what misleads consumers:
   `stamp_document(page=)` selects the format for ZPL instead of raising.
 - A placement whose resolved rectangle leaves the PDF mediabox, or the ZPL label (`^LL` length, and `^PW` width when present), raises `ValueError`, which the endpoint maps to 400; the check applies to the final resolved rectangle only, never to keyword-relative offsets.
 - An opt-in `compression="z64"` emits ZPL graphics as `^GFA,total,total,bpr,:Z64:<base64(zlib)>:<crc16>`; the `~DY` download of the `graphic_name` cache carries the same Z64 data; the default stays byte-identical uncompressed hex.
-- `stamp_document` raises for partial placement geometry, a placement with only one of `x`/`y` or with neither and no keyword, instead of silently falling back to the registry.
+- Without a keyword, `stamp_document` raises for partial placement geometry, a placement with only one of `x`/`y` or with neither, instead of silently falling back to the registry; with a keyword, the placement's `x` and `y` are optional offsets from the located anchor, each defaulting to 0.
+- `karrio.lib` exports the accepted units, compressions, declaration kinds and combined document types.
 - The stamped PDF page gets its own resources copy, so shared `/Resources` no longer leak the stamp to other pages.
 - The paper variant used in the registry key is detected from the stamped page rather than page 1.
 - Classification gains a carrier-neutral `cn23` declaration kind, with the combined type `label_cn23`; consumers add their own `label_cn23` seeds.
-- The REST endpoint accepts `unit`, a top-level `keyword` and `compression`, and `x`/`y` become optional for keyword placement.
+- The REST endpoint accepts `unit`, a top-level `keyword` and `compression`, and `x`/`y` become optional, acting as offsets beside a keyword.
 
-Behaviour changes for existing callers: a ZPL coordinate placement without an explicit page now stamps the first format instead of the last; images whose aspect differs from their box are no longer stretched; unrotated PDF placements extending past the mediabox and ZPL placements extending past `^LL`/`^PW` now raise; partial placements that previously fell back to the registry now raise.
+Behaviour changes for existing callers: a ZPL coordinate placement without an explicit page now stamps the first format instead of the last; images whose aspect differs from their box are no longer stretched; unrotated PDF placements extending past the mediabox and ZPL placements extending past `^LL`/`^PW` now raise; partial placements without a keyword that previously fell back to the registry now raise; a keyword beside a placement carrying `x` and `y` now offsets the keyword instead of raising.
 
 Out of scope: a byte cap on the emitted graphic or the request payload (kept as an open question in design.md), `^LH` and `^FT` offsets in bounds or keyword location, the consumers' `label_cn23` seeds, and re-detecting the paper on a seed's own page after the lookup (a follow-up in design.md).
 

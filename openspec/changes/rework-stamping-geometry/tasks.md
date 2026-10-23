@@ -31,6 +31,7 @@ SDK tests run with `python -m unittest discover -v -f modules/sdk/tests`, and se
 - [x] 4.2 Replace `_validate_pdf_extent`'s rotated-only use with a check of every final rectangle, add the ZPL label check, remove the permissive-extent test, and commit `feat(sdk): reject stamp placements outside the page or label`
 - [x] 4.3 Add a server test that an out-of-page placement answers 400 naming the edge, in the same commit
 - [x] 4.4 Add tests in `test_stamping_bounds.py` that `stamp_document` raises `ValueError` for a placement with only `x`, with only `y` (naming the missing field), and for a geometry-only placement without a keyword (naming the keyword), against PDF and ZPL and with a seed registered for the key, so no registry fallback stamps; then add the check beside the keyword-contradiction check and commit `feat(sdk): reject partial stamp placement geometry`
+- [x] 4.5 Add tests that a keyword beside a placement offsets the located anchor by `x` only, by `x` and `y`, and by `px` offsets, restore `test_geometry_only_placement_offsets_add_to_the_located_origin`, limit the partial-geometry rejection to placements without a keyword, and commit `feat(sdk): accept consumer offsets alongside a stamp keyword`
 
 ## 5. Z64 compression
 
@@ -52,6 +53,7 @@ SDK tests run with `python -m unittest discover -v -f modules/sdk/tests`, and se
 
 - [x] 8.1 Add tests in `test_stamping_classification.py` with synthetic `acme` markers: a lone CN23 in ZPL and PDF classifies as `cn23`; a label with a CN23 on page 2 as `label_cn23`, page 2; both CN22 and CN23 markers raise naming both; every existing `cn22` case is unchanged
 - [x] 8.2 Add the `cn23` declaration kind and its combined type, export them through `karrio.lib`, and commit `feat(sdk): classify cn23 customs declarations`
+- [x] 8.3 Export `STAMP_COMPRESSIONS` through `karrio.lib` beside `STAMP_UNITS`, and commit `feat(sdk): export the accepted stamp compressions`
 
 ## 9. REST fields
 

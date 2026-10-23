@@ -21,7 +21,7 @@ Non-goals: a size cap, `^LH`/`^FT`/`^CC` handling, mediabox origins other than `
 
 `StampPlacement.unit` takes `mm` (default), `pt` or `px`.
 `_normalize_units(placement)` converts `x`, `y`, `width` and `height` to millimetres (`pt`: `v * 25.4 / 72`; `px`: `v * 25.4 / dpi`), leaves `None` offsets, `page`, `rotation` and `dpi` untouched, and returns the placement with `unit="mm"`, so it is idempotent.
-It runs at the top of `stamp_document`, `stamp_pdf` and `stamp_zpl`, so direct backend callers also honour the unit, and on a consumer geometry-only placement before keyword resolution, so keyword offsets may be given in any unit.
+It runs at the top of `stamp_document`, `stamp_pdf` and `stamp_zpl`, so direct backend callers also honour the unit, and on a consumer placement before keyword resolution, so a consumer's keyword offsets may be given in any unit.
 Seeds and injected registry results are normalized too, which is a no-op for the millimetre values they carry today.
 An unknown unit raises `ValueError` naming `StampPlacement.unit`.
 
@@ -48,6 +48,7 @@ The fitted image sits at offset `(0, (bh - ih * s) / 2)` from the share's top-le
 On PDF, `_merge_overlay` uses one scale factor for both axes and composes the offset before the rotation; the drawn rectangle for the bounds check stays the whole box.
 On ZPL, the canvas stays box-sized, the signature is resized with LANCZOS to `(max(round(iw * s), 1), max(round(ih * s), 1))`, clamped to the share, and pasted at the rounded offset, so the `^GFA` dimensions are unchanged.
 Left alignment was chosen over centring because a signature reads from the start of its line and a date strip already precedes it.
+The date strip itself is not fitted: it is rendered at the strip's own dot or pixel size and drawn into the strip as before, so a fit would only shift it by rounding.
 
 ### ZPL page selects a format
 
@@ -58,7 +59,7 @@ Splicing is unchanged otherwise: the field goes before the selected format's `^X
 
 `StampRequest.zpl_format` is retired; the resolved placement's `page` carries the format for both backends.
 A ZPL keyword sets the resolved page to the matched field's format.
-`stamp_document(page=)` against ZPL no longer raises: like PDF, it restricts the keyword search to that format and applies a registry-resolved placement to it, and combined with a fully anchored placement it still raises.
+`stamp_document(page=)` against ZPL no longer raises: like PDF, it restricts the keyword search to that format and applies a registry-resolved placement to it, and combined with a fully anchored placement and no keyword it still raises.
 
 ### Bounds apply to the final rectangle only
 
@@ -79,13 +80,14 @@ Both Z64 paths are checked once on Labelary or a printer (task 5.3).
 
 ### The stamped page owns its resources
 
-Before merging, `stamp_pdf` replaces the stamped page's `/Resources` with a direct copy of its effective resources (its own entry, or the one inherited from the page tree), copying the top-level dictionary and each subdictionary the merge writes into (`/XObject`, `/Font`, `/ExtGState`, `/ProcSet`); streams stay shared, since the merge never mutates them.
-Copying whenever the entry is indirect or inherited, rather than detecting sharing across pages, keeps the rule local to one page.
+Before every merge, `stamp_pdf` replaces the stamped page's `/Resources` with a direct copy of its effective resources (its own entry, or the one inherited from the page tree), copying the top-level dictionary and each subdictionary the merge writes into (`/XObject`, `/Font`, `/ExtGState`, `/ProcSet`); streams stay shared, since the merge never mutates them.
+The copy is made on every stamp, whether the entry is the page's own, indirect or inherited, rather than detecting sharing across pages, which keeps the rule local to one page; copying resources the page already owns is harmless.
 
 ### Paper is detected on the stamped page
 
 The paper variant is measured on the page the stamp will land on, when that is known before the registry key is composed: the `page` argument when given, else, for a consumer PDF keyword, the first page containing the keyword, located before the key is composed.
-A seed lookup without a `page` argument still measures page 1, because the seed that names its page is found only through the key; an unparseable or out-of-range page yields `*`, and the later page validation raises.
+A seed lookup without a `page` argument still measures page 1, because the seed that names its page is found only through the key; an unparseable or out-of-range page yields `*` from detection.
+`stamp_document` validates a PDF `page` argument against the page count before composing the key, so an out-of-range page raises the page error rather than a registry miss for the `*` paper segment, which a carrier with only concrete paper seeds would otherwise report.
 Re-detecting the paper on the seed's own page after the seed resolves, and re-resolving when it differs, is a follow-up outside this change.
 
 ### `cn23` is a second declaration kind
@@ -95,16 +97,23 @@ A document carrying exactly one declaration kind classifies as before with that 
 A document carrying both declaration kinds raises `ValueError` naming both, rather than preferring one, because the stamp anchor would otherwise depend on which form the carrier printed first.
 Carriers declare `cn23` markers in `PluginMetadata.document_sections` as for `cn22`; the SDK ships no `cn23` seed.
 
-### Partial placement geometry raises
+### Partial placement geometry raises; keyword offsets are optional
 
-`stamp_document` raises `ValueError` for a placement carrying exactly one of `x` and `y`, and for a placement without `x` and `y` when no keyword is supplied, naming the missing field or the missing keyword.
-Today the first falls through to the registry with the half anchor ignored, and the second ignores the geometry and consults the registry, so both stamp somewhere the caller did not ask for.
-The check runs before resolution, beside the existing anchor-and-keyword contradiction check, and is delivered with the bounds work (task group 4), since both reject placements that would otherwise stamp in the wrong place.
+Without a keyword, `stamp_document` raises `ValueError` for a placement carrying exactly one of `x` and `y`, and for a placement without `x` and `y`, naming the missing field or the missing keyword.
+Before this change the first fell through to the registry with the half anchor ignored, and the second ignored the geometry and consulted the registry, so both stamped somewhere the caller did not ask for.
+The check runs before resolution and is delivered with the bounds work (task group 4), since both reject placements that would otherwise stamp in the wrong place.
+
+With a keyword, the consumer's placement is the keyword geometry and its `x` and `y` are optional offsets from the located anchor, each defaulting to 0, in the placement's unit: label axes from the matched `^FO` for ZPL, and the keyword's reading frame for PDF.
+A keyword beside a placement carrying both `x` and `y` therefore offsets the keyword rather than raising as two contradictory anchors, and the page-with-anchored-placement rejection applies only without a keyword.
+
+### Accepted values are exported
+
+`karrio.lib` exports `STAMP_UNITS` (`mm`, `pt`, `px`), `STAMP_COMPRESSIONS` (`z64`), `DECLARATION_KINDS` (`cn22`, `cn23`) and `COMBINED_DOC_TYPES` (`label_cn22`, `label_cn23` by kind), so consumers and the endpoint validate against the same values.
 
 ### REST mirrors the SDK fields
 
 `StampPlacementData` gains `unit` (`mm`, `pt`, `px`, default `mm`) and makes `x` and `y` optional, while `width` and `height` stay required; `StampData` gains `keyword` and `compression` (`z64`).
-The serializer rejects with 400 a placement with exactly one of `x`/`y`, and a placement without `x`/`y` when no `keyword` is given, matching the SDK rule above, so the request fails validation before reaching the SDK.
+Without a `keyword`, the serializer rejects with 400 a placement with exactly one of `x`/`y`, or with neither, matching the SDK rule above, so the request fails validation before reaching the SDK.
 The view passes `keyword` and `compression` through to `lib.stamp_document`; `page` is no longer documented as PDF-only.
 
 ## Risks

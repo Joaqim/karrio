@@ -3,14 +3,14 @@
 ### Requirement: Consumer-supplied placement takes precedence
 
 Placement anchors SHALL be expressed in the placement's unit from the top-left of a one-based page index, where the page is a PDF page or, for ZPL, a `^XA`...`^XZ` format.
-A consumer-supplied placement SHALL be the primary path and SHALL be used directly without consulting any keyword or registry of defaults.
-A consumer-supplied keyword SHALL be consulted only when the placement is omitted.
-A registry seed SHALL be consulted only when both the placement and the keyword are omitted.
-A placement carrying exactly one of `x` and `y`, or carrying neither when no keyword is supplied, SHALL be rejected with an error naming the missing field or the missing keyword, and SHALL NOT fall back to the registry.
+A consumer-supplied placement without a keyword SHALL be the primary path and SHALL be used directly without consulting any keyword or registry of defaults.
+A consumer-supplied keyword SHALL outrank the registry, and a placement supplied with it SHALL be its geometry, whose `x` and `y` are optional offsets from the located anchor, each defaulting to 0, in the placement's unit.
+A registry seed SHALL be consulted for the anchor only when both the placement and the keyword are omitted, and for a keyword's geometry only when the placement is omitted.
+Without a keyword, a placement carrying exactly one of `x` and `y`, or carrying neither, SHALL be rejected with an error naming the missing field or the missing keyword, and SHALL NOT fall back to the registry.
 
 #### Scenario: A supplied placement is used as given
 
-- **WHEN** a consumer supplies a placement together with the image
+- **WHEN** a consumer supplies a placement carrying `x` and `y` together with the image and no keyword
 - **THEN** the utility composites at the supplied anchor without performing a keyword or registry lookup
 
 #### Scenario: A supplied keyword outranks the registry
@@ -25,7 +25,7 @@ A placement carrying exactly one of `x` and `y`, or carrying neither when no key
 
 #### Scenario: A half-anchored placement is rejected
 
-- **WHEN** a consumer supplies a placement with `x` but no `y`, for a document whose key has a registry seed
+- **WHEN** a consumer supplies a placement with `x` but no `y` and no keyword, for a document whose key has a registry seed
 - **THEN** the utility raises an explicit error naming the missing `StampPlacement.y`
 - **AND** no document is returned
 
@@ -34,6 +34,21 @@ A placement carrying exactly one of `x` and `y`, or carrying neither when no key
 - **WHEN** a consumer supplies a placement without `x` and `y` and no keyword, for a document whose key has a registry seed
 - **THEN** the utility raises an explicit error naming the missing keyword
 - **AND** the registry seed is not used
+
+#### Scenario: Placement offsets alongside a keyword
+
+- **WHEN** a consumer supplies a keyword matching a ZPL field at `^FO160,240` and a placement with `x` 10 mm and `y` 5 mm at 203 dpi
+- **THEN** the stamp field's origin is `^FO240,280`
+
+#### Scenario: A single offset alongside a keyword
+
+- **WHEN** a consumer supplies a keyword and a placement carrying `x` but no `y`
+- **THEN** the utility offsets the located anchor by `x` along the label's x axis and by 0 along its y axis
+
+#### Scenario: Pixel offsets alongside a keyword
+
+- **WHEN** a consumer supplies a keyword matching a ZPL field at `^FO160,240` and a `px` placement with `x` 30 and `y` -40 at 203 dpi
+- **THEN** the stamp field's origin is `^FO190,200`
 
 ### Requirement: Keyword-anchored placement resolution
 
@@ -272,7 +287,7 @@ A placement without a unit SHALL composite exactly as before units were availabl
 
 The utility SHALL scale the image uniformly to the largest size that fits inside its box, placing it against the box's leading edge along the primary axis and centred along the short axis, in the box's pre-rotation frame.
 The box SHALL keep its size: the bounds check, the date strip and the ZPL raster extent SHALL use the whole box.
-When a date strip is composited, the fit SHALL apply inside the signature's share of the box.
+When a date strip is composited, the fit SHALL apply inside the signature's share of the box, and the date strip itself SHALL be drawn at its rendered size within its strip, without a fit.
 These rules SHALL hold identically for the PDF and the ZPL backend.
 
 #### Scenario: A wide image is not stretched into a tall box
@@ -374,6 +389,7 @@ The PDF backend SHALL composite onto the stamped page without modifying any othe
 
 The paper-variant segment of a PDF registry key SHALL be measured on the page the stamp lands on when that page is known before the key is composed: the entry point's `page` argument when given, else the first page containing a consumer keyword.
 Otherwise the segment SHALL be measured on page 1.
+A PDF `page` argument outside the document SHALL be rejected naming `StampPlacement.page` before the registry key is composed, so the page error is not masked by a registry miss.
 
 #### Scenario: A letter page after an A4 page resolves the letter seed
 
@@ -385,10 +401,16 @@ Otherwise the segment SHALL be measured on page 1.
 - **WHEN** a consumer supplies a keyword that occurs only on the letter page 2 of a PDF whose page 1 is A4, without a page argument
 - **THEN** the keyword geometry resolves from the letter seed
 
+#### Scenario: An out-of-range page is reported before the key
+
+- **WHEN** a consumer passes page 3 for a two-page PDF under a carrier whose only seed is for the A4 paper variant
+- **THEN** the utility raises an explicit error naming `StampPlacement.page` and the page count, not a registry miss
+
 ### Requirement: Stamping endpoint placement fields
 
 The stamping endpoint SHALL accept a placement unit, a keyword and a compression choice, and SHALL pass them to the stamp entry point.
-A placement's `x` and `y` SHALL be optional, its `width` and `height` SHALL stay required, and the endpoint SHALL answer 400 to a placement carrying only one of `x` and `y`, and to a placement without `x` and `y` when no keyword is supplied.
+A placement's `x` and `y` SHALL be optional, its `width` and `height` SHALL stay required, and without a keyword the endpoint SHALL answer 400 to a placement carrying only one of `x` and `y`, or neither.
+With a keyword, a placement's `x` and `y` SHALL be passed through as offsets from the located keyword.
 
 #### Scenario: Keyword stamping over REST
 
@@ -404,6 +426,16 @@ A placement's `x` and `y` SHALL be optional, its `width` and `height` SHALL stay
 
 - **WHEN** a client posts a placement without `x` and `y` and no keyword
 - **THEN** the endpoint answers 400 naming the missing keyword
+
+#### Scenario: A half-anchored placement without a keyword is rejected
+
+- **WHEN** a client posts a placement with `x` but no `y` and no keyword
+- **THEN** the endpoint answers 400 naming the missing `y`
+
+#### Scenario: Keyword offsets over REST
+
+- **WHEN** a client posts a ZPL document with a keyword and a placement carrying `x` and `y`
+- **THEN** the endpoint answers 201 with the stamp offset by `x` and `y` from the keyword's field origin
 
 ## REMOVED Requirements
 
