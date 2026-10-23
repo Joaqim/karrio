@@ -30,12 +30,13 @@ SDK tests run with `python -m unittest discover -v -f modules/sdk/tests`, and se
 - [ ] 4.1 Add tests in `modules/sdk/tests/core/test_stamping_bounds.py`: unrotated and rotated PDF rectangles past each mediabox edge raise naming the edge; a rectangle ending exactly on the edge passes; ZPL rectangles past `^LL` and past `^PW` raise before the raster is built; `^LL` and `^PW` set in an earlier format apply to a later one; a stream without `^PW` checks the length only and one without `^LL` the operand range only; a seed keyword geometry with negative offsets resolving inside the page passes
 - [ ] 4.2 Replace `_validate_pdf_extent`'s rotated-only use with a check of every final rectangle, add the ZPL label check, remove the permissive-extent test, and commit `feat(sdk): reject stamp placements outside the page or label`
 - [ ] 4.3 Add a server test that an out-of-page placement answers 400 naming the edge, in the same commit
+- [ ] 4.4 Add tests in `test_stamping_bounds.py` that `stamp_document` raises `ValueError` for a placement with only `x`, with only `y` (naming the missing field), and for a geometry-only placement without a keyword (naming the keyword), against PDF and ZPL and with a seed registered for the key, so no registry fallback stamps; then add the check beside the keyword-contradiction check and commit `feat(sdk): reject partial stamp placement geometry`
 
 ## 5. Z64 compression
 
-- [ ] 5.1 Add tests in `modules/sdk/tests/core/test_stamping_z64.py`: without `compression` the output is byte-identical to a literal hex golden; with `z64` the header keeps the uncompressed totals, the inflated base64 equals the hex golden's bytes, and the CRC equals a CRC-16/XMODEM computed by an independent reference implementation in the test (check value `31C3` for `123456789`); `gzip` raises naming the accepted values; `z64` with `graphic_name` raises
+- [ ] 5.1 Add tests in `modules/sdk/tests/core/test_stamping_z64.py`: without `compression` the output is byte-identical to a literal hex golden; with `z64` the header keeps the uncompressed totals, the inflated base64 equals the hex golden's bytes, and the CRC equals a CRC-16/XMODEM computed by an independent reference implementation in the test (check value `31C3` for `123456789`); `gzip` raises naming the accepted values; `z64` with `graphic_name` emits `~DY{name},A,G,{total},{bpr},:Z64:{data}:{crc}` whose inflated data equals the hex golden's bytes, with the `^XG` recall unchanged
 - [ ] 5.2 Add `compression` to `StampRequest`, `stamp_zpl` and `stamp_document`, and commit `feat(sdk): emit z64-compressed zpl stamp graphics on request`
-- [ ] 5.3 Decode one Z64 output with Labelary or a printer and record the result in design.md
+- [ ] 5.3 Decode one inline `^GFA` Z64 output and one `~DY` Z64 download recalled with `^XG` on Labelary or a printer, and record both results in design.md
 
 ## 6. Per-page resources
 

@@ -6,6 +6,7 @@ Placement anchors SHALL be expressed in the placement's unit from the top-left o
 A consumer-supplied placement SHALL be the primary path and SHALL be used directly without consulting any keyword or registry of defaults.
 A consumer-supplied keyword SHALL be consulted only when the placement is omitted.
 A registry seed SHALL be consulted only when both the placement and the keyword are omitted.
+A placement carrying exactly one of `x` and `y`, or carrying neither when no keyword is supplied, SHALL be rejected with an error naming the missing field or the missing keyword, and SHALL NOT fall back to the registry.
 
 #### Scenario: A supplied placement is used as given
 
@@ -21,6 +22,18 @@ A registry seed SHALL be consulted only when both the placement and the keyword 
 
 - **WHEN** a consumer omits both the placement and the keyword and a registry seed exists for the document's key
 - **THEN** the utility resolves the anchor from that seed and composites at it
+
+#### Scenario: A half-anchored placement is rejected
+
+- **WHEN** a consumer supplies a placement with `x` but no `y`, for a document whose key has a registry seed
+- **THEN** the utility raises an explicit error naming the missing `StampPlacement.y`
+- **AND** no document is returned
+
+#### Scenario: A geometry-only placement without a keyword is rejected
+
+- **WHEN** a consumer supplies a placement without `x` and `y` and no keyword, for a document whose key has a registry seed
+- **THEN** the utility raises an explicit error naming the missing keyword
+- **AND** the registry seed is not used
 
 ### Requirement: Keyword-anchored placement resolution
 
@@ -322,6 +335,7 @@ The stamp entry point's `page` argument SHALL select the format for ZPL as it se
 
 The ZPL backend SHALL emit an inline graphic as uncompressed uppercase hex by default, byte-identical to the output before compression was available.
 When the caller requests `z64` compression, the backend SHALL emit `^GFA,<total>,<total>,<bytes per row>,:Z64:<data>:<crc>`, where `<total>` and `<bytes per row>` are the uncompressed values, `<data>` is the padded standard base64 of the zlib-compressed packed rows, and `<crc>` is the CRC-16/XMODEM of `<data>` as four uppercase hex digits.
+With a graphic name, the `~DY` download SHALL carry the same Z64 data, with the uncompressed total and bytes per row.
 The stamp entry point and the endpoint SHALL accept the compression choice, and SHALL reject any other value with an error naming the accepted values.
 
 #### Scenario: Compression is off by default
@@ -334,6 +348,12 @@ The stamp entry point and the endpoint SHALL accept the compression choice, and 
 - **WHEN** a consumer stamps a ZPL document with `z64` compression
 - **THEN** decoding the base64 and inflating it yields exactly the packed rows of the uncompressed graphic for the same input
 - **AND** the CRC field equals the CRC-16/XMODEM of the base64 text
+
+#### Scenario: Z64 applies to the printer cache download
+
+- **WHEN** a consumer stamps a ZPL document with `z64` compression and a graphic name
+- **THEN** the `~DY` download carries `:Z64:` data whose inflated bytes equal the uncompressed packed rows, with the uncompressed total and bytes per row
+- **AND** the stamp field recalls the graphic with `^XG` as without compression
 
 #### Scenario: An unknown compression is rejected
 

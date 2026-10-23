@@ -74,7 +74,8 @@ Keyword geometries are offsets relative to a located field or run and are negati
 `{b64}` is the standard-alphabet, padded base64 of `zlib.compress` over the packed 1-bpp rows, `{total}` and `{bpr}` keep their uncompressed values, and `{crc}` is the CRC-16/XMODEM (polynomial 0x1021, initial value 0) of the base64 text as four uppercase hex digits.
 A string rather than a boolean leaves room for `:B64:` or ACS run-length encoding without a second flag, and the unprefixed name matches `layer` and `graphic_name`, which are equally backend-specific; the PDF backend ignores it.
 Any value other than `None` or `"z64"` raises `ValueError` naming the accepted values.
-Combining `compression` with `graphic_name` raises until `~DY` with Z64 data is verified on a printer (see open questions).
+With `graphic_name`, the `~DY` download carries the same Z64 data, `~DY{name},A,G,{total},{bpr},:Z64:{b64}:{crc}`, where format `A` covers ASCII-encoded data, Z64 included, and `{total}` and `{bpr}` keep their uncompressed values; the `^XG` recall is unchanged.
+Both Z64 paths are checked once on Labelary or a printer (task 5.3).
 
 ### The stamped page owns its resources
 
@@ -85,18 +86,25 @@ Copying whenever the entry is indirect or inherited, rather than detecting shari
 
 The paper variant is measured on the page the stamp will land on, when that is known before the registry key is composed: the `page` argument when given, else, for a consumer PDF keyword, the first page containing the keyword, located before the key is composed.
 A seed lookup without a `page` argument still measures page 1, because the seed that names its page is found only through the key; an unparseable or out-of-range page yields `*`, and the later page validation raises.
+Re-detecting the paper on the seed's own page after the seed resolves, and re-resolving when it differs, is a follow-up outside this change.
 
 ### `cn23` is a second declaration kind
 
 The classifier's declaration kinds become `("cn22", "cn23")`; `DECLARATION_KIND` stays `cn22` for compatibility and `COMBINED_DOC_TYPE` stays `label_cn22`.
 A document carrying exactly one declaration kind classifies as before with that kind: `cn23` alone, or `label_cn23` with the label kind, with `page` the first page carrying it.
-A document carrying both declaration kinds raises `ValueError` naming both (see open questions).
+A document carrying both declaration kinds raises `ValueError` naming both, rather than preferring one, because the stamp anchor would otherwise depend on which form the carrier printed first.
 Carriers declare `cn23` markers in `PluginMetadata.document_sections` as for `cn22`; the SDK ships no `cn23` seed.
+
+### Partial placement geometry raises
+
+`stamp_document` raises `ValueError` for a placement carrying exactly one of `x` and `y`, and for a placement without `x` and `y` when no keyword is supplied, naming the missing field or the missing keyword.
+Today the first falls through to the registry with the half anchor ignored, and the second ignores the geometry and consults the registry, so both stamp somewhere the caller did not ask for.
+The check runs before resolution, beside the existing anchor-and-keyword contradiction check, and is delivered with the bounds work (task group 4), since both reject placements that would otherwise stamp in the wrong place.
 
 ### REST mirrors the SDK fields
 
 `StampPlacementData` gains `unit` (`mm`, `pt`, `px`, default `mm`) and makes `x` and `y` optional, while `width` and `height` stay required; `StampData` gains `keyword` and `compression` (`z64`).
-The serializer rejects with 400 a placement with exactly one of `x`/`y`, and a placement without `x`/`y` when no `keyword` is given, because the SDK would otherwise ignore that geometry and consult the registry.
+The serializer rejects with 400 a placement with exactly one of `x`/`y`, and a placement without `x`/`y` when no `keyword` is given, matching the SDK rule above, so the request fails validation before reaching the SDK.
 The view passes `keyword` and `compression` through to `lib.stamp_document`; `page` is no longer documented as PDF-only.
 
 ## Risks
@@ -108,7 +116,7 @@ The view passes `keyword` and `compression` through to `lib.stamp_document`; `pa
 ## Open questions
 
 - Size guard: should the SDK or the endpoint cap the emitted graphic or request size (PRD Q3)? No byte cap is decided.
-- Should a document carrying both `cn22` and `cn23` markers raise, as proposed, or prefer one kind?
-- Should `compression="z64"` also apply to the `~DY` download of the `graphic_name` cache, once verified on a printer?
-- Without `^LL`, is the operand-range check alone the right fallback, or should a ZPL placement then raise?
-- Should a seed lookup without `page` re-detect paper on the seed's own page when it differs from page 1?
+
+## Follow-ups
+
+- Re-detect the paper variant on the page a seed resolves to, after the seed lookup, and re-resolve when it differs from page 1.
