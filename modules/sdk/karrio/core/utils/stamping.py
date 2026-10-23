@@ -141,10 +141,10 @@ class StampPlacement:
     """
 
     page: int = 1
-    x: float = None
-    y: float = None
-    width: float = None
-    height: float = None
+    x: typing.Optional[float] = None
+    y: typing.Optional[float] = None
+    width: typing.Optional[float] = None
+    height: typing.Optional[float] = None
     rotation: float = 0
     dpi: int = 203
     unit: str = "mm"
@@ -169,11 +169,11 @@ class StampRequest:
     the PDF backend ignores it.
     """
 
-    image: str = None
-    placement: StampPlacement = None
+    image: typing.Optional[str] = None
+    placement: typing.Optional[StampPlacement] = None
     layer: str = "overlay"
-    date: str = None
-    graphic_name: str = None
+    date: typing.Optional[str] = None
+    graphic_name: typing.Optional[str] = None
     compression: typing.Optional[str] = None
 
 
@@ -204,12 +204,12 @@ class StampSeed:
     rather than silently moving an anchor consumers may rely on.
     """
 
-    placement: StampPlacement = None
+    placement: typing.Optional[StampPlacement] = None
     revision: int = 0
-    keyword: str = None
-    keyword_placement: StampPlacement = None
-    pdf_keyword_placement: StampPlacement = None
-    zpl_keyword_frame_placement: StampPlacement = None
+    keyword: typing.Optional[str] = None
+    keyword_placement: typing.Optional[StampPlacement] = None
+    pdf_keyword_placement: typing.Optional[StampPlacement] = None
+    zpl_keyword_frame_placement: typing.Optional[StampPlacement] = None
 
 
 def mm_to_points(value: float) -> float:
