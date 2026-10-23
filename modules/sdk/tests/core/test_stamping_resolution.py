@@ -316,17 +316,18 @@ class TestZplKeywordLocator(unittest.TestCase):
 
 
 class TestKeywordResolution(unittest.TestCase):
-    def test_keyword_with_a_fully_anchored_placement_raises(self):
-        with self.assertRaises(ValueError) as ctx:
-            lib.stamp_document(
-                keyword_zpl_document(INLINE_KEYWORD_STREAM),
-                image=signature_png_b64(),
-                placement=zpl_placement(),
-                keyword=KEYWORD,
-            )
+    def test_keyword_turns_a_placement_x_and_y_into_offsets(self):
+        # Beside a keyword the placement's 20 / 30 mm (160 / 240 dots) offset
+        # the located ^FO10,20 rather than anchoring on the label.
+        stamped = lib.stamp_document(
+            keyword_zpl_document(INLINE_KEYWORD_STREAM),
+            image=signature_png_b64(),
+            placement=zpl_placement(),
+            keyword=KEYWORD,
+        )
 
-        self.assertIn("placement", str(ctx.exception).lower())
-        self.assertIn("keyword", str(ctx.exception).lower())
+        ((fo_x, fo_y, *_),) = grf_fields(decode_zpl(stamped.base64))
+        self.assertEqual((fo_x, fo_y), (170, 260))
 
     def test_keyword_with_geometry_only_placement_resolves_from_the_form(self):
         # The geometry-only placement carries extent/rotation/dpi while the
@@ -346,18 +347,63 @@ class TestKeywordResolution(unittest.TestCase):
         self.assertEqual((total, bpr), (9600, 60))
         self.assertIn("Total Weight (in kg)", zpl)
 
-    def test_half_anchored_keyword_geometry_is_rejected(self):
-        # A placement setting only one of x and y is rejected even beside a
-        # keyword; keyword offsets reach the locator through the registry.
-        with self.assertRaises(ValueError) as ctx:
-            lib.stamp_document(
-                keyword_zpl_document("^XA^FO160,240^FDTotal Weight (in kg)^FS^XZ"),
-                image=signature_png_b64(),
-                placement=stamping.StampPlacement(x=10.0, width=60.0, height=20.0),
-                keyword="Total Weight (in kg)",
-            )
+    def test_geometry_only_placement_offsets_add_to_the_located_origin(self):
+        stamped = lib.stamp_document(
+            keyword_zpl_document("^XA^FO160,240^FDTotal Weight (in kg)^FS^XZ"),
+            image=signature_png_b64(),
+            placement=stamping.StampPlacement(x=10.0, width=60.0, height=20.0),
+            keyword="Total Weight (in kg)",
+        )
 
-        self.assertIn("StampPlacement.y", str(ctx.exception))
+        ((fo_x, fo_y, *_),) = grf_fields(decode_zpl(stamped.base64))
+        self.assertEqual(fo_x, int(round(((160 * 25.4 / 203) + 10.0) / 25.4 * 203)))
+        self.assertEqual(fo_y, int(round(((240 * 25.4 / 203) + 0.0) / 25.4 * 203)))
+
+    def test_both_consumer_offsets_add_to_the_located_origin(self):
+        # 10 mm and 5 mm at 203 dpi are 79.92 and 39.96 dots from ^FO160,240.
+        stamped = lib.stamp_document(
+            keyword_zpl_document("^XA^FO160,240^FDTotal Weight (in kg)^FS^XZ"),
+            image=signature_png_b64(),
+            placement=stamping.StampPlacement(x=10.0, y=5.0, width=60.0, height=20.0),
+            keyword="Total Weight (in kg)",
+        )
+
+        ((fo_x, fo_y, *_),) = grf_fields(decode_zpl(stamped.base64))
+        self.assertEqual((fo_x, fo_y), (240, 280))
+
+    def test_px_consumer_offsets_are_dots_from_the_located_origin(self):
+        stamped = lib.stamp_document(
+            keyword_zpl_document("^XA^FO160,240^FDTotal Weight (in kg)^FS^XZ"),
+            image=signature_png_b64(),
+            placement=stamping.StampPlacement(
+                unit="px", x=30, y=-40, width=480, height=160, dpi=203
+            ),
+            keyword="Total Weight (in kg)",
+        )
+
+        ((fo_x, fo_y, *_),) = grf_fields(decode_zpl(stamped.base64))
+        self.assertEqual((fo_x, fo_y), (190, 200))
+
+    def test_both_consumer_offsets_follow_a_pdf_keyword(self):
+        # Keyword baseline at (100, 500) pt: the 40 x 10 mm strip starts 5 mm
+        # along the text and 2 mm below its baseline, so its bottom-left is
+        # (100 + 14.173, 500 - 5.669 - 28.346) pt.
+        stamped = lib.stamp_document(
+            models.ShippingDocument(
+                category="label",
+                format="PDF",
+                base64=text_runs_pdf_b64(
+                    [TextRun("Total Weight (in kg)", (1, 0, 0, 1, 100, 500))]
+                ),
+            ),
+            image=solid_black_png_b64(400, 100),
+            placement=stamping.StampPlacement(x=5.0, y=2.0, width=40.0, height=10.0),
+            keyword="Total Weight (in kg)",
+        )
+
+        ((_, _, _, _, e, f),) = overlay_cms(stamped.base64)
+        self.assertAlmostEqual(e, 114.173, places=2)
+        self.assertAlmostEqual(f, 465.984, places=2)
 
     def test_keyword_derived_negative_anchor_raises(self):
         with self.assertRaises(ValueError) as ctx:

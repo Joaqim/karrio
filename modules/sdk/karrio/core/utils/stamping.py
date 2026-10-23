@@ -1679,14 +1679,13 @@ def stamp_document(
     The document format is detected from its bytes and dispatched to the
     matching backend; the returned document preserves the input's format and
     shape, replacing only its ``base64`` content. The anchor resolves through
-    an explicit chain, placement before consumer keyword before seed. A fully
-    anchored ``placement`` (both ``x`` and ``y`` set) is used directly with no
-    keyword or registry consultation, and a ``keyword`` supplied alongside one
-    raises rather than silently ignoring either of the two contradictory
-    anchors, as does a placement setting only one of ``x`` and ``y``, or
-    neither without a keyword, rather than falling back to the registry. A
-    consumer ``keyword`` locates the carrier form's own text and takes its
-    geometry from a geometry-only placement (``x``/``y`` left ``None``), else
+    an explicit chain, placement before consumer keyword before seed.
+    Without a keyword a ``placement`` must be fully anchored (both ``x`` and
+    ``y`` set) and is used directly with no registry consultation; one
+    setting only one of them, or neither, raises rather than falling back to
+    the registry. A consumer ``keyword`` locates the carrier form's own text
+    and takes its geometry from the placement, whose ``x`` and ``y`` are then
+    optional offsets from the located anchor (``None`` meaning 0), else
     from the registry for the document's key — the injected
     ``registry`` lookup when one is supplied, else the carrier seed's keyword
     geometry for the format — and a miss raises naming what is missing. With
@@ -1718,8 +1717,8 @@ def stamp_document(
     placement applies to: a coordinate seed measured on one page stamps the
     page a classification names, and a keyword is searched on that page or
     format only instead of the first one containing it; an out-of-range page
-    raises. Combined with a fully anchored placement, which already names its
-    page, it raises as a second, contradictory anchor.
+    raises. Combined with a fully anchored placement and no keyword, which
+    already names its page, it raises as a second, contradictory anchor.
 
     ``compression`` selects the ZPL graphic encoding, ``None`` for
     uncompressed hex or ``z64`` (see :class:`StampRequest`); any other value
@@ -1743,16 +1742,13 @@ def stamp_document(
     _validate_compression(compression)
     placement = _normalize_units(placement)
     fully_anchored = (
-        placement is not None and placement.x is not None and placement.y is not None
+        not keyword
+        and placement is not None
+        and placement.x is not None
+        and placement.y is not None
     )
 
-    if fully_anchored and keyword:
-        raise ValueError(
-            "A stamp keyword cannot be combined with a fully anchored "
-            "placement (both x and y set); supply one anchor, not two"
-        )
-
-    if placement is not None and not fully_anchored:
+    if placement is not None and not keyword and not fully_anchored:
         missing = next(
             (
                 f"StampPlacement.{field}"
@@ -1765,14 +1761,13 @@ def stamp_document(
         if missing is not None:
             raise ValueError(
                 f"The stamp placement sets one anchor but not {missing}; "
-                "supply both x and y, or neither with a keyword"
+                "without a keyword a placement needs both x and y"
             )
-        if not keyword:
-            raise ValueError(
-                "A stamp placement without x and y needs a keyword to locate "
-                "it; supply a keyword or both StampPlacement.x and "
-                "StampPlacement.y"
-            )
+        raise ValueError(
+            "A stamp placement without x and y needs a keyword to locate "
+            "it; supply a keyword or both StampPlacement.x and "
+            "StampPlacement.y"
+        )
 
     if fully_anchored and page is not None:
         raise ValueError(

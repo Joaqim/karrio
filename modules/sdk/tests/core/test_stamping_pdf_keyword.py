@@ -26,9 +26,7 @@ COUNTERCLOCKWISE = (0.0, 1.0, -1.0, 0.0)
 # its baseline, measured in the keyword's own reading frame.
 GEOMETRY = stamping.StampPlacement(x=5.0, y=2.0, width=40.0, height=10.0)
 
-# Consumer geometry names only the extent: a consumer-supplied x or y would
-# make the placement fully anchored, so measured offsets reach the keyword
-# through the registry (a seed or an injected lookup).
+# Consumer geometry naming only the extent anchors at the keyword itself.
 EXTENT = stamping.StampPlacement(width=40.0, height=10.0)
 
 # The same offsets in points: 2 / 5 / 10 / 12 mm.
