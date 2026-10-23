@@ -10,9 +10,10 @@ A carrier may compose a customs declaration with the shipping label in one
 printout, so the document type to stamp under is not always the category the
 document arrived with. ``classify_customs_composition`` reads the section
 markers the carrier plugin declares in ``document_sections`` (a kind may list
-alternative marker sets with ``AnyOf`` when carrier templates differ) and names the
-registry document type (``cn22`` or ``label_cn22``) and, for PDF, the page
-carrying the declaration; the consumer passes both to ``stamp_document``, which
+alternative marker sets with ``AnyOf`` when carrier templates differ) and names
+the registry document type (``cn22``, ``cn23``, ``label_cn22`` or
+``label_cn23``) and, for PDF, the page carrying the declaration; the consumer
+passes both to ``stamp_document``, which
 applies the seed on that page (ZPL classifies with no page). A seed anchors a
 PDF either at measured coordinates or, when it carries PDF keyword geometry,
 by locating its keyword in the page text and laying the strip out along that
@@ -705,10 +706,10 @@ def _build_zpl_raster(request: StampRequest) -> "PIL.Image.Image":
     fixed ``ZPL_INK_THRESHOLD``. The signature is fitted into its share of the
     canvas without distortion (see :func:`_fit_scale`), its dot size clamped to
     the share and its offset rounded to whole dots, so the canvas, and the
-    ``^GFA`` dimensions, stay the placement's. A threshold rather than error diffusion keeps
-    the date's anti-aliased edges and the signature's faint strokes solid ink
-    instead of scattered speckle; the signature resamples with LANCZOS to
-    preserve stroke connectivity across the resize.
+    ``^GFA`` dimensions, stay the placement's. A threshold rather than error
+    diffusion keeps the date's anti-aliased edges and the signature's faint
+    strokes solid ink instead of scattered speckle; the signature resamples
+    with LANCZOS to preserve stroke connectivity across the resize.
     """
     placement = request.placement
     width = max(mm_to_dots(placement.width, placement.dpi), 1)
@@ -1867,6 +1868,10 @@ def stamp_document(
 DECLARATION_KIND: str = "cn22"
 LABEL_KIND: str = "label"
 COMBINED_DOC_TYPE: str = f"{LABEL_KIND}_{DECLARATION_KIND}"
+DECLARATION_KINDS: typing.Tuple[str, ...] = (DECLARATION_KIND, "cn23")
+COMBINED_DOC_TYPES: typing.Dict[str, str] = {
+    kind: f"{LABEL_KIND}_{kind}" for kind in DECLARATION_KINDS
+}
 
 
 class CustomsComposition(str, enum.Enum):
@@ -1882,9 +1887,10 @@ class CustomsClassification:
     """The customs composition of a document and the stamp type it resolves.
 
     ``kinds`` are the declared composed kinds present, sorted. ``doc_type`` is
-    the registry document type to stamp under: ``cn22`` for a lone
-    declaration, ``label_cn22`` for a label composed with one, ``None`` when
-    the document carries no declaration. ``page`` is the one-based PDF page
+    the registry document type to stamp under: the declaration kind (``cn22``
+    or ``cn23``) for a lone declaration, its combined type (``label_cn22`` or
+    ``label_cn23``) for a label composed with one, ``None`` when the document
+    carries no declaration. ``page`` is the one-based PDF page
     carrying the declaration, ``None`` for ZPL and for no declaration.
     """
 
@@ -1983,11 +1989,13 @@ def classify_customs_composition(
     composed kind. A ZPL kind is present when its markers occur in the stream;
     a PDF kind when its markers occur in one page's extracted text; a kind
     declared as :class:`AnyOf` is present when any one of its sets matches. The
-    declaration marker alone never implies a lone declaration: a document
-    carrying the declaration and label kinds is ``label_with_declaration``,
-    one carrying the declaration without the label is ``declaration``, and
-    anything else, including a carrier declaring no sections for the format,
-    is ``none``. A format other than ZPL or PDF raises naming the detected
+    declaration kinds are ``DECLARATION_KINDS``, and the declaration marker
+    alone never implies a lone declaration: a document carrying a
+    declaration and the label kind is ``label_with_declaration``, one
+    carrying a declaration without the label is ``declaration``, and anything
+    else, including a carrier declaring no sections for the format, is
+    ``none``. A document carrying more than one declaration kind raises
+    naming them, as does a format other than ZPL or PDF, naming the detected
     format. The document is never modified.
     """
     document_format = helpers.sniff_document_format(
@@ -2008,17 +2016,22 @@ def classify_customs_composition(
     extract, paged = _SECTION_TEXTS[document_format]
     unit_kinds = [_kinds_present(text, declared) for text in extract(document.base64)]
     kinds = frozenset().union(*unit_kinds)
+    declarations = sorted(kinds.intersection(DECLARATION_KINDS))
 
-    if DECLARATION_KIND not in kinds:
+    if not declarations:
         return CustomsClassification(kinds=tuple(sorted(kinds)))
 
+    if len(declarations) > 1:
+        raise ValueError(
+            "The document carries the markers of more than one customs "
+            f"declaration kind ({', '.join(declarations)}); a stamp anchor "
+            "needs exactly one"
+        )
+
+    (declaration,) = declarations
     combined = LABEL_KIND in kinds
     page = next(
-        (
-            index
-            for index, found in enumerate(unit_kinds, 1)
-            if DECLARATION_KIND in found
-        ),
+        (index for index, found in enumerate(unit_kinds, 1) if declaration in found),
         None,
     )
 
@@ -2029,6 +2042,6 @@ def classify_customs_composition(
             else CustomsComposition.declaration
         ),
         kinds=tuple(sorted(kinds)),
-        doc_type=COMBINED_DOC_TYPE if combined else DECLARATION_KIND,
+        doc_type=COMBINED_DOC_TYPES[declaration] if combined else declaration,
         page=page if paged else None,
     )

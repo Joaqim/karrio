@@ -46,6 +46,8 @@ STAMP_UNITS = stamping.STAMP_UNITS
 CustomsClassification = stamping.CustomsClassification
 CustomsComposition = stamping.CustomsComposition
 AnyOf = stamping.AnyOf
+DECLARATION_KINDS = stamping.DECLARATION_KINDS
+COMBINED_DOC_TYPES = stamping.COMBINED_DOC_TYPES
 
 
 # -----------------------------------------------------------

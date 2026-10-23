@@ -448,5 +448,98 @@ class TestAlternativeMarkerSets(unittest.TestCase):
             alternatives.sets = ()
 
 
+# Markers for a carrier declaring both declaration kinds beside its label.
+ACME_CN23_SECTIONS = {
+    "ZPL": {
+        "cn22": "^FX ACME_CN22^FS",
+        "cn23": "^FX ACME_CN23^FS",
+        "label": "^FX ACME_LABEL^FS",
+    },
+    "PDF": {
+        "cn22": ("ACME DECLARATION", "CN22"),
+        "cn23": ("ACME DECLARATION", "CN23"),
+        "label": ("Acme letter",),
+    },
+}
+
+CN23_SECTION = "\n".join(["^FX ACME_CN23^FS", "^FO20,35", "^FDSender signature^FS"])
+CN23_LINES = ["ACME DECLARATION", "CN23", "Sender signature"]
+
+
+class TestCn23Classification(unittest.TestCase):
+    def classify(self, document):
+        return stamping.classify_customs_composition(
+            document, sections=ACME_CN23_SECTIONS
+        )
+
+    def test_lone_zpl_cn23(self):
+        self.assertEqual(
+            self.classify(zpl_form(CN23_SECTION)),
+            stamping.CustomsClassification(
+                composition=stamping.CustomsComposition.declaration,
+                kinds=("cn23",),
+                doc_type="cn23",
+                page=None,
+            ),
+        )
+
+    def test_lone_pdf_cn23(self):
+        self.assertEqual(
+            self.classify(pdf_form(CN23_LINES)),
+            stamping.CustomsClassification(
+                composition=stamping.CustomsComposition.declaration,
+                kinds=("cn23",),
+                doc_type="cn23",
+                page=1,
+            ),
+        )
+
+    def test_label_with_a_cn23_on_page_two(self):
+        self.assertEqual(
+            self.classify(pdf_form(LABEL_LINES, CN23_LINES)),
+            stamping.CustomsClassification(
+                composition=stamping.CustomsComposition.label_with_declaration,
+                kinds=("cn23", "label"),
+                doc_type="label_cn23",
+                page=2,
+            ),
+        )
+
+    def test_zpl_label_with_a_cn23(self):
+        result = self.classify(zpl_form(LABEL_SECTION, CN23_SECTION))
+
+        self.assertEqual(result.doc_type, "label_cn23")
+        self.assertIsNone(result.page)
+
+    def test_both_declaration_kinds_raise_naming_both(self):
+        for name, document in (
+            ("ZPL", zpl_form(DECLARATION_SECTION, CN23_SECTION)),
+            ("PDF", pdf_form(DECLARATION_LINES, CN23_LINES)),
+        ):
+            with self.subTest(format=name):
+                with self.assertRaises(ValueError) as ctx:
+                    self.classify(document)
+
+                self.assertIn("cn22", str(ctx.exception))
+                self.assertIn("cn23", str(ctx.exception))
+
+    def test_cn22_cases_are_unchanged_with_cn23_declared(self):
+        self.assertEqual(
+            self.classify(pdf_form(LABEL_LINES, DECLARATION_LINES)),
+            stamping.CustomsClassification(
+                composition=stamping.CustomsComposition.label_with_declaration,
+                kinds=("cn22", "label"),
+                doc_type="label_cn22",
+                page=2,
+            ),
+        )
+
+    def test_declaration_kinds_and_combined_types_are_exported(self):
+        self.assertEqual(lib.DECLARATION_KINDS, ("cn22", "cn23"))
+        self.assertEqual(
+            lib.COMBINED_DOC_TYPES, {"cn22": "label_cn22", "cn23": "label_cn23"}
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
