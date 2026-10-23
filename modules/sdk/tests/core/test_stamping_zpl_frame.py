@@ -159,7 +159,10 @@ class TestZplFormatScoping(unittest.TestCase):
         )
 
     def test_page_axis_seed_also_splices_into_the_keyword_format(self):
-        stream = f"{UPRIGHT_CN22_FORMAT}\n{LABEL_FORMAT}"
+        # The page-axis seed hangs its 392-dot strip from ^FO12,1053, past the
+        # format's 840-dot ^LL, so the format here declares a 1600-dot label.
+        cn22_format = UPRIGHT_CN22_FORMAT.replace("^LL840", "^LL1600")
+        stream = f"{cn22_format}\n{LABEL_FORMAT}"
         zpl = _stamp(stream, EXAMPLE_SEED)
 
         self.assertTrue(zpl.endswith(f"^FS^XZ\n{LABEL_FORMAT}"))

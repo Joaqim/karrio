@@ -98,6 +98,10 @@ OVERLAY_DPI: int = 300
 # renders (about 1.7 m), bounding the allocation a single request can cause.
 MAX_DATE_RASTER_PX: int = 20000
 
+# Points a drawn PDF extent may cross the mediabox by, absorbing the
+# floating-point rounding of unit conversion and rotation.
+PDF_BOUNDS_TOLERANCE_PT: float = 1e-6
+
 # Standard portrait page sizes in millimetres, keyed by the paper-variant
 # segment they contribute to a registry key. Detection compares a page's
 # mediabox against these on the orientation-independent (short, long) axes.
@@ -481,34 +485,39 @@ def _validate_pdf_extent(
     page_width_pt: float,
     page_height_pt: float,
 ) -> None:
-    """Reject a rotated extent that leaves the page mediabox.
+    """Reject a drawn extent that leaves the page mediabox.
 
-    The drawn extent is the rotated bounding box ``bounds`` with its top-left
-    corner on ``anchor``; an edge crossing the mediabox raises, naming the edge
-    and the bound. Unrotated placements skip this check.
+    The drawn extent is the (rotated) bounding box ``bounds`` with its
+    top-left corner on ``anchor``, in bottom-left-origin PDF points; an edge
+    crossing the mediabox by more than ``PDF_BOUNDS_TOLERANCE_PT`` raises,
+    naming the edge, the drawn rectangle and the page bounds.
     """
     min_x, max_x, min_y, max_y = bounds
     left, top = anchor
     right = left + (max_x - min_x)
     bottom = top - (max_y - min_y)
+    tolerance = PDF_BOUNDS_TOLERANCE_PT
 
-    for edge, value in (("left", left), ("bottom", bottom)):
-        if value < -0.5:
-            raise ValueError(
-                f"The rotated stamp extent's {edge} edge ({value:.1f} pt) starts "
-                f"before the page mediabox origin of the page "
-                f"({page_width_pt:.1f} x {page_height_pt:.1f} pt)"
+    crossed = next(
+        (
+            edge
+            for edge, outside in (
+                ("left", left < -tolerance),
+                ("bottom", bottom < -tolerance),
+                ("right", right > page_width_pt + tolerance),
+                ("top", top > page_height_pt + tolerance),
             )
-
-    for edge, value, bound in (
-        ("right", right, page_width_pt),
-        ("top", top, page_height_pt),
-    ):
-        if value > bound + 0.5:
-            raise ValueError(
-                f"The rotated stamp extent's {edge} edge ({value:.1f} pt) leaves "
-                f"the page mediabox ({page_width_pt:.1f} x {page_height_pt:.1f} pt)"
-            )
+            if outside
+        ),
+        None,
+    )
+    if crossed is not None:
+        raise ValueError(
+            f"The stamp extent's {crossed} edge leaves the page mediabox: the "
+            f"stamp is drawn over x {left:.1f}-{right:.1f} pt and y "
+            f"{bottom:.1f}-{top:.1f} pt (bottom-left origin) on a "
+            f"{page_width_pt:.1f} x {page_height_pt:.1f} pt page"
+        )
 
 
 def _clone_pdf(document_b64: str) -> "pypdf.PdfWriter":
@@ -566,10 +575,10 @@ def stamp_pdf(document_b64: str, request: StampRequest) -> str:
     dictionaries survive untouched — then the placement page receives the
     image via a scale/rotate/translate transformation merge. A nonzero
     rotation rotates the image clockwise and anchors the rotated extent's
-    bounding box's top-left corner at the placement's ``(x, y)``; a rotated
-    extent crossing the mediabox is rejected. ``overlay`` draws the image over the page
-    content; ``underlay`` draws it beneath, so carrier content stays legible
-    above a letterhead. When ``request.date`` is supplied, the rendered date
+    bounding box's top-left corner at the placement's ``(x, y)``; a drawn
+    extent crossing the mediabox, rotated or not, is rejected. ``overlay``
+    draws the image over the page content; ``underlay`` draws it beneath, so
+    carrier content stays legible above a letterhead. When ``request.date`` is supplied, the rendered date
     occupies the leading portion of the placement along its primary
     (un-rotated) axis and the signature the remainder; both are parts of the
     one rotated rectangle. The page count is invariant.
@@ -585,16 +594,10 @@ def stamp_pdf(document_b64: str, request: StampRequest) -> str:
     rotation = placement.rotation or 0
     over = request.layer != "underlay"
 
-    origin = None
-    if rotation:
-        x, y, width, height = rect
-        anchor = (
-            mm_to_points(placement.x),
-            page_height_pt - mm_to_points(placement.y),
-        )
-        bounds = _rotated_bounds(width, height, rotation)
-        _validate_pdf_extent(anchor, bounds, page_width_pt, page_height_pt)
-        origin = (anchor[0] - bounds[0], anchor[1] - bounds[3])
+    anchor = (mm_to_points(placement.x), page_height_pt - mm_to_points(placement.y))
+    bounds = _rotated_bounds(rect[2], rect[3], rotation)
+    _validate_pdf_extent(anchor, bounds, page_width_pt, page_height_pt)
+    origin = (anchor[0] - bounds[0], anchor[1] - bounds[3]) if rotation else None
 
     if request.date:
         x, y, width, height = rect
@@ -912,6 +915,56 @@ def _validate_zpl_operands(x_dots: int, y_dots: int, width: int, height: int) ->
             )
 
 
+def _zpl_label_bounds(
+    stream: str,
+) -> typing.Tuple[typing.Optional[float], typing.Optional[float]]:
+    """Return the label ``(length, width)`` in dots in effect at a stream's end.
+
+    The length is the latest ``^LL`` operand and the width the latest ``^PW``
+    operand, ``None`` when the stream sets neither; both persist on the
+    printer across formats, so a setting from an earlier format still holds.
+    """
+    length = width = None
+    for command in _ZPL_COMMAND_PATTERN.finditer(stream):
+        name, parameters = command.group(1), command.group(2)
+        value = _float_operand(parameters.split(","), 0)
+        if value is None:
+            continue
+        if name == "LL":
+            length = value
+        elif name == "PW":
+            width = value
+
+    return length, width
+
+
+def _validate_zpl_label(
+    origin: typing.Tuple[int, int],
+    extent: typing.Tuple[int, int],
+    bounds: typing.Tuple[typing.Optional[float], typing.Optional[float]],
+    page: int,
+) -> None:
+    """Reject a ZPL stamp rectangle running past the label length or width.
+
+    ``bounds`` is the ``(length, width)`` of :func:`_zpl_label_bounds`; an
+    unknown bound is not checked, leaving the operand range as the only limit.
+    """
+    (x_dots, y_dots), (width, height) = origin, extent
+    length_bound, width_bound = bounds
+
+    for edge, label, command, value, bound in (
+        ("y extent", "label length", "LL", y_dots + height, length_bound),
+        ("x extent", "print width", "PW", x_dots + width, width_bound),
+    ):
+        if bound is not None and value > bound:
+            raise ValueError(
+                f"The stamp's {edge} resolves to {value} dots, past the "
+                f"{label} ^{command}{bound:g} in effect for ZPL format {page}: "
+                f"the stamp is drawn from ^FO{x_dots},{y_dots} over "
+                f"{width} x {height} dots"
+            )
+
+
 def _validate_graphic_name(graphic_name: str) -> None:
     """Reject a ZPL stored-object name that is not a plain object name."""
     if not re.match(ZPL_GRAPHIC_NAME_PATTERN, graphic_name):
@@ -930,7 +983,9 @@ def stamp_zpl(document_b64: str, request: StampRequest) -> str:
     stream at the placement's ``^FO`` origin. A nonzero rotation rotates the
     raster clockwise and the rotated raster's top-left anchors at the
     placement's own ``^FO``. Any origin or extent operand resolving outside
-    the ZPL range 0-32000 is rejected before the raster is built.
+    the ZPL range 0-32000, and any extent running past the label length
+    (``^LL``) or print width (``^PW``) in effect for the selected format, is
+    rejected before the raster is built.
     ``request.date`` is composited into the same raster preceding the
     signature. The field is spliced into the format the placement's ``page``
     selects, the first by default (see :func:`_splice_zpl_field`).
@@ -954,7 +1009,12 @@ def stamp_zpl(document_b64: str, request: StampRequest) -> str:
     _validate_zpl_operands(x_dots, y_dots, *_zpl_raster_extent(placement))
 
     stream = helpers.decode_bytes(base64.b64decode(document_b64))
-    _validate_zpl_page(placement.page, len(_zpl_formats(stream)))
+    formats = _zpl_formats(stream)
+    page = _validate_zpl_page(placement.page, len(formats)) + 1
+    _, close = formats[page - 1]
+    label = _zpl_label_bounds(stream if close is None else stream[:close])
+    _validate_zpl_label((x_dots, y_dots), _zpl_raster_extent(placement), label, page)
+
     raster = _build_zpl_raster(request)
     rotation = placement.rotation or 0
 
@@ -962,6 +1022,7 @@ def stamp_zpl(document_b64: str, request: StampRequest) -> str:
         raster = raster.rotate(-rotation, expand=True, fillcolor=1)
 
     _validate_zpl_operands(x_dots, y_dots, *raster.size)
+    _validate_zpl_label((x_dots, y_dots), raster.size, label, page)
     hexdata, total, bytes_per_row = _encode_grf(raster)
 
     if request.graphic_name:

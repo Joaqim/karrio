@@ -17,6 +17,7 @@ import karrio.lib as lib
 import karrio.core.utils.stamping as stamping
 
 from .stamping_helpers import (
+    blank_pdf_b64,
     decode_zpl,
     example_zpl_form_b64,
     form_pdf_b64,
@@ -333,19 +334,6 @@ class TestPdfRotation(unittest.TestCase):
 
         self.assertIn("mediabox", str(ctx.exception))
 
-    def test_the_same_extent_unrotated_is_tolerated(self):
-        stamped = stamping.stamp_pdf(
-            form_pdf_b64(),
-            stamping.StampRequest(
-                image=signature_png_b64(),
-                placement=stamping.StampPlacement(
-                    x=200.0, y=50.0, width=20.0, height=200.0
-                ),
-            ),
-        )
-
-        self.assertEqual(len(overlay_cms(stamped)), 1)
-
 
 class TestZplRotation(unittest.TestCase):
     def test_rotation_swaps_dimensions_and_anchors_at_the_placement(self):
@@ -524,8 +512,10 @@ class TestConsumerDateStamp(unittest.TestCase):
         self.assertLess(ratio, 1.1)
 
     def test_oversized_date_strip_is_rejected_before_rendering(self):
-        # A 4 x 2 m date strip would render a 23622 x 23622 px raster at the
-        # 300 dpi overlay density, past the per-side limit.
+        # A 4 x 2 m placement with a date strip of 2 x 2 m would render a
+        # 23622 x 23622 px raster at the 300 dpi overlay density, past the
+        # per-side limit. The 12000 x 6000 pt page holds the placement, so
+        # the page bounds do not reject it first.
         with mock.patch.object(
             stamping,
             "_render_date_image",
@@ -533,7 +523,7 @@ class TestConsumerDateStamp(unittest.TestCase):
         ) as render:
             with self.assertRaises(ValueError) as ctx:
                 stamping.stamp_pdf(
-                    sentinel_pdf_b64(),
+                    blank_pdf_b64(width=12000, height=6000),
                     stamping.StampRequest(
                         image=signature_png_b64(),
                         placement=stamping.StampPlacement(

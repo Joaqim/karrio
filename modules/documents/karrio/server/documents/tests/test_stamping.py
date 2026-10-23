@@ -180,6 +180,21 @@ class TestDocumentStamper(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("1 page(s)", str(response.content))
 
+    def test_stamp_placement_outside_the_page_returns_400(self):
+        """A placement drawn past the mediabox is a 400 naming the edge."""
+        response = self.client.post(
+            self.url,
+            {
+                "document": A4_PDF_BASE64,
+                "image": SIGNATURE_PNG_BASE64,
+                "placement": {"x": 200.0, "y": 50.0, "width": 20.0, "height": 10.0},
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("right edge", str(response.content))
+
     def test_stamp_rejects_png_document(self):
         """A PNG document is a client fault: 400, not 500."""
         response = self.client.post(
