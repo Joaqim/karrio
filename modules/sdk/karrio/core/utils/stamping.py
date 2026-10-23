@@ -149,9 +149,9 @@ class StampRequest:
     ``graphic_name`` opts the ZPL backend into the send-once-per-printer cache:
     the raster is downloaded once as a stored ``~DY`` object and recalled per
     label with ``^XG`` instead of inlining ``^GFA``; the PDF backend ignores it.
-    ``zpl_format`` is the zero-based index of the ``^XA``...``^XZ`` format the
-    ZPL field is spliced into (see :func:`_splice_zpl_field`); ``None`` means
-    the stream's last format. The PDF backend ignores it.
+    The placement's ``page`` names the PDF page or, for ZPL, the one-based
+    ``^XA``...``^XZ`` format the field is spliced into (see
+    :func:`_zpl_formats`).
     """
 
     image: str = None
@@ -159,7 +159,6 @@ class StampRequest:
     layer: str = "overlay"
     date: str = None
     graphic_name: str = None
-    zpl_format: typing.Optional[int] = None
 
 
 @attr.s(auto_attribs=True)
@@ -701,28 +700,59 @@ def _encode_grf(image: "PIL.Image.Image") -> typing.Tuple[str, int, int]:
     return "".join(rows), bytes_per_row * height, bytes_per_row
 
 
-def _splice_zpl_field(
-    stream: str, field: str, format_index: typing.Optional[int] = None
-) -> str:
-    """Insert ``field`` immediately before the ``^XZ`` closing one format.
+ZPL_FORMAT_CLOSE: str = "^XZ"
+
+
+def _zpl_formats(stream: str) -> typing.List[typing.Tuple[int, typing.Optional[int]]]:
+    """Return each format of a ZPL stream as ``(start, close)`` offsets.
 
     A format spans from just after the previous ``^XZ`` (or the stream start)
-    to its own ``^XZ``, so a redundant header ``^XA`` opening a format does not
-    start another one. ``format_index`` is the zero-based format to splice
-    into, ``None`` meaning the last one. ZPL has no z-order; a later field is
-    drawn on top, so splicing before the format-close ``^XZ`` draws the
-    graphic over that format's content. A stream with no ``^XZ``, or a format
-    index past its last ``^XZ`` (an unterminated trailing format), is closed
-    after the appended field.
+    to its own ``^XZ``, whose offset is ``close``, so a redundant header
+    ``^XA`` opening a format does not start another one. The text after the
+    last ``^XZ`` is an unterminated format, with ``close`` ``None``, only when
+    it contains ``^XA``; ``^FX`` comment text or whitespace there is not one.
     """
-    marker = "^XZ"
-    closes = [match.start() for match in re.finditer(re.escape(marker), stream)]
-    position = (closes[-1:] if format_index is None else closes[format_index:])[:1]
-    if not position:
-        return f"{stream}{field}{marker}"
+    closes = [
+        match.start() for match in re.finditer(re.escape(ZPL_FORMAT_CLOSE), stream)
+    ]
+    starts = [0] + [close + len(ZPL_FORMAT_CLOSE) for close in closes]
+    formats: typing.List[typing.Tuple[int, typing.Optional[int]]] = list(
+        zip(starts, closes)
+    )
+    if "^XA" in stream[starts[-1] :]:
+        formats.append((starts[-1], None))
 
-    index = position[0]
-    return f"{stream[:index]}{field}{stream[index:]}"
+    return formats
+
+
+def _validate_zpl_page(page: typing.Optional[int], format_count: int) -> int:
+    """Return the zero-based index of a one-based ZPL format page."""
+    number = 1 if page is None else page
+    if not 1 <= number <= format_count:
+        raise ValueError(
+            f"StampPlacement.page must be between 1 and the stream's "
+            f"{format_count} ZPL format(s) (got {page})"
+        )
+
+    return number - 1
+
+
+def _splice_zpl_field(stream: str, field: str, page: typing.Optional[int]) -> str:
+    """Insert ``field`` immediately before the ``^XZ`` closing one format.
+
+    ``page`` is the one-based format of :func:`_zpl_formats` to splice into,
+    the first when omitted; a page beyond the formats raises. ZPL has no
+    z-order; a later field is drawn on top, so splicing before the
+    format-close ``^XZ`` draws the graphic over that format's content. An
+    unterminated format is closed after the appended field. Every other byte
+    of the stream is kept.
+    """
+    formats = _zpl_formats(stream)
+    _, close = formats[_validate_zpl_page(page, len(formats))]
+    if close is None:
+        return f"{stream}{field}{ZPL_FORMAT_CLOSE}"
+
+    return f"{stream[:close]}{field}{stream[close:]}"
 
 
 # A caret command token: two leading uppercase/alphanumeric characters then the
@@ -765,7 +795,9 @@ def _float_operand(
         return None
 
 
-def _match_zpl_field(stream: str, keyword: str) -> _ZplFieldMatch:
+def _match_zpl_field(
+    stream: str, keyword: str, format_index: typing.Optional[int] = None
+) -> _ZplFieldMatch:
     """Return the first field whose ``^FD`` text contains ``keyword``.
 
     The scan walks command tokens rather than lines because carrier streams mix
@@ -781,10 +813,11 @@ def _match_zpl_field(stream: str, keyword: str) -> _ZplFieldMatch:
     and height of the field it belongs to, ending at that field's ``^FS``;
     its omitted operands fall back to the format's latest ``^FW`` (normal
     without one) and ``^CF`` height (``ZPL_DEFAULT_FONT_HEIGHT`` without
-    one). Zero matches raise naming the keyword.
+    one). A ``format_index`` restricts the match to that zero-based format.
+    Zero matches raise naming the keyword.
     """
     origin: typing.Optional[typing.Tuple[float, float]] = None
-    format_index = 0
+    current_format = 0
     orientation, height = 0, ZPL_DEFAULT_FONT_HEIGHT
     field_orientation: typing.Optional[int] = None
     field_height: typing.Optional[float] = None
@@ -793,7 +826,7 @@ def _match_zpl_field(stream: str, keyword: str) -> _ZplFieldMatch:
         name, parameters = command.group(1), command.group(2)
 
         if name == "XZ":
-            format_index += 1
+            current_format += 1
             origin = field_orientation = field_height = None
             orientation, height = 0, ZPL_DEFAULT_FONT_HEIGHT
         elif name == "FS":
@@ -812,7 +845,11 @@ def _match_zpl_field(stream: str, keyword: str) -> _ZplFieldMatch:
             field_orientation = ZPL_ORIENTATIONS.get(code)
             operands = parameters[1:] if field_orientation is not None else parameters
             field_height = _float_operand(operands.split(","), 1)
-        elif name == "FD" and keyword in parameters:
+        elif (
+            name == "FD"
+            and keyword in parameters
+            and format_index in (None, current_format)
+        ):
             if origin is None:
                 raise ValueError(
                     "The ZPL field matching the stamp keyword "
@@ -824,12 +861,16 @@ def _match_zpl_field(stream: str, keyword: str) -> _ZplFieldMatch:
                     field_orientation if field_orientation is not None else orientation
                 ),
                 height=field_height or height,
-                format_index=format_index,
+                format_index=current_format,
             )
 
     raise ValueError(
         f"No ZPL field matching the stamp keyword '{keyword}' was found "
-        "in the document"
+        + (
+            "in the document"
+            if format_index is None
+            else f"in ZPL format {format_index + 1} of the document"
+        )
     )
 
 
@@ -891,8 +932,9 @@ def stamp_zpl(document_b64: str, request: StampRequest) -> str:
     placement's own ``^FO``. Any origin or extent operand resolving outside
     the ZPL range 0-32000 is rejected before the raster is built.
     ``request.date`` is composited into the same raster preceding the
-    signature. ``request.graphic_name`` opts into the ``~DY`` / ``^XG``
-    send-once cache. ZPL has no z-order, so an ``underlay`` layer (letterhead)
+    signature. The field is spliced into the format the placement's ``page``
+    selects, the first by default (see :func:`_splice_zpl_field`).
+    ``request.graphic_name`` opts into the ``~DY`` / ``^XG`` send-once cache. ZPL has no z-order, so an ``underlay`` layer (letterhead)
     is out of practical scope and is rejected.
     """
     if request.layer == "underlay":
@@ -912,6 +954,7 @@ def stamp_zpl(document_b64: str, request: StampRequest) -> str:
     _validate_zpl_operands(x_dots, y_dots, *_zpl_raster_extent(placement))
 
     stream = helpers.decode_bytes(base64.b64decode(document_b64))
+    _validate_zpl_page(placement.page, len(_zpl_formats(stream)))
     raster = _build_zpl_raster(request)
     rotation = placement.rotation or 0
 
@@ -924,12 +967,12 @@ def stamp_zpl(document_b64: str, request: StampRequest) -> str:
     if request.graphic_name:
         download = f"~DY{request.graphic_name},A,G,{total},{bytes_per_row},{hexdata}"
         field = f"^FO{x_dots},{y_dots}^XG{request.graphic_name},1,1^FS"
-        result = f"{download}\n{_splice_zpl_field(stream, field, request.zpl_format)}"
+        result = f"{download}\n{_splice_zpl_field(stream, field, placement.page)}"
     else:
         field = (
             f"^FO{x_dots},{y_dots}^GFA,{total},{total}," f"{bytes_per_row},{hexdata}^FS"
         )
-        result = _splice_zpl_field(stream, field, request.zpl_format)
+        result = _splice_zpl_field(stream, field, placement.page)
 
     return base64.b64encode(result.encode("utf-8")).decode("utf-8")
 
@@ -1040,8 +1083,9 @@ def _resolve_keyword_placement(
     keyword: str,
     geometry: StampPlacement,
     frame: bool = False,
-) -> typing.Tuple[StampPlacement, int]:
-    """Return ``geometry`` placed from the located field, and the field's format.
+    page: typing.Optional[int] = None,
+) -> StampPlacement:
+    """Return ``geometry`` placed from the located field, on the field's format.
 
     With ``frame`` unset only the position comes from the carrier form: the
     matched field's ``^FO`` origin converts from dots to millimetres at the
@@ -1052,11 +1096,15 @@ def _resolve_keyword_placement(
     and :class:`StampSeed`) and is mapped onto the label like the PDF
     keyword geometry, its rotation adding the field's orientation. Either way
     the resolved placement meets the same anchor and operand validation as a
-    consumer-supplied one, and the returned format index names the
-    ``^XA``...``^XZ`` format the stamp belongs in.
+    consumer-supplied one, and its ``page`` names the one-based
+    ``^XA``...``^XZ`` format the stamp belongs in. A ``page`` restricts the
+    search to that format; a page beyond the formats raises.
     """
     stream = helpers.decode_bytes(base64.b64decode(document_b64))
-    match = _match_zpl_field(stream, keyword)
+    format_index = (
+        None if page is None else _validate_zpl_page(page, len(_zpl_formats(stream)))
+    )
+    match = _match_zpl_field(stream, keyword, format_index)
 
     if frame:
         origin = _zpl_text_origin(match, keyword)
@@ -1073,7 +1121,7 @@ def _resolve_keyword_placement(
             y=dots_to_mm(origin_y, geometry.dpi) + (geometry.y or 0.0),
         )
 
-    return placement, match.format_index
+    return attr.evolve(placement, page=match.format_index + 1)
 
 
 Matrix = typing.Tuple[float, float, float, float, float, float]
@@ -1413,17 +1461,18 @@ def _resolve_keyword(
     geometry: StampPlacement,
     page: int = None,
     frame: bool = False,
-) -> typing.Tuple[StampPlacement, typing.Optional[int]]:
+) -> StampPlacement:
     """Resolve a keyword-anchored placement with the format's locator.
 
-    Returns the placement and, for ZPL, the format the stamp belongs in.
-    ``frame`` selects ZPL reading-frame geometry; PDF geometry is always
-    measured in the text's reading frame.
+    The placement's page is the PDF page or ZPL format the keyword was found
+    in, searched in ``page`` only when given. ``frame`` selects ZPL
+    reading-frame geometry; PDF geometry is always measured in the text's
+    reading frame.
     """
     if document_format == "ZPL":
-        return _resolve_keyword_placement(document_b64, keyword, geometry, frame)
+        return _resolve_keyword_placement(document_b64, keyword, geometry, frame, page)
 
-    return _resolve_pdf_keyword_placement(document_b64, keyword, geometry, page), None
+    return _resolve_pdf_keyword_placement(document_b64, keyword, geometry, page)
 
 
 def stamp_document(
@@ -1476,13 +1525,13 @@ def stamp_document(
     found nowhere, and text not turned by a multiple of 90 degrees each
     raise.
 
-    An optional one-based ``page`` names the PDF page a registry-resolved or
-    keyword-resolved placement applies to: a coordinate seed measured on one
-    page stamps the page a classification names, and a keyword is searched on
-    that page only instead of the first page containing it; an out-of-range
-    page raises. Combined with a fully anchored placement, which already
-    names its page, it raises as a second, contradictory anchor, and against
-    ZPL, which has no pages, it raises rather than being silently ignored.
+    An optional one-based ``page`` names the PDF page, or the ZPL
+    ``^XA``...``^XZ`` format, a registry-resolved or keyword-resolved
+    placement applies to: a coordinate seed measured on one page stamps the
+    page a classification names, and a keyword is searched on that page or
+    format only instead of the first one containing it; an out-of-range page
+    raises. Combined with a fully anchored placement, which already names its
+    page, it raises as a second, contradictory anchor.
 
     The utility composites pixels only: it stores nothing and makes no
     assertion about the legal validity or signature semantics of the result.
@@ -1497,12 +1546,6 @@ def stamp_document(
         raise ValueError(
             f"Document stamping has no active backend for the "
             f"'{document_format}' format; the document cannot be stamped"
-        )
-
-    if page is not None and document_format != "PDF":
-        raise ValueError(
-            f"A stamp page is unsupported for the '{document_format}' format; "
-            "only a PDF document has pages to select"
         )
 
     placement = _normalize_units(placement)
@@ -1522,7 +1565,6 @@ def stamp_document(
             "(both x and y set); set the page on the placement instead"
         )
 
-    zpl_format: typing.Optional[int] = None
     if fully_anchored:
         resolved = placement
     elif keyword:
@@ -1549,7 +1591,7 @@ def stamp_document(
                     f"registry seed with keyword geometry resolves for key "
                     f"'{key}'"
                 )
-        resolved, zpl_format = _resolve_keyword(
+        resolved = _resolve_keyword(
             document_format,
             document.base64,
             keyword,
@@ -1565,7 +1607,7 @@ def stamp_document(
             seed = _resolve_seed(key)
             geometry, frame = _seed_keyword_geometry(seed, document_format)
             if seed is not None and seed.keyword and geometry is not None:
-                resolved, zpl_format = _resolve_keyword(
+                resolved = _resolve_keyword(
                     document_format,
                     document.base64,
                     seed.keyword,
@@ -1591,7 +1633,6 @@ def stamp_document(
         layer=layer,
         date=date,
         graphic_name=graphic_name,
-        zpl_format=zpl_format,
     )
     stamped = _BACKENDS[document_format](document.base64, request)
 

@@ -605,3 +605,35 @@ def grf_ink_bounds(hexdata: str, bytes_per_row: int):
             rows.add(y)
             columns.update(inked)
     return sorted(rows), sorted(columns)
+
+
+# Two ZPL formats, each printing the keyword: the first at ^FO20,35, the
+# second, which opens with a redundant header ^XA, at ^FO25,45. ^FX comment
+# text sits between the formats and after the last one.
+ZPL_FORMAT_ONE = "^XA^FO10,10^GB100,100,2^FS^FO20,35^FDSender signature^FS^XZ"
+ZPL_FORMAT_TWO = "^XA^CI28\n^XA^FO30,40^GB50,50,1^FS^FO25,45^FDSender signature^FS^XZ"
+ZPL_INTER_FORMAT_TEXT = "\n^FX between the formats^FS\n"
+ZPL_TRAILING_TEXT = "\n^FX after the last format^FS\n"
+
+
+def two_format_zpl(terminated: bool = True, swapped: bool = False) -> str:
+    """A two-format ZPL stream with nested ``^XA`` and ``^FX`` comment text.
+
+    Without ``terminated`` the second format lacks its closing ``^XZ``, so
+    the trailing ``^FX`` text belongs to it; ``swapped`` puts the formats in
+    the other order.
+    """
+    first, second = (
+        (ZPL_FORMAT_TWO, ZPL_FORMAT_ONE)
+        if swapped
+        else (ZPL_FORMAT_ONE, ZPL_FORMAT_TWO)
+    )
+    if not terminated:
+        second = second[: -len("^XZ")]
+    return f"{first}{ZPL_INTER_FORMAT_TEXT}{second}{ZPL_TRAILING_TEXT}"
+
+
+def stamp_field(zpl: str) -> str:
+    """Return the one inline stamp field ``^FO..^GFA..^FS`` in a stream."""
+    (field,) = re.findall(r"\^FO\d+,\d+\^GFA,[^^]*\^FS", zpl)
+    return field

@@ -7,9 +7,7 @@ import karrio.core.models as models
 import karrio.core.utils.stamping as stamping
 
 from .stamping_helpers import (
-    EXAMPLE_SEED,
     INLINE_KEYWORD_STREAM,
-    KEYWORD,
     keyword_zpl_document,
     overlay_cms,
     page_count,
@@ -120,25 +118,19 @@ class TestPageOverrideRejections(unittest.TestCase):
 
         self.assertIn("fully anchored placement", str(ctx.exception))
 
-    def test_override_against_zpl_raises(self):
-        geometry = stamping.StampPlacement(width=60.0, height=20.0)
-        with providers(seeded_provider({"customs_declaration/ZPL/*": EXAMPLE_SEED})):
-            for kwargs in (
-                dict(carrier="acme", doc_type="customs_declaration"),
-                dict(keyword=KEYWORD, placement=geometry),
-                dict(placement=zpl_placement()),
-            ):
-                with self.subTest(kwargs=sorted(kwargs)):
-                    with self.assertRaises(ValueError) as ctx:
-                        lib.stamp_document(
-                            keyword_zpl_document(INLINE_KEYWORD_STREAM),
-                            image=signature_png_b64(),
-                            page=1,
-                            **kwargs,
-                        )
+    def test_override_with_a_fully_anchored_zpl_placement_raises(self):
+        # A page selects a ZPL format like a PDF page (see
+        # test_stamping_zpl_pages), so against ZPL it raises only as the
+        # second anchor beside a fully anchored placement.
+        with self.assertRaises(ValueError) as ctx:
+            lib.stamp_document(
+                keyword_zpl_document(INLINE_KEYWORD_STREAM),
+                image=signature_png_b64(),
+                placement=zpl_placement(),
+                page=1,
+            )
 
-                    self.assertIn("'ZPL'", str(ctx.exception))
-                    self.assertIn("page", str(ctx.exception))
+        self.assertIn("fully anchored placement", str(ctx.exception))
 
 
 if __name__ == "__main__":
