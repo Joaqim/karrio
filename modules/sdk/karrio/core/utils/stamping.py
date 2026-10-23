@@ -1202,13 +1202,13 @@ def _detect_paper_variant(
                 return "*"
             index = page - 1
         elif keyword:
-            needle = _normalize_whitespace(keyword)
+            needle = _match_text(keyword)
             index = next(
                 (
                     index
                     for index, candidate in enumerate(pages)
                     if any(
-                        needle in _normalize_whitespace(text)
+                        needle in _match_text(text)
                         for text, _ in _page_text_runs(candidate)
                     )
                 ),
@@ -1516,8 +1516,8 @@ def _resolve_pdf_keyword_placement(
 
     The keyword is searched in the text runs of ``page`` when given, else of
     the first page whose text contains it. The origin is the start of the
-    first run containing the keyword (whitespace runs collapsed), in page
-    space including every enclosing ``cm`` and form ``/Matrix``, and the
+    first run containing the keyword (whitespace runs collapsed and
+    typographic quotes folded, see ``QUOTE_FOLDS``), in page space including every enclosing ``cm`` and form ``/Matrix``, and the
     run's direction defines the reading frame the geometry is measured in
     (see :class:`StampSeed`). The geometry's rectangle is mapped from that
     frame onto the page, its rotation adds the text's clockwise angle, and
@@ -1541,13 +1541,13 @@ def _resolve_pdf_keyword_placement(
             "text: the target PDF page carries no extractable text"
         )
 
-    needle = _normalize_whitespace(keyword)
+    needle = _match_text(keyword)
     match = next(
         (
             (index, matrix)
             for index in candidates
             for text, matrix in page_runs[index]
-            if needle in _normalize_whitespace(text)
+            if needle in _match_text(text)
         ),
         None,
     )
@@ -1921,8 +1921,20 @@ class AnyOf:
         self.__attrs_init__(sets=tuple(sets))
 
 
-def _normalize_whitespace(text: str) -> str:
-    return " ".join(text.split())
+# Typographic quote variants folded to their ASCII form before matching.
+# pypdf 6.16 (py-pdf/pypdf#3905) decodes a standard-14 font without /Encoding
+# through its built-in StandardEncoding, where byte 0x27 is quoteright
+# (U+2019), while earlier versions decode it as U+0027; folding keeps one
+# keyword or marker matching on either.
+QUOTE_FOLDS: typing.Dict[int, str] = {
+    **{ord(c): "'" for c in "\u2018\u2019\u201a\u201b\u2032"},
+    **{ord(c): '"' for c in "\u201c\u201d\u201e\u201f\u2033"},
+}
+
+
+def _match_text(text: str) -> str:
+    """Return ``text`` with whitespace runs collapsed and quotes folded."""
+    return " ".join(text.translate(QUOTE_FOLDS).split())
 
 
 def _marker_sets(value: SectionMarkers) -> typing.Tuple[MarkerSet, ...]:
@@ -1939,13 +1951,11 @@ def _kinds_present(
     than a sequence of characters, an :class:`AnyOf` declares alternative
     sets of which one must fully match, and an empty set never matches.
     """
-    haystack = _normalize_whitespace(text)
+    haystack = _match_text(text)
 
     def matches(markers: MarkerSet) -> bool:
         values = (markers,) if isinstance(markers, str) else tuple(markers)
-        return bool(values) and all(
-            _normalize_whitespace(value) in haystack for value in values
-        )
+        return bool(values) and all(_match_text(value) in haystack for value in values)
 
     return frozenset(
         kind

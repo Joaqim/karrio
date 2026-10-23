@@ -77,6 +77,21 @@ class TestPdfKeywordPlacement(unittest.TestCase):
         self.assertAlmostEqual(cm[1], 0, places=6)
         self.assertAlmostEqual(cm[2], 0, places=6)
 
+    def test_keyword_matches_either_apostrophe_style(self):
+        # pypdf 6.16 decodes byte 0x27 of a standard-14 font without
+        # /Encoding as U+2019 (StandardEncoding quoteright), earlier versions
+        # as U+0027, so a keyword written with either style must match.
+        for keyword in (KEYWORD, KEYWORD.replace("'", "\u2019")):
+            with self.subTest(keyword=keyword):
+                stamped = _stamp(
+                    _document([_run(UPRIGHT, 100, 500)]),
+                    keyword=keyword,
+                    registry=_measured,
+                )
+
+                (cm,) = overlay_cms(stamped.base64)
+                self.assertOrigin(cm, 100 + MM5, 500 - MM2 - MM10 + FIT)
+
     def test_clockwise_keyword_turns_the_strip_along_the_text(self):
         # Text reading downward from (300, 600) pt: "along" is page-down and
         # "below" is page-left, so the strip spans x 300-12..300-2 mm and

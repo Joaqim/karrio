@@ -232,6 +232,16 @@ class TestPdfClassification(unittest.TestCase):
 
         self.assertEqual(result.doc_type, "cn22")
 
+    def test_marker_matches_either_apostrophe_style(self):
+        for marker in ("Sender's declaration", "Sender\u2019s declaration"):
+            with self.subTest(marker=marker):
+                result = stamping.classify_customs_composition(
+                    pdf_form(["Sender's declaration"]),
+                    sections={"PDF": {"cn22": (marker,)}},
+                )
+
+                self.assertEqual(result.doc_type, "cn22")
+
     def test_text_matching_no_marker_is_not_customs_bearing(self):
         result = self.classify(pdf_form(["Commercial invoice"]))
 
