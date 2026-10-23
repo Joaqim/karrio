@@ -57,11 +57,11 @@ SDK tests run with `python -m unittest discover -v -f modules/sdk/tests`, and se
 
 ## 9. REST fields
 
-- [ ] 9.1 Add server tests in `modules/documents/karrio/server/documents/tests/test_stamping.py`: a keyword with a width/height-only placement stamps ZPL with 201; `unit="px"` with `compression="z64"` returns a Z64 graphic at the pixel extent; only one of `x`/`y` answers 400; a placement without `x`/`y` and no keyword answers 400 naming the keyword; `page=2` stamps the second ZPL format; an unknown unit or compression answers 400
-- [ ] 9.2 Add `unit`, optional `x`/`y`, `keyword` and `compression` to the serializers and the view, and commit `feat(documents): accept stamp units, keywords and compression over rest`
+- [x] 9.1 Add server tests in `modules/documents/karrio/server/documents/tests/test_stamping.py`: a keyword with a width/height-only placement stamps ZPL with 201; `unit="px"` with `compression="z64"` returns a Z64 graphic at the pixel extent; only one of `x`/`y` answers 400; a placement without `x`/`y` and no keyword answers 400 naming the keyword; `page=2` stamps the second ZPL format; an unknown unit or compression answers 400
+- [x] 9.2 Add `unit`, optional `x`/`y`, `keyword` and `compression` to the serializers and the view, and commit `feat(documents): accept stamp units, keywords and compression over rest`
 
 ## 10. Integration
 
 - [ ] 10.1 Run the SDK and documents suites in the nix dev shell with import paths under the worktree, and the SDK suite in `python:3.12-slim-bookworm`
-- [ ] 10.2 Update `apps/www/docs/reference/guides/document-stamping.mdx` for units, fit, ZPL pages, bounds, compression and `cn23`, as `docs(documents): document stamping units, fit and zpl pages`
+- [x] 10.2 Update `apps/www/docs/reference/guides/document-stamping.mdx` for units, fit, ZPL pages, bounds, compression and `cn23`, as `docs(documents): document stamping units, fit and zpl pages`
 - [ ] 10.3 Run `docs/notes/workflow/rebuild-develop.sh`; pushing stays the user's decision
