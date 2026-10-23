@@ -256,12 +256,15 @@ def dots_to_mm(value: float, dpi: int) -> float:
     return value * MM_PER_INCH / dpi
 
 
-@typing.overload
-def _normalize_units(placement: StampPlacement) -> StampPlacement: ...
-
-
+# The None overload comes first: under the repository's mypy.ini
+# (strict_optional = False) None is assignable to StampPlacement, so a
+# StampPlacement overload listed first would shadow it.
 @typing.overload
 def _normalize_units(placement: None) -> None: ...
+
+
+@typing.overload
+def _normalize_units(placement: StampPlacement) -> StampPlacement: ...
 
 
 def _normalize_units(
@@ -673,10 +676,11 @@ def _validate_page(page: typing.Optional[int], page_count: int) -> int:
 
 def _date_raster_size(width_pt: float, height_pt: float) -> typing.Tuple[int, int]:
     """Return the PDF date raster's pixel size, rejecting oversized strips."""
-    size = tuple(
+    width, height = (
         max(int(round(value / POINTS_PER_INCH * OVERLAY_DPI)), 1)
         for value in (width_pt, height_pt)
     )
+    size = (width, height)
     if max(size) > MAX_DATE_RASTER_PX:
         raise ValueError(
             f"The date strip resolves to {size[0]} x {size[1]} px at "
@@ -791,7 +795,7 @@ def _build_zpl_raster(request: StampRequest) -> "PIL.Image.Image":
         for side, bound in zip(signature.size, share)
     )
     canvas.paste(
-        signature.resize(fitted, PIL.Image.LANCZOS),
+        signature.resize(fitted, PIL.Image.Resampling.LANCZOS),
         (share_left, int(round((share[1] - fitted[1]) / 2))),
     )
 
@@ -1349,9 +1353,9 @@ def _resolve_keyword_placement(
     match = _match_zpl_field(stream, keyword, format_index)
 
     if frame:
-        origin = _zpl_text_origin(match, keyword)
+        origin_x, origin_y = _zpl_text_origin(match, keyword)
         placement = _frame_placement(
-            tuple(dots_to_mm(value, geometry.dpi) for value in origin),
+            (dots_to_mm(origin_x, geometry.dpi), dots_to_mm(origin_y, geometry.dpi)),
             match.orientation,
             geometry,
         )
