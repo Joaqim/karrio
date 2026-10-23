@@ -68,7 +68,7 @@ class TestZ64Compression(unittest.TestCase):
             r"\^GFA,(\d+),(\d+),(\d+),:Z64:([A-Za-z0-9+/=]+):([0-9A-F]{4})\^FS\^XZ",
             zpl,
         )
-        self.assertIsNotNone(match, zpl)
+        assert match is not None, zpl
         total, total2, bpr, data, crc = match.groups()
         self.assertEqual((total, total2, bpr), ("8", "8", "2"))
         self.assertEqual(
@@ -84,7 +84,7 @@ class TestZ64Compression(unittest.TestCase):
             r"~DYR:SIGN\.GRF,A,G,(\d+),(\d+),:Z64:([A-Za-z0-9+/=]+):([0-9A-F]{4})",
             download,
         )
-        self.assertIsNotNone(match, download)
+        assert match is not None, download
         total, bpr, data, crc = match.groups()
         self.assertEqual((total, bpr), ("8", "2"))
         self.assertEqual(

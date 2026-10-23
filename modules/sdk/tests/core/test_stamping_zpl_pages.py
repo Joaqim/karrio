@@ -2,6 +2,8 @@
 
 import unittest
 
+import attr
+
 import karrio.lib as lib
 import karrio.core.models as models
 import karrio.core.utils.stamping as stamping
@@ -21,7 +23,7 @@ from .stamping_helpers import (
 )
 
 # A 20 x 10 mm stamp at (5, 5) mm: ^FO40,40 at 203 dpi.
-PLACEMENT = dict(x=5.0, y=5.0, width=20.0, height=10.0)
+PLACEMENT = stamping.StampPlacement(x=5.0, y=5.0, width=20.0, height=10.0)
 
 
 def _stamp(stream, **placement):
@@ -30,7 +32,7 @@ def _stamp(stream, **placement):
             zpl_doc_b64(stream),
             stamping.StampRequest(
                 image=signature_png_b64(),
-                placement=stamping.StampPlacement(**{**PLACEMENT, **placement}),
+                placement=attr.evolve(PLACEMENT, **placement),
             ),
         )
     )
@@ -146,7 +148,7 @@ class TestStampDocumentZplPage(unittest.TestCase):
             image=signature_png_b64(),
             carrier="acme",
             doc_type="customs_declaration",
-            registry=lambda key: stamping.StampPlacement(**PLACEMENT),
+            registry=lambda key: PLACEMENT,
             page=2,
         )
 
@@ -161,7 +163,7 @@ class TestStampDocumentZplPage(unittest.TestCase):
             lib.stamp_document(
                 _document(two_format_zpl()),
                 image=signature_png_b64(),
-                placement=stamping.StampPlacement(**PLACEMENT),
+                placement=PLACEMENT,
                 page=2,
             )
 

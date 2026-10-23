@@ -2,6 +2,8 @@
 
 import unittest
 
+import attr
+
 import karrio.lib as lib
 import karrio.core.utils.stamping as stamping
 
@@ -83,17 +85,17 @@ class TestPointUnits(unittest.TestCase):
 
 
 class TestDefaultAndUnknownUnits(unittest.TestCase):
-    PLACEMENT = dict(x=20.0, y=30.0, width=60.0, height=15.0)
+    PLACEMENT = stamping.StampPlacement(x=20.0, y=30.0, width=60.0, height=15.0)
 
     def test_omitted_unit_is_byte_identical_to_mm(self):
-        omitted = stamping.StampPlacement(**self.PLACEMENT)
-        explicit = stamping.StampPlacement(unit="mm", **self.PLACEMENT)
+        omitted = self.PLACEMENT
+        explicit = attr.evolve(self.PLACEMENT, unit="mm")
 
         self.assertEqual(_pdf(omitted), _pdf(explicit))
         self.assertEqual(_zpl(omitted), _zpl(explicit))
 
     def test_unknown_unit_is_rejected_naming_the_field(self):
-        placement = stamping.StampPlacement(unit="in", **self.PLACEMENT)
+        placement = attr.evolve(self.PLACEMENT, unit="in")
         for stamp in (_pdf, _zpl):
             with self.subTest(backend=stamp.__name__):
                 with self.assertRaises(ValueError) as ctx:
@@ -108,7 +110,7 @@ class TestDefaultAndUnknownUnits(unittest.TestCase):
             lib.stamp_document(
                 keyword_zpl_document(INLINE_KEYWORD_STREAM),
                 image=solid_black_png_b64(),
-                placement=stamping.StampPlacement(unit="in", **self.PLACEMENT),
+                placement=attr.evolve(self.PLACEMENT, unit="in"),
             )
 
         self.assertIn("StampPlacement.unit", str(ctx.exception))

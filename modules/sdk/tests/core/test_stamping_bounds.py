@@ -260,16 +260,19 @@ class TestPartialPlacementGeometry(unittest.TestCase):
 
     def test_placement_with_only_one_anchor_is_rejected(self):
         for name, document in self.DOCUMENTS:
-            for anchor, missing in (
-                (dict(x=20.0), "StampPlacement.y"),
-                (dict(y=30.0), "StampPlacement.x"),
+            for placement, missing in (
+                (
+                    stamping.StampPlacement(x=20.0, width=20.0, height=10.0),
+                    "StampPlacement.y",
+                ),
+                (
+                    stamping.StampPlacement(y=30.0, width=20.0, height=10.0),
+                    "StampPlacement.x",
+                ),
             ):
                 with self.subTest(format=name, missing=missing):
                     with self.assertRaises(ValueError) as ctx:
-                        self._stamp(
-                            document(),
-                            stamping.StampPlacement(width=20.0, height=10.0, **anchor),
-                        )
+                        self._stamp(document(), placement)
 
                     self.assertIn(missing, str(ctx.exception))
 

@@ -129,6 +129,7 @@ class TestZplFit(unittest.TestCase):
         )
         raster = stamping._build_zpl_raster(request)
         pixels = raster.load()
+        assert pixels is not None
         share_rows = sorted(
             {y for y in range(160) for x in range(160, 320) if pixels[x, y] == 0}
         )

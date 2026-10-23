@@ -48,6 +48,8 @@ import binascii
 
 import attr
 import pypdf
+import pypdf.errors
+import pypdf.generic
 import PIL.Image
 import PIL.ImageDraw
 import PIL.ImageFont
@@ -233,6 +235,14 @@ def dots_to_mm(value: float, dpi: int) -> float:
     rounds back to whole dots inside the ZPL backend.
     """
     return value * MM_PER_INCH / dpi
+
+
+@typing.overload
+def _normalize_units(placement: StampPlacement) -> StampPlacement: ...
+
+
+@typing.overload
+def _normalize_units(placement: None) -> None: ...
 
 
 def _normalize_units(
@@ -550,7 +560,7 @@ def _own_resources(page: "pypdf.PageObject") -> None:
     and in each of ``MERGED_RESOURCE_KEYS``; streams stay shared, since the
     merge never mutates them.
     """
-    node = page
+    node: typing.Any = page
     while "/Resources" not in node and "/Parent" in node:
         node = node["/Parent"]
 
@@ -1672,7 +1682,7 @@ def stamp_document(
     graphic_name: str = None,
     keyword: str = None,
     page: int = None,
-    compression: str = None,
+    compression: typing.Optional[str] = None,
 ) -> models.ShippingDocument:
     """Composite a base64 PNG onto a returned carrier document.
 

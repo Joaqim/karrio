@@ -1068,7 +1068,7 @@ def stamp_document(
     graphic_name: str = None,
     keyword: str = None,
     page: int = None,
-    compression: str = None,
+    compression: typing.Optional[str] = None,
 ) -> models.ShippingDocument:
     """Composite a base64 PNG onto a returned carrier document.
 
