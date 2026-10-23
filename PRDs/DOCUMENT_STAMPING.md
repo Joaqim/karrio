@@ -74,10 +74,6 @@ The utility composites pixels only: it stores nothing and asserts nothing about 
 | Q3 | Does the request body limit accommodate a base64 document plus a base64 image, and should the emitted graphic be capped? | No `DATA_UPLOAD_MAX_MEMORY_SIZE` override exists, so Django's 2.5 MB default likely caps the combined payload; this is untested. A 400 x 140 mm placement meant as dots emitted a 0.9 MB `^GFA`; the bounds check (D19) now rejects that case, and Z64 (D20) shrinks large graphics, but no byte cap is decided | A) confirm the default suffices, B) set an explicit ceiling with a 413 response, C) cap the emitted graphic in the SDK | Open |
 | Q4 | Should a registry miss return 409 instead of 400? | The endpoint maps every SDK `ValueError`, a registry miss included, to 400 (D11) | A) keep 400 for all `ValueError`s, B) 409 for a registry miss, 400 otherwise | Open |
 | Q5 | Should the date and signature split become per-carrier? | D6 splits every placement evenly (`DATE_STRIP_FRACTION = 0.5`, `modules/sdk/karrio/core/utils/stamping.py:76`); the split is derived from PostNord, currently the only supported stamping carrier | A) keep one even split, B) a per-carrier partition | Open until reference documents from further carriers are available |
-| Q6 | Should a document carrying both `cn22` and `cn23` markers raise or prefer one kind? | D24 raises naming both | A) raise, B) prefer `cn23`, C) report both kinds | Open |
-| Q7 | Should `compression="z64"` also apply to the `~DY` download of the `graphic_name` cache? | D20 rejects the combination until `~DY` with Z64 data is verified on a printer | A) keep rejecting, B) compress the `~DY` data too | Open |
-| Q8 | Without `^LL`, should a ZPL placement raise rather than fall back to the operand range? | D19 checks only the operand range when `^LL` is absent | A) operand range only, B) raise | Open |
-| Q9 | Should a seed lookup without `page` re-detect paper on the seed's own page? | D23 measures page 1 when the stamped page is known only after the lookup | A) page 1, B) re-detect and re-resolve | Open |
 
 ### Resolved Decisions
 
@@ -102,12 +98,15 @@ The utility composites pixels only: it stores nothing and asserts nothing about 
 | D17 | Placement units | `StampPlacement.unit` is `mm` (default), `pt` or `px`; `px` is printer dots at `dpi` for ZPL and pixels of the PDF page rendered at `dpi` for PDF; placements are normalized to millimetres, so seeds stay in millimetres | A placement measured in dots or render pixels was read as millimetres and stamped a graphic eight times too large, off the label |
 | D18 | Image fit | Uniform scale to the largest size fitting the box, left-aligned and centred on the short axis, inside the signature's share when a date is set; the box keeps its size | Stretching distorted every image whose aspect differed from its box |
 | D19 | Page and label bounds | Every final rectangle must lie within the PDF mediabox or the ZPL label (`^LL` length, `^PW` width when present); keyword-relative offsets are not checked | Off-page and off-label stamps succeeded silently; keyword offsets are negative by design |
-| D20 | ZPL compression | Opt-in `compression="z64"`, emitting `^GFA,total,total,bpr,:Z64:<base64(zlib)>:<crc16>`; the default stays byte-identical hex; rejected with `graphic_name` | A string leaves room for `:B64:` or ACS encodings without a second flag; the default keeps existing output stable |
+| D20 | ZPL compression | Opt-in `compression="z64"`, emitting `^GFA,total,total,bpr,:Z64:<base64(zlib)>:<crc16>`, and with `graphic_name` the same Z64 data in `~DY<name>,A,G,total,bpr,:Z64:<base64(zlib)>:<crc16>`; the default stays byte-identical hex | A string leaves room for `:B64:` or ACS encodings without a second flag; the default keeps existing output stable; both Z64 paths are checked once on Labelary or a printer |
 | D21 | ZPL page | `placement.page` and the `page` argument select the Nth `^XA`...`^XZ` format, one-based; page 1 is the first format | One page vocabulary for both formats; the last-format default stamped the wrong label of a multi-format stream |
 | D22 | Shared PDF resources | The stamped page gets a private copy of its resources before the merge | pypdf merges into the page's resources in place, so pages sharing one `/Resources` object all received the image |
-| D23 | Paper detection | Measured on the stamped page when known before the key is composed (the `page` argument, or the page a consumer PDF keyword is found on), else page 1 | A mixed-size document resolved the seed of its first page |
-| D24 | `cn23` | A second carrier-neutral declaration kind, combined type `label_cn23`; a document with both kinds raises | Carriers print CN23 for higher-value consignments; carriers contribute the markers and seeds |
+| D23 | Paper detection | Measured on the stamped page when known before the key is composed (the `page` argument, or the page a consumer PDF keyword is found on), else page 1; re-detecting on the page a seed resolves to is a follow-up | A mixed-size document resolved the seed of its first page; a seed names its page only after the lookup |
+| D24 | `cn23` | A second carrier-neutral declaration kind, combined type `label_cn23`; a document with both kinds raises naming both | Carriers print CN23 for higher-value consignments; preferring one kind would make the anchor depend on which form the carrier printed |
 | D25 | Endpoint fields | `unit`, `keyword` and `compression` are accepted; `x`/`y` are optional, and a placement with one of them, or with neither and no keyword, answers 400 | Resolves the former Q2; keyword stamping was unreachable over REST |
+| D26 | Partial placement geometry | `stamp_document` raises `ValueError` for a placement with only one of `x`/`y`, or with neither and no keyword, naming the missing field or keyword | Both previously fell back to the registry silently and stamped where the caller did not ask |
+| D27 | ZPL without `^LL` | Only the 0-32000 dot operand range is checked | No label length is known to check against |
+| D28 | Resources copy | A private copy whenever the stamped page's resources are indirect or inherited, not only when another page shares them | Keeps the rule local to the stamped page |
 
 ---
 
@@ -296,8 +295,9 @@ The date strip takes the leading half `d` of the primary axis; both halves are p
 | Unknown `unit` or `compression` | `ValueError` naming the accepted values |
 | PDF extent, rotated or not, leaving the mediabox | `ValueError` naming the edge |
 | ZPL extent past the `^LL` length or the `^PW` width | `ValueError` naming the bound, raised before the raster is built |
-| `compression` with `graphic_name` | `ValueError` (Q7) |
-| Classification of a document with both `cn22` and `cn23` markers | `ValueError` naming both (Q6) |
+| `compression="z64"` with `graphic_name` | `~DY` download carries the Z64 data; `^XG` recall unchanged |
+| Placement with only one of `x`/`y`, or neither without a keyword | `ValueError` naming the missing field or keyword; no registry fallback |
+| Classification of a document with both `cn22` and `cn23` markers | `ValueError` naming both (D24) |
 | ZPL origin or extent outside 0-32000 dots | `ValueError`, raised before the raster is built |
 | PDF date strip above 20 000 px per side | `ValueError`, raised before rendering |
 | ZPL underlay | `ValueError`: ZPL has no z-order |
@@ -674,17 +674,21 @@ Bounds: the final drawn rectangle, after rotation, must lie within the PDF media
 Without `^PW` only the length is checked, and without `^LL` only the 0-32000 operand range.
 
 Compression: `compression="z64"` emits `^GFA,{total},{total},{bpr},:Z64:{data}:{crc}`, where `data` is the padded standard base64 of `zlib.compress` over the packed rows and `crc` the CRC-16/XMODEM (polynomial 0x1021, initial value 0) of `data` as four uppercase hex digits; `None`, the default, emits the existing hex byte-identically, and other values raise.
+With `graphic_name`, the `~DY` download carries the same data as `~DY{name},A,G,{total},{bpr},:Z64:{data}:{crc}`, format `A` covering ASCII-encoded data, Z64 included, and the `^XG` recall is unchanged.
 
 Resources: before merging, the stamped page's effective resources (its own or inherited) are replaced by a direct copy of the top-level dictionary and the subdictionaries the merge writes into, so no other page changes.
 
 Paper: the registry key's paper segment is measured on the `page` argument's page when given, else on the page a consumer PDF keyword is found on, else on page 1, since a seed names its page only after the lookup.
+Re-detecting the paper on the page a seed resolves to, and re-resolving when it differs, is a follow-up outside this section.
+
+Partial geometry: `stamp_document` raises before resolution for a placement with only one of `x`/`y` (naming the missing field) or with neither and no keyword (naming the keyword), beside the keyword-contradiction check, instead of falling back to the registry.
 
 `cn23`: the classifier's declaration kinds are `cn22` and `cn23`, giving `cn23` or `label_cn23`; a document with both raises.
 `DECLARATION_KIND` and `COMBINED_DOC_TYPE` keep their `cn22` values.
 
 Endpoint: `StampPlacementData` gains `unit` and optional `x`/`y`, and `StampData` gains `keyword` and `compression`; one of `x`/`y`, or neither without a keyword, answers 400.
 
-Behaviour changes: a ZPL coordinate placement without a page stamps the first format instead of the last; images are no longer stretched; unrotated PDF placements past the mediabox and ZPL placements past `^LL`/`^PW` raise.
+Behaviour changes: a ZPL coordinate placement without a page stamps the first format instead of the last; images are no longer stretched; unrotated PDF placements past the mediabox and ZPL placements past `^LL`/`^PW` raise; partial placements that fell back to the registry raise.
 
 ### Implementation plan
 
@@ -694,6 +698,7 @@ Behaviour changes: a ZPL coordinate placement without a page stamps the first fo
 | 8.2 | `feat(sdk): fit stamp images to their box preserving aspect ratio` | `stamping.py` (`_merge_overlay`, `_build_zpl_raster`), `modules/sdk/tests/core/test_stamping_fit.py`, existing stamping tests whose oracles assumed stretching |
 | 8.3 | `feat(sdk): select the zpl format a stamp lands in by page` | `stamping.py` (`_splice_zpl_field`, `_match_zpl_field`, `stamp_document`), `modules/sdk/tests/core/stamping_helpers.py`, `modules/sdk/tests/core/test_stamping_zpl_pages.py` |
 | 8.4 | `feat(sdk): reject stamp placements outside the page or label` | `stamping.py` (`_validate_pdf_extent`, ZPL label check), `modules/sdk/tests/core/test_stamping_bounds.py`, `modules/documents/karrio/server/documents/tests/test_stamping.py` |
+| 8.4b | `feat(sdk): reject partial stamp placement geometry` | `stamping.py` (`stamp_document`), `modules/sdk/tests/core/test_stamping_bounds.py` |
 | 8.5 | `feat(sdk): emit z64-compressed zpl stamp graphics on request` | `stamping.py` (`StampRequest.compression`, `stamp_zpl`, `stamp_document`), `modules/sdk/tests/core/test_stamping_z64.py` |
 | 8.6 | `fix(sdk): keep a stamp on its page when pdf pages share resources` | `stamping.py` (`stamp_pdf`), `stamping_helpers.py`, `modules/sdk/tests/core/test_stamping_pdf.py` |
 | 8.7 | `fix(sdk): detect the stamp paper variant on the stamped page` | `stamping.py` (`_detect_paper_variant`, `stamp_document`), `modules/sdk/tests/core/test_stamping_resolution.py` |
@@ -724,6 +729,8 @@ Oracles are independent literals: `^FO` operands, `^GFA` headers, `cm` matrices,
 | Stamp page 2 of a shared-resources PDF | page 1 resources unchanged |
 | A4 page 1, letter page 2, `page=2` | letter seed |
 | Lone CN23; label plus CN23 on page 2; CN22 and CN23 | `cn23`; `label_cn23`, page 2; `ValueError` |
+| SDK placement with only `x`, only `y`, or neither without keyword, with a seed registered | `ValueError`; seed unused |
+| `z64` with `graphic_name` | `~DY` Z64 data inflating to the hex golden's bytes; `^XG` unchanged |
 | REST keyword with a width/height-only placement; one of `x`/`y`; neither without keyword | 201; 400; 400 |
 
 ```bash
