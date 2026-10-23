@@ -62,6 +62,6 @@ SDK tests run with `python -m unittest discover -v -f modules/sdk/tests`, and se
 
 ## 10. Integration
 
-- [ ] 10.1 Run the SDK and documents suites in the nix dev shell with import paths under the worktree, and the SDK suite in `python:3.12-slim-bookworm`
+- [x] 10.1 Run the SDK and documents suites in the nix dev shell with import paths under the worktree, and the SDK suite in `python:3.12-slim-bookworm`
 - [x] 10.2 Update `apps/www/docs/reference/guides/document-stamping.mdx` for units, fit, ZPL pages, bounds, compression and `cn23`, as `docs(documents): document stamping units, fit and zpl pages`
 - [x] 10.3 Run `docs/notes/workflow/rebuild-develop.sh`; pushing stays the user's decision
