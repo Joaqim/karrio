@@ -8,4 +8,5 @@ app_name = "karrio.server.documents"
 urlpatterns = [
     path("", include("karrio.server.documents.views.printers")),
     path("v1/", include("karrio.server.documents.views.templates")),
+    path("v1/", include("karrio.server.documents.views.stamping")),
 ]
