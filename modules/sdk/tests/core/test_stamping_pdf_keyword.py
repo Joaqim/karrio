@@ -190,6 +190,16 @@ class TestPdfKeywordPlacement(unittest.TestCase):
 
         self.assertIn("non-negative", str(ctx.exception))
 
+    def test_keyword_geometry_without_an_extent_is_rejected(self):
+        with self.assertRaises(ValueError) as ctx:
+            _stamp(
+                _document([_run(UPRIGHT, 100, 500)]),
+                keyword=KEYWORD,
+                placement=stamping.StampPlacement(height=10.0),
+            )
+
+        self.assertIn("StampPlacement.width must be a positive", str(ctx.exception))
+
     def test_non_orthogonal_text_direction_raises(self):
         with self.assertRaises(ValueError) as ctx:
             _stamp(

@@ -212,6 +212,25 @@ class StampSeed:
     zpl_keyword_frame_placement: typing.Optional[StampPlacement] = None
 
 
+@attr.s(auto_attribs=True, frozen=True)
+class _ResolvedPlacement:
+    """A millimetre placement whose anchor and extent are known to be set.
+
+    :func:`_validate_anchor` returns it once ``x`` and ``y`` are non-negative
+    and ``width`` and ``height`` positive, so the backends compute from
+    measures that cannot be ``None``; the remaining fields carry over from the
+    :class:`StampPlacement` unchanged.
+    """
+
+    x: float
+    y: float
+    width: float
+    height: float
+    page: int = 1
+    rotation: float = 0
+    dpi: int = 203
+
+
 def mm_to_points(value: float) -> float:
     """Convert a millimetre measure to PDF points (1 pt = 1/72 in)."""
     return value * POINTS_PER_INCH / MM_PER_INCH
@@ -289,7 +308,7 @@ def _normalize_units(
 
 
 def placement_to_pdf_rect(
-    placement: StampPlacement,
+    placement: _ResolvedPlacement,
     page_height_pt: float,
 ) -> typing.Tuple[float, float, float, float]:
     """Return the placement rectangle in PDF points with a bottom-left origin.
@@ -307,7 +326,7 @@ def placement_to_pdf_rect(
     return (x, y, width, height)
 
 
-def _flatten_to_rgb(image_b64: str) -> "PIL.Image.Image":
+def _flatten_to_rgb(image_b64: typing.Optional[str]) -> "PIL.Image.Image":
     """Return a base64 PNG trimmed and white-flattened to an opaque RGB image.
 
     The image is auto-trimmed to its non-transparent bounding box and
@@ -334,7 +353,7 @@ def _flatten_to_rgb(image_b64: str) -> "PIL.Image.Image":
     return PIL.Image.alpha_composite(backdrop, trimmed).convert("RGB")
 
 
-def _build_overlay_page(image_b64: str) -> "pypdf.PageObject":
+def _build_overlay_page(image_b64: typing.Optional[str]) -> "pypdf.PageObject":
     """Return a single-page image-PDF page built from a base64 PNG."""
     buffer = io.BytesIO()
     _flatten_to_rgb(image_b64).save(
@@ -379,28 +398,56 @@ def _render_date_image(date: str, width: int, height: int) -> str:
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 
-def _validate_anchor(placement: StampPlacement) -> None:
-    """Reject anchors outside the printable coordinate domain.
+def _anchor_measure(placement: StampPlacement, field: str) -> float:
+    """Return a placement's ``x`` or ``y``, rejecting a missing or negative one."""
+    value = getattr(placement, field)
+    if value is None or value < 0:
+        raise ValueError(
+            f"StampPlacement.{field} must be a non-negative millimetre "
+            f"measure from the page top-left (got {value})"
+        )
+
+    return value
+
+
+def _extent_measure(placement: StampPlacement, field: str) -> float:
+    """Return a placement's ``width`` or ``height``, rejecting a missing or
+    non-positive one."""
+    value = getattr(placement, field)
+    if value is None or value <= 0:
+        raise ValueError(
+            f"StampPlacement.{field} must be a positive millimetre measure "
+            f"(got {value})"
+        )
+
+    return value
+
+
+def _validate_anchor(
+    placement: typing.Optional[StampPlacement],
+) -> _ResolvedPlacement:
+    """Return the placement resolved, rejecting anchors outside the domain.
 
     Placement coordinates are millimetres from the page top-left and become ZPL
     ``^FO`` operands valid only from 0, so a negative anchor is rejected before
-    any backend work; width and height must be positive measures.
+    any backend work; width and height must be positive measures. A missing
+    placement raises as well.
     """
-    for field in ("x", "y"):
-        value = getattr(placement, field)
-        if value is None or value < 0:
-            raise ValueError(
-                f"StampPlacement.{field} must be a non-negative millimetre "
-                f"measure from the page top-left (got {value})"
-            )
+    if placement is None:
+        raise ValueError("A stamp placement is required")
 
-    for field in ("width", "height"):
-        value = getattr(placement, field)
-        if value is None or value <= 0:
-            raise ValueError(
-                f"StampPlacement.{field} must be a positive millimetre measure "
-                f"(got {value})"
-            )
+    x, y = (_anchor_measure(placement, field) for field in ("x", "y"))
+    width, height = (_extent_measure(placement, field) for field in ("width", "height"))
+
+    return _ResolvedPlacement(
+        x=x,
+        y=y,
+        width=width,
+        height=height,
+        page=placement.page,
+        rotation=placement.rotation,
+        dpi=placement.dpi,
+    )
 
 
 def _rotate_clockwise(
@@ -461,11 +508,11 @@ def _fit_scale(
 
 def _merge_overlay(
     page: "pypdf.PageObject",
-    image_b64: str,
+    image_b64: typing.Optional[str],
     rect: typing.Tuple[float, float, float, float],
     rotation: float,
     over: bool,
-    origin: typing.Tuple[float, float] = None,
+    origin: typing.Optional[typing.Tuple[float, float]] = None,
     fit: bool = True,
 ) -> None:
     """Composite one base64 PNG into ``rect`` (PDF points) on ``page``.
@@ -477,8 +524,8 @@ def _merge_overlay(
     zero rotation translates the scaled image to ``rect``'s bottom-left
     corner. A nonzero rotation rotates the scaled image clockwise about that
     corner and translates the corner to ``origin`` (bottom-left-origin PDF
-    points), which the caller derives from the placement anchor, so the fit
-    offset turns with the rectangle.
+    points), which the caller derives from the placement anchor and must
+    supply, so the fit offset turns with the rectangle.
     """
     x, y, width, height = rect
     overlay = _build_overlay_page(image_b64)
@@ -492,6 +539,8 @@ def _merge_overlay(
         )
 
     if rotation:
+        if origin is None:
+            raise ValueError("A rotated stamp overlay needs its anchor origin")
         transformation = transformation.rotate(-rotation).translate(*origin)
     else:
         transformation = transformation.translate(x, y)
@@ -606,7 +655,7 @@ def _pdf_page_count(document_b64: str) -> int:
         raise ValueError(f"The PDF document could not be parsed: {error}") from error
 
 
-def _validate_page(page: int, page_count: int) -> int:
+def _validate_page(page: typing.Optional[int], page_count: int) -> int:
     """Return the zero-based index of a one-based placement page.
 
     An omitted page means the first; a page outside ``1..page_count`` raises
@@ -656,8 +705,7 @@ def stamp_pdf(document_b64: str, request: StampRequest) -> str:
     fitted into its rectangle without distortion. The page count is
     invariant.
     """
-    placement = _normalize_units(request.placement)
-    _validate_anchor(placement)
+    placement = _validate_anchor(_normalize_units(request.placement))
     writer = _clone_pdf(document_b64)
 
     page = writer.pages[_validate_page(placement.page, len(writer.pages))]
@@ -678,7 +726,7 @@ def stamp_pdf(document_b64: str, request: StampRequest) -> str:
         date_width = width * DATE_STRIP_FRACTION
         date_size = _date_raster_size(date_width, height)
         signature_origin = None
-        if rotation:
+        if origin is not None:
             offset = _rotate_clockwise((date_width, 0.0), math.radians(rotation))
             signature_origin = (origin[0] + offset[0], origin[1] + offset[1])
         _merge_overlay(
@@ -721,7 +769,7 @@ def _build_zpl_raster(request: StampRequest) -> "PIL.Image.Image":
     strokes solid ink instead of scattered speckle; the signature resamples
     with LANCZOS to preserve stroke connectivity across the resize.
     """
-    placement = request.placement
+    placement = _validate_anchor(request.placement)
     width = max(mm_to_dots(placement.width, placement.dpi), 1)
     height = max(mm_to_dots(placement.height, placement.dpi), 1)
 
@@ -983,7 +1031,7 @@ def _locate_zpl_field(stream: str, keyword: str) -> typing.Tuple[float, float]:
     return _match_zpl_field(stream, keyword).origin
 
 
-def _zpl_raster_extent(placement: StampPlacement) -> typing.Tuple[int, int]:
+def _zpl_raster_extent(placement: _ResolvedPlacement) -> typing.Tuple[int, int]:
     """Return the rotated raster's dot extent without building the raster.
 
     Exact for right-angle rotations; for any other angle it is a lower bound
@@ -1106,8 +1154,7 @@ def stamp_zpl(document_b64: str, request: StampRequest) -> str:
 
     _validate_compression(request.compression)
     request = attr.evolve(request, placement=_normalize_units(request.placement))
-    placement = request.placement
-    _validate_anchor(placement)
+    placement = _validate_anchor(request.placement)
     x_dots = mm_to_dots(placement.x, placement.dpi)
     y_dots = mm_to_dots(placement.y, placement.dpi)
     _validate_zpl_operands(x_dots, y_dots, *_zpl_raster_extent(placement))
@@ -1352,7 +1399,9 @@ def _frame_placement(
     """
     (dx, dy), (nx, ny) = _TEXT_FRAMES[direction]
     min_x, max_x, min_y, max_y = _rotated_bounds(
-        geometry.width, geometry.height, geometry.rotation or 0
+        _extent_measure(geometry, "width"),
+        _extent_measure(geometry, "height"),
+        geometry.rotation or 0,
     )
     left, top = geometry.x or 0.0, geometry.y or 0.0
     corners = [
