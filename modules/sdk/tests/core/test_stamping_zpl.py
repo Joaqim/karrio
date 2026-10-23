@@ -139,28 +139,34 @@ class TestZplBackend(unittest.TestCase):
 
 
 class TestZplRaster(unittest.TestCase):
-    def _assert_connected_black_row(self, dpi):
+    def _assert_connected_black_row(self, dpi, fitted_width):
         request = stamping.StampRequest(
             image=solid_black_png_b64(), placement=zpl_placement(dpi=dpi)
         )
 
         raster = stamping._build_zpl_raster(request)
 
-        width, height = raster.size
+        _, height = raster.size
         pixels = raster.load()
         # A solid-black stamp must survive flatten + resample + binarization as a
         # fully connected black run: at least one row is black (value 0) across
-        # its entire width. The oracle is the raster's own pixels, not the GRF
-        # encoder, so an inverted set-bit convention or a lost stroke fails here.
+        # the image's whole fitted width. The oracle is the raster's own pixels,
+        # not the GRF encoder, so an inverted set-bit convention or a lost
+        # stroke fails here.
         self.assertTrue(
-            any(all(pixels[x, y] == 0 for x in range(width)) for y in range(height))
+            any(
+                all(pixels[x, y] == 0 for x in range(fitted_width))
+                for y in range(height)
+            )
         )
 
     def test_stroke_stays_connected_at_203_dpi(self):
-        self._assert_connected_black_row(203)
+        # The 400 x 140 px image fits the 480 x 160-dot box 457 dots wide.
+        self._assert_connected_black_row(203, 457)
 
     def test_stroke_stays_connected_at_300_dpi(self):
-        self._assert_connected_black_row(300)
+        # The 709 x 236-dot box fits the image 674 dots wide.
+        self._assert_connected_black_row(300, 674)
 
     def test_faint_signature_strokes_survive_as_connected_ink(self):
         # A semi-transparent stroke (flattens to gray ~115) survives the ink

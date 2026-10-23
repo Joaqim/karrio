@@ -420,6 +420,22 @@ def _rotated_bounds(
     )
 
 
+def _fit_scale(
+    image_size: typing.Tuple[float, float], box_size: typing.Tuple[float, float]
+) -> typing.Tuple[float, typing.Tuple[float, float]]:
+    """Return the uniform scale fitting an image in a box, and its offset.
+
+    The scale is ``min(bw / iw, bh / ih)``, the largest that keeps the whole
+    image inside the box without distorting it. The offset places the scaled
+    image against the box's leading (left) edge and centres it on the other
+    axis: ``(0, (bh - ih * scale) / 2)`` in the box's own frame.
+    """
+    (image_width, image_height), (box_width, box_height) = image_size, box_size
+    scale = min(box_width / image_width, box_height / image_height)
+
+    return scale, (0.0, (box_height - image_height * scale) / 2)
+
+
 def _merge_overlay(
     page: "pypdf.PageObject",
     image_b64: str,
@@ -427,21 +443,30 @@ def _merge_overlay(
     rotation: float,
     over: bool,
     origin: typing.Tuple[float, float] = None,
+    fit: bool = True,
 ) -> None:
     """Composite one base64 PNG into ``rect`` (PDF points) on ``page``.
 
-    The image PDF is scaled to the rectangle. A zero rotation translates the
-    scaled image to ``rect``'s bottom-left corner. A nonzero rotation rotates
-    the scaled image clockwise about that corner and translates the corner to
-    ``origin`` (bottom-left-origin PDF points), which the caller derives from
-    the placement anchor.
+    With ``fit`` set the image PDF is scaled uniformly to the largest size
+    inside the rectangle, against its left edge and centred vertically (see
+    :func:`_fit_scale`); without it the image is scaled to the rectangle on
+    each axis, which suits an image rendered at the rectangle's own aspect. A
+    zero rotation translates the scaled image to ``rect``'s bottom-left
+    corner. A nonzero rotation rotates the scaled image clockwise about that
+    corner and translates the corner to ``origin`` (bottom-left-origin PDF
+    points), which the caller derives from the placement anchor, so the fit
+    offset turns with the rectangle.
     """
     x, y, width, height = rect
     overlay = _build_overlay_page(image_b64)
-    transformation = pypdf.Transformation().scale(
-        width / float(overlay.mediabox.width),
-        height / float(overlay.mediabox.height),
-    )
+    overlay_size = (float(overlay.mediabox.width), float(overlay.mediabox.height))
+    if fit:
+        scale, (_, lift) = _fit_scale(overlay_size, (width, height))
+        transformation = pypdf.Transformation().scale(scale, scale).translate(0, lift)
+    else:
+        transformation = pypdf.Transformation().scale(
+            width / overlay_size[0], height / overlay_size[1]
+        )
 
     if rotation:
         transformation = transformation.rotate(-rotation).translate(*origin)
@@ -587,6 +612,7 @@ def stamp_pdf(document_b64: str, request: StampRequest) -> str:
             rotation,
             over,
             origin=origin,
+            fit=False,
         )
         _merge_overlay(
             page,
@@ -611,7 +637,10 @@ def _build_zpl_raster(request: StampRequest) -> "PIL.Image.Image":
     The signature (and, when supplied, the rendered date preceding it along the
     placement's primary axis per ``DATE_STRIP_FRACTION``) is composited onto one
     white canvas sized to the placement's dot extent, then binarized with the
-    fixed ``ZPL_INK_THRESHOLD``. A threshold rather than error diffusion keeps
+    fixed ``ZPL_INK_THRESHOLD``. The signature is fitted into its share of the
+    canvas without distortion (see :func:`_fit_scale`), its dot size clamped to
+    the share and its offset rounded to whole dots, so the canvas, and the
+    ``^GFA`` dimensions, stay the placement's. A threshold rather than error diffusion keeps
     the date's anti-aliased edges and the signature's faint strokes solid ink
     instead of scattered speckle; the signature resamples with LANCZOS to
     preserve stroke connectivity across the resize.
@@ -622,19 +651,25 @@ def _build_zpl_raster(request: StampRequest) -> "PIL.Image.Image":
 
     canvas = PIL.Image.new("RGB", (width, height), (255, 255, 255))
     signature = _flatten_to_rgb(request.image)
+    share_left = 0
 
     if request.date:
-        date_width = max(int(round(width * DATE_STRIP_FRACTION)), 1)
+        share_left = max(int(round(width * DATE_STRIP_FRACTION)), 1)
         date_image = PIL.Image.open(
-            helpers.to_buffer(_render_date_image(request.date, date_width, height))
+            helpers.to_buffer(_render_date_image(request.date, share_left, height))
         ).convert("RGB")
         canvas.paste(date_image, (0, 0))
-        canvas.paste(
-            signature.resize((max(width - date_width, 1), height), PIL.Image.LANCZOS),
-            (date_width, 0),
-        )
-    else:
-        canvas.paste(signature.resize((width, height), PIL.Image.LANCZOS), (0, 0))
+
+    share = (max(width - share_left, 1), height)
+    scale, _ = _fit_scale(signature.size, share)
+    fitted = tuple(
+        min(max(int(round(side * scale)), 1), bound)
+        for side, bound in zip(signature.size, share)
+    )
+    canvas.paste(
+        signature.resize(fitted, PIL.Image.LANCZOS),
+        (share_left, int(round((share[1] - fitted[1]) / 2))),
+    )
 
     return (
         canvas.convert("L")

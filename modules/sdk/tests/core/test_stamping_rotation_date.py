@@ -121,15 +121,19 @@ def _expected_box_mm(x, y, width, height, rotation):
 
 
 class TestPdfRotationGeometry(unittest.TestCase):
-    """The drawn PDF extent against an analytic oracle and the ZPL backend."""
+    """The drawn PDF extent against an analytic oracle and the ZPL backend.
+
+    The 500 x 160 px image has the 50 x 16 mm box's own aspect, so its fit
+    fills the box and the drawn image is the box.
+    """
 
     ANGLES = (30, 90, 135, 180, 200, 270, 315)
 
-    def _stamp(self, rotation, **fields):
+    def _stamp(self, rotation, image=None, **fields):
         return stamping.stamp_pdf(
             sentinel_pdf_b64(),
             stamping.StampRequest(
-                image=solid_black_png_b64(),
+                image=image or solid_black_png_b64(500, 160),
                 placement=stamping.StampPlacement(
                     x=60.0, y=120.0, width=50.0, height=16.0, rotation=rotation
                 ),
@@ -165,7 +169,7 @@ class TestPdfRotationGeometry(unittest.TestCase):
                     stamping.stamp_zpl(
                         zpl_doc_b64(),
                         stamping.StampRequest(
-                            image=solid_black_png_b64(),
+                            image=solid_black_png_b64(500, 160),
                             placement=stamping.StampPlacement(
                                 x=60.0,
                                 y=120.0,
@@ -190,10 +194,17 @@ class TestPdfRotationGeometry(unittest.TestCase):
     def test_date_and_signature_tile_the_rotated_rectangle(self):
         # With a date the two images are halves of one rotated rectangle:
         # together they cover exactly the corner-anchored extent, and neither
-        # half strays outside it.
+        # half strays outside it. The 250 x 160 px signature has the 25 x 16 mm
+        # share's aspect, so it fills its half.
         for rotation in (0,) + self.ANGLES:
             with self.subTest(rotation=rotation):
-                boxes = _drawn_image_boxes_mm(self._stamp(rotation, date="2026-09-22"))
+                boxes = _drawn_image_boxes_mm(
+                    self._stamp(
+                        rotation,
+                        image=solid_black_png_b64(250, 160),
+                        date="2026-09-22",
+                    )
+                )
                 expected = _expected_box_mm(60.0, 120.0, 50.0, 16.0, rotation)
 
                 self.assertEqual(len(boxes), 2)
@@ -201,8 +212,10 @@ class TestPdfRotationGeometry(unittest.TestCase):
                 self.assertNotEqual(boxes[0], boxes[1])
 
     def test_half_turn_near_the_left_edge_is_accepted(self):
-        # Rotated 180 degrees a 60 x 20 mm placement at x=5 mm is drawn over
-        # x 5-65 mm, well inside the page.
+        # Rotated 180 degrees a 60 x 20 mm placement at x=5 mm spans x 5-65 mm,
+        # well inside the page. The 400 x 140 px image fits it 57.143 x 20 mm
+        # against its pre-rotation left edge, which the half turn puts on the
+        # right, so the image is drawn over x 7.857-65 mm.
         document = stamping.stamp_pdf(
             form_pdf_b64(),
             stamping.StampRequest(
@@ -214,7 +227,7 @@ class TestPdfRotationGeometry(unittest.TestCase):
         )
 
         self._assert_box(
-            _union(_drawn_image_boxes_mm(document)), (5.0, 50.0, 65.0, 70.0)
+            _union(_drawn_image_boxes_mm(document)), (7.857, 50.0, 65.0, 70.0)
         )
 
     def test_three_quarter_turn_near_the_left_edge_is_accepted(self):
@@ -281,10 +294,13 @@ class TestPdfRotation(unittest.TestCase):
 
     def test_rotation_translates_the_rotated_corner_to_the_anchor(self):
         # The rotated extent's top-left lands at (pt(x), H - pt(y)) on the
-        # 595 x 842 pt page: (113.386, 275.071) pt for (40, 200) mm.
+        # 595 x 842 pt page: (113.386, 275.071) pt for (40, 200) mm. The
+        # 361 x 81 px trimmed signature fits the 60 x 20 mm box 13.463 mm
+        # high, centred 3.269 mm (9.266 pt) across it, which the quarter turn
+        # carries onto x.
         (rotated,) = _pdf_cms(rotated_placement(90))
 
-        self.assertAlmostEqual(rotated[4], 40.0 * 72.0 / 25.4, places=3)
+        self.assertAlmostEqual(rotated[4], 40.0 * 72.0 / 25.4 + 9.266, places=3)
         self.assertAlmostEqual(rotated[5], 842.0 - 200.0 * 72.0 / 25.4, places=2)
 
     def test_zero_rotation_is_byte_identical_to_no_rotation(self):

@@ -24,11 +24,12 @@ from .stamping_helpers import (
 
 # The seed places an upright 60 x 20 mm rectangle at (40, 200) mm on page 1,
 # which on the 842 pt tall A4 page is a bottom-left corner at
-# (113.386, 218.378) pt.
+# (113.386, 218.378) pt. The 361 x 81 px trimmed signature fits it at
+# 60 x 13.463 mm, 3.269 mm (9.266 pt) above that corner.
 _SEED_PLACEMENT = stamping.StampPlacement(
     page=1, x=40.0, y=200.0, width=60.0, height=20.0
 )
-_SEED_ORIGIN_PT = (113.386, 218.378)
+_SEED_ORIGIN_PT = (113.386, 227.644)
 
 
 def _two_page_document() -> models.ShippingDocument:

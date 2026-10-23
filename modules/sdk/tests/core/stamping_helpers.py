@@ -588,3 +588,20 @@ def keyword_zpl_document(stream: str) -> models.ShippingDocument:
     return models.ShippingDocument(
         category="customs_declaration", format="ZPL", base64=zpl_doc_b64(stream)
     )
+
+
+def grf_ink_bounds(hexdata: str, bytes_per_row: int):
+    """Return ``(rows, columns)`` of a GRF payload's ink, as sorted lists.
+
+    The hex is unpacked independently of the production encoder: each row is
+    ``bytes_per_row`` bytes, bits MSB-first, a set bit being ink.
+    """
+    rows, columns = set(), set()
+    width = bytes_per_row * 2
+    for y, start in enumerate(range(0, len(hexdata), width)):
+        bits = bin(int(hexdata[start : start + width], 16))[2:].zfill(width * 4)
+        inked = [x for x, bit in enumerate(bits) if bit == "1"]
+        if inked:
+            rows.add(y)
+            columns.update(inked)
+    return sorted(rows), sorted(columns)

@@ -243,7 +243,9 @@ class TestSeededPdfStamp(unittest.TestCase):
         self.assertGreater(date_cm[5], signature_cm[5])
         self.assertAlmostEqual(date_cm[4], anchor_x, places=1)
         self.assertAlmostEqual(date_cm[5], anchor_y, places=1)
-        self.assertAlmostEqual(signature_cm[4], anchor_x, places=1)
+        # The 361 x 81 px trimmed signature fits its 24.555 x 7.62 mm share at
+        # 24.555 x 5.510 mm, centred 1.055 mm (2.991 pt) across the strip.
+        self.assertAlmostEqual(signature_cm[4], anchor_x + 2.991, places=1)
         self.assertAlmostEqual(signature_cm[5], anchor_y - date_width_pt, places=1)
         for cm in band:
             self._assert_clockwise_quarter_turn(cm)

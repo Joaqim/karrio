@@ -34,6 +34,11 @@ EXTENT = stamping.StampPlacement(width=40.0, height=10.0)
 # The same offsets in points: 2 / 5 / 10 / 12 mm.
 MM2, MM5, MM10, MM12 = 5.66929, 14.17323, 28.34646, 34.01575
 
+# The signature trims to 361 x 81 px, so it fits a 40 x 10 mm strip at
+# 40 x 8.975 mm, centred 0.5125 mm (1.45266 pt) inside the strip's long edges:
+# its drawn origin sits that far toward the keyword from the strip's.
+FIT = 1.45266
+
 
 def _measured(key):
     return GEOMETRY
@@ -68,7 +73,7 @@ class TestPdfKeywordPlacement(unittest.TestCase):
         )
 
         (cm,) = overlay_cms(stamped.base64)
-        self.assertOrigin(cm, 100 + MM5, 500 - MM2 - MM10)
+        self.assertOrigin(cm, 100 + MM5, 500 - MM2 - MM10 + FIT)
         self.assertGreater(cm[0], 0)
         self.assertGreater(cm[3], 0)
         self.assertAlmostEqual(cm[1], 0, places=6)
@@ -86,7 +91,7 @@ class TestPdfKeywordPlacement(unittest.TestCase):
         )
 
         (cm,) = overlay_cms(stamped.base64)
-        self.assertOrigin(cm, 300 - MM12, 600 - MM5)
+        self.assertOrigin(cm, 300 - MM12 + FIT, 600 - MM5)
         self.assertAlmostEqual(cm[0], 0, places=6)
         self.assertAlmostEqual(cm[3], 0, places=6)
         self.assertLess(cm[1], 0)
@@ -103,7 +108,7 @@ class TestPdfKeywordPlacement(unittest.TestCase):
         )
 
         (cm,) = overlay_cms(stamped.base64)
-        self.assertOrigin(cm, 300 + MM12, 200 + MM5)
+        self.assertOrigin(cm, 300 + MM12 - FIT, 200 + MM5)
         self.assertGreater(cm[1], 0)
         self.assertLess(cm[2], 0)
 
@@ -131,7 +136,7 @@ class TestPdfKeywordPlacement(unittest.TestCase):
         # leads; the stamp overlay follows it.
         (form_cm, cm) = overlay_cms(stamped.base64)
         self.assertOrigin(form_cm, 148.84964, 151.74292)
-        self.assertOrigin(cm, 167.71664 - MM12, 697.73292 - MM5)
+        self.assertOrigin(cm, 167.71664 - MM12 + FIT, 697.73292 - MM5)
 
     def test_consumer_extent_anchors_at_the_keyword_origin(self):
         stamped = _stamp(
@@ -139,7 +144,7 @@ class TestPdfKeywordPlacement(unittest.TestCase):
         )
 
         (cm,) = overlay_cms(stamped.base64)
-        self.assertOrigin(cm, 100, 500 - MM10)
+        self.assertOrigin(cm, 100, 500 - MM10 + FIT)
 
     def test_consumer_extent_follows_a_clockwise_keyword(self):
         stamped = _stamp(
@@ -147,7 +152,7 @@ class TestPdfKeywordPlacement(unittest.TestCase):
         )
 
         (cm,) = overlay_cms(stamped.base64)
-        self.assertOrigin(cm, 300 - MM10, 600)
+        self.assertOrigin(cm, 300 - MM10 + FIT, 600)
         self.assertLess(cm[1], 0)
 
     def test_keyword_within_a_longer_run_anchors_at_the_run_origin(self):
@@ -158,7 +163,7 @@ class TestPdfKeywordPlacement(unittest.TestCase):
         )
 
         (cm,) = overlay_cms(stamped.base64)
-        self.assertOrigin(cm, 100 + MM5, 500 - MM2 - MM10)
+        self.assertOrigin(cm, 100 + MM5, 500 - MM2 - MM10 + FIT)
 
     def test_resolved_placement_meets_bounds_validation(self):
         with self.assertRaises(ValueError) as ctx:
@@ -214,7 +219,7 @@ class TestPdfKeywordPages(unittest.TestCase):
         self.assertEqual(overlay_cms(stamped.base64, page_index=0), [])
         (cm,) = overlay_cms(stamped.base64, page_index=1)
         self.assertAlmostEqual(cm[4], 200 + MM5, places=2)
-        self.assertAlmostEqual(cm[5], 300 - MM2 - MM10, places=2)
+        self.assertAlmostEqual(cm[5], 300 - MM2 - MM10 + FIT, places=2)
 
     def test_omitted_page_takes_the_first_match(self):
         stamped = _stamp(self._two_page(), keyword=KEYWORD, registry=_measured)
@@ -282,7 +287,7 @@ class TestPdfKeywordSeeds(unittest.TestCase):
             )
 
         (cm,) = overlay_cms(stamped.base64)
-        self.assertAlmostEqual(cm[4], 300 - MM12, places=2)
+        self.assertAlmostEqual(cm[4], 300 - MM12 + FIT, places=2)
         self.assertAlmostEqual(cm[5], 600 - MM5, places=2)
 
     def test_seed_keyword_is_located_on_the_classified_page(self):
@@ -296,7 +301,7 @@ class TestPdfKeywordSeeds(unittest.TestCase):
 
         self.assertEqual(overlay_cms(stamped.base64, page_index=0), [])
         (cm,) = overlay_cms(stamped.base64, page_index=1)
-        self.assertAlmostEqual(cm[4], 300 - MM12, places=2)
+        self.assertAlmostEqual(cm[4], 300 - MM12 + FIT, places=2)
 
     def test_consumer_keyword_takes_the_seed_pdf_geometry(self):
         with self._seeded():
@@ -311,7 +316,7 @@ class TestPdfKeywordSeeds(unittest.TestCase):
 
         (cm,) = overlay_cms(stamped.base64)
         self.assertAlmostEqual(cm[4], 200 + MM5, places=2)
-        self.assertAlmostEqual(cm[5], 300 - MM2 - MM10, places=2)
+        self.assertAlmostEqual(cm[5], 300 - MM2 - MM10 + FIT, places=2)
 
     def test_consumer_keyword_without_pdf_geometry_raises_naming_the_key(self):
         zpl_only = stamping.StampSeed(
@@ -332,7 +337,9 @@ class TestPdfKeywordSeeds(unittest.TestCase):
     def test_coordinate_seed_never_consults_its_keyword(self):
         # The seed carries a keyword and ZPL geometry but only a coordinate
         # PDF placement: (40, 200) mm, a bottom-left of (113.386, 218.378) pt,
-        # regardless of where the keyword sits on the page.
+        # regardless of where the keyword sits on the page. The 361 x 81 px
+        # signature fits the 60 x 20 mm box 60 x 13.463 mm, 3.269 mm
+        # (9.266 pt) above its bottom edge.
         seed = stamping.StampSeed(
             placement=stamping.StampPlacement(x=40.0, y=200.0, width=60.0, height=20.0),
             keyword=KEYWORD,
@@ -347,7 +354,7 @@ class TestPdfKeywordSeeds(unittest.TestCase):
 
         (cm,) = overlay_cms(stamped.base64)
         self.assertAlmostEqual(cm[4], 113.386, places=2)
-        self.assertAlmostEqual(cm[5], 218.378, places=2)
+        self.assertAlmostEqual(cm[5], 227.644, places=2)
 
     def test_injected_registry_supplies_pdf_keyword_geometry(self):
         seen = []
