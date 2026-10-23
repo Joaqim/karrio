@@ -8,11 +8,15 @@ import karrio.core.models as models
 import karrio.core.utils.stamping as stamping
 
 from .stamping_helpers import (
+    EXAMPLE_ZPL_FORM,
     TextRun,
     blank_pdf_b64,
     decode_zpl,
+    example_providers,
     grf_fields,
+    keyword_zpl_document,
     overlay_cms,
+    pdf_document,
     signature_png_b64,
     solid_black_png_b64,
     text_runs_pdf_b64,
@@ -225,6 +229,59 @@ class TestKeywordOffsetsAreNotBounded(unittest.TestCase):
         # below the baseline.
         self.assertAlmostEqual(e, 271.6535, places=3)
         self.assertAlmostEqual(f, 482.9921, places=3)
+
+
+class TestPartialPlacementGeometry(unittest.TestCase):
+    """A half or keyword-less geometry never falls back to the registry.
+
+    Both documents carry a registry seed for their key, so a fallback would
+    stamp instead of raising.
+    """
+
+    DOCUMENTS = (
+        ("PDF", pdf_document),
+        ("ZPL", lambda: keyword_zpl_document(EXAMPLE_ZPL_FORM)),
+    )
+
+    def _stamp(self, document, placement):
+        with example_providers():
+            return lib.stamp_document(
+                document,
+                image=signature_png_b64(),
+                placement=placement,
+                carrier="acme",
+                doc_type="customs_declaration",
+            )
+
+    def test_seeds_resolve_for_both_documents(self):
+        for name, document in self.DOCUMENTS:
+            with self.subTest(format=name):
+                self.assertEqual(self._stamp(document(), None).format, name)
+
+    def test_placement_with_only_one_anchor_is_rejected(self):
+        for name, document in self.DOCUMENTS:
+            for anchor, missing in (
+                (dict(x=20.0), "StampPlacement.y"),
+                (dict(y=30.0), "StampPlacement.x"),
+            ):
+                with self.subTest(format=name, missing=missing):
+                    with self.assertRaises(ValueError) as ctx:
+                        self._stamp(
+                            document(),
+                            stamping.StampPlacement(width=20.0, height=10.0, **anchor),
+                        )
+
+                    self.assertIn(missing, str(ctx.exception))
+
+    def test_geometry_only_placement_without_a_keyword_is_rejected(self):
+        for name, document in self.DOCUMENTS:
+            with self.subTest(format=name):
+                with self.assertRaises(ValueError) as ctx:
+                    self._stamp(
+                        document(), stamping.StampPlacement(width=20.0, height=10.0)
+                    )
+
+                self.assertIn("keyword", str(ctx.exception))
 
 
 if __name__ == "__main__":

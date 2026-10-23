@@ -342,17 +342,18 @@ class TestKeywordResolution(unittest.TestCase):
         self.assertEqual((total, bpr), (9600, 60))
         self.assertIn("Total Weight (in kg)", zpl)
 
-    def test_geometry_only_placement_offsets_add_to_the_located_origin(self):
-        stamped = lib.stamp_document(
-            keyword_zpl_document("^XA^FO160,240^FDTotal Weight (in kg)^FS^XZ"),
-            image=signature_png_b64(),
-            placement=stamping.StampPlacement(x=10.0, width=60.0, height=20.0),
-            keyword="Total Weight (in kg)",
-        )
+    def test_half_anchored_keyword_geometry_is_rejected(self):
+        # A placement setting only one of x and y is rejected even beside a
+        # keyword; keyword offsets reach the locator through the registry.
+        with self.assertRaises(ValueError) as ctx:
+            lib.stamp_document(
+                keyword_zpl_document("^XA^FO160,240^FDTotal Weight (in kg)^FS^XZ"),
+                image=signature_png_b64(),
+                placement=stamping.StampPlacement(x=10.0, width=60.0, height=20.0),
+                keyword="Total Weight (in kg)",
+            )
 
-        ((fo_x, fo_y, *_),) = grf_fields(decode_zpl(stamped.base64))
-        self.assertEqual(fo_x, int(round(((160 * 25.4 / 203) + 10.0) / 25.4 * 203)))
-        self.assertEqual(fo_y, int(round(((240 * 25.4 / 203) + 0.0) / 25.4 * 203)))
+        self.assertIn("StampPlacement.y", str(ctx.exception))
 
     def test_keyword_derived_negative_anchor_raises(self):
         with self.assertRaises(ValueError) as ctx:

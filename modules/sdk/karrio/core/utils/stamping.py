@@ -1558,9 +1558,11 @@ def stamp_document(
     anchored ``placement`` (both ``x`` and ``y`` set) is used directly with no
     keyword or registry consultation, and a ``keyword`` supplied alongside one
     raises rather than silently ignoring either of the two contradictory
-    anchors. A consumer ``keyword`` locates the carrier form's own text and
-    takes its geometry from a geometry-only placement (``x``/``y`` left
-    ``None``), else from the registry for the document's key — the injected
+    anchors, as does a placement setting only one of ``x`` and ``y``, or
+    neither without a keyword, rather than falling back to the registry. A
+    consumer ``keyword`` locates the carrier form's own text and takes its
+    geometry from a geometry-only placement (``x``/``y`` left ``None``), else
+    from the registry for the document's key — the injected
     ``registry`` lookup when one is supplied, else the carrier seed's keyword
     geometry for the format — and a miss raises naming what is missing. With
     neither placement nor keyword the registry is consulted: a seed carrying a
@@ -1619,6 +1621,28 @@ def stamp_document(
             "A stamp keyword cannot be combined with a fully anchored "
             "placement (both x and y set); supply one anchor, not two"
         )
+
+    if placement is not None and not fully_anchored:
+        missing = next(
+            (
+                f"StampPlacement.{field}"
+                for field, other in (("x", "y"), ("y", "x"))
+                if getattr(placement, field) is None
+                and getattr(placement, other) is not None
+            ),
+            None,
+        )
+        if missing is not None:
+            raise ValueError(
+                f"The stamp placement sets one anchor but not {missing}; "
+                "supply both x and y, or neither with a keyword"
+            )
+        if not keyword:
+            raise ValueError(
+                "A stamp placement without x and y needs a keyword to locate "
+                "it; supply a keyword or both StampPlacement.x and "
+                "StampPlacement.y"
+            )
 
     if fully_anchored and page is not None:
         raise ValueError(
