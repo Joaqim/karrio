@@ -647,3 +647,41 @@ def rows_png_b64(rows: typing.Sequence[str]) -> str:
             if cell == "#":
                 image.putpixel((x, y), (0, 0, 0, 255))
     return _png_b64(image)
+
+
+def shared_resources_pdf_b64(inherited: bool = False) -> str:
+    """A two-page blank A4 PDF whose pages share one indirect ``/Resources``.
+
+    With ``inherited`` the pages carry no ``/Resources`` of their own and
+    inherit the shared one from the page tree root.
+    """
+    writer = pypdf.PdfWriter(
+        clone_from=pypdf.PdfReader(io.BytesIO(base64.b64decode(blank_pdf_b64(2))))
+    )
+    resources = writer._add_object(
+        DictionaryObject(
+            {
+                NameObject("/ProcSet"): ArrayObject([NameObject("/PDF")]),
+                NameObject("/XObject"): DictionaryObject(),
+            }
+        )
+    )
+    for page in writer.pages:
+        if inherited:
+            page.pop(NameObject("/Resources"), None)
+        else:
+            page[NameObject("/Resources")] = resources
+    if inherited:
+        writer._root_object["/Pages"][NameObject("/Resources")] = resources
+    return _pdf_b64(writer)
+
+
+def page_resource_keys(document_b64: str, page_index: int):
+    """Return a page's effective resource keys and ``/XObject`` names, sorted."""
+    page = pypdf.PdfReader(io.BytesIO(base64.b64decode(document_b64))).pages[page_index]
+    node = page
+    while "/Resources" not in node and "/Parent" in node:
+        node = node["/Parent"]
+    resources = node.get("/Resources") or DictionaryObject()
+    xobjects = resources.get("/XObject") or DictionaryObject()
+    return sorted(resources.keys()), sorted(xobjects.keys())

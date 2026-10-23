@@ -529,6 +529,47 @@ def _validate_pdf_extent(
         )
 
 
+# Resource subdictionaries (and the /ProcSet array) a merge writes into, so a
+# private resources copy duplicates them rather than sharing them.
+MERGED_RESOURCE_KEYS: typing.Tuple[str, ...] = (
+    "/XObject",
+    "/Font",
+    "/ExtGState",
+    "/ProcSet",
+)
+
+
+def _own_resources(page: "pypdf.PageObject") -> None:
+    """Give ``page`` a direct copy of its effective ``/Resources``.
+
+    pypdf merges an overlay into the page's resources in place, so pages
+    sharing one indirect ``/Resources`` object, or inheriting it from the
+    page tree, would all receive the stamp image. The effective resources,
+    the page's own or the nearest ancestor's, are copied at the top level
+    and in each of ``MERGED_RESOURCE_KEYS``; streams stay shared, since the
+    merge never mutates them.
+    """
+    node = page
+    while "/Resources" not in node and "/Parent" in node:
+        node = node["/Parent"]
+
+    effective = node.get("/Resources") or pypdf.generic.DictionaryObject()
+
+    def private(key: str):
+        value = effective[key]
+        if key in MERGED_RESOURCE_KEYS and isinstance(
+            value, pypdf.generic.DictionaryObject
+        ):
+            return pypdf.generic.DictionaryObject(value)
+        if key in MERGED_RESOURCE_KEYS and isinstance(value, pypdf.generic.ArrayObject):
+            return pypdf.generic.ArrayObject(value)
+        return effective.raw_get(key)
+
+    page[pypdf.generic.NameObject("/Resources")] = pypdf.generic.DictionaryObject(
+        {pypdf.generic.NameObject(key): private(key) for key in effective}
+    )
+
+
 def _clone_pdf(document_b64: str) -> "pypdf.PdfWriter":
     """Return a writer holding a whole-document clone of a base64 PDF.
 
@@ -587,10 +628,14 @@ def stamp_pdf(document_b64: str, request: StampRequest) -> str:
     bounding box's top-left corner at the placement's ``(x, y)``; a drawn
     extent crossing the mediabox, rotated or not, is rejected. ``overlay``
     draws the image over the page content; ``underlay`` draws it beneath, so
-    carrier content stays legible above a letterhead. When ``request.date`` is supplied, the rendered date
-    occupies the leading portion of the placement along its primary
-    (un-rotated) axis and the signature the remainder; both are parts of the
-    one rotated rectangle. The page count is invariant.
+    carrier content stays legible above a letterhead. The stamped page
+    receives a private copy of its resources first (see
+    :func:`_own_resources`), so no other page changes. When ``request.date``
+    is supplied, the rendered date occupies the leading portion of the
+    placement along its primary (un-rotated) axis and the signature the
+    remainder; both are parts of the one rotated rectangle. The image is
+    fitted into its rectangle without distortion. The page count is
+    invariant.
     """
     placement = _normalize_units(request.placement)
     _validate_anchor(placement)
@@ -602,6 +647,7 @@ def stamp_pdf(document_b64: str, request: StampRequest) -> str:
     rect = placement_to_pdf_rect(placement, page_height_pt)
     rotation = placement.rotation or 0
     over = request.layer != "underlay"
+    _own_resources(page)
 
     anchor = (mm_to_points(placement.x), page_height_pt - mm_to_points(placement.y))
     bounds = _rotated_bounds(rect[2], rect[3], rotation)

@@ -22,12 +22,14 @@ from .stamping_helpers import (
     ordered_content_streams,
     overlay_cms,
     page_count,
+    page_resource_keys,
     page_text,
     pdf_document,
     placement,
     png_document,
     real_signature_b64,
     sentinel_pdf_b64,
+    shared_resources_pdf_b64,
     signature_png_b64,
 )
 
@@ -221,6 +223,37 @@ class TestStampPdfBackend(unittest.TestCase):
 
         self.assertEqual(overlay_cms(stamped, page_index=0), [])
         self.assertEqual(len(overlay_cms(stamped, page_index=1)), 1)
+
+
+class TestPdfSharedResources(unittest.TestCase):
+    def _stamp_page_two(self, document):
+        return stamping.stamp_pdf(
+            document,
+            stamping.StampRequest(
+                image=signature_png_b64(),
+                placement=stamping.StampPlacement(
+                    page=2, x=40.0, y=200.0, width=60.0, height=20.0
+                ),
+            ),
+        )
+
+    def test_stamping_page_two_leaves_shared_page_one_resources_unchanged(self):
+        for inherited in (False, True):
+            with self.subTest(inherited=inherited):
+                document = shared_resources_pdf_b64(inherited=inherited)
+                self.assertEqual(
+                    page_resource_keys(document, 0), (["/ProcSet", "/XObject"], [])
+                )
+
+                stamped = self._stamp_page_two(document)
+
+                self.assertEqual(
+                    page_resource_keys(stamped, 0), page_resource_keys(document, 0)
+                )
+                _, page_two_xobjects = page_resource_keys(stamped, 1)
+                self.assertEqual(len(page_two_xobjects), 1)
+                self.assertEqual(overlay_cms(stamped, page_index=0), [])
+                self.assertEqual(len(overlay_cms(stamped, page_index=1)), 1)
 
 
 class TestPdfInputErrors(unittest.TestCase):
