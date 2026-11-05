@@ -206,6 +206,30 @@ def _carrier_id(carrier_snapshot: typing.Optional[dict]) -> str:
     return carrier_snapshot.get("carrier_id") or ""
 
 
+def _locale_key(tracker: models.Tracking) -> str:
+    """Partition key for a tracker's persisted `options.language`.
+
+    PlainDictField does not enforce inner types, so a non-string value is
+    coerced rather than raising TypeError in the partition sort and
+    stalling the whole batch.
+    """
+    language = (tracker.options or {}).get("language")
+    return str(language) if language else ""
+
+
+def _merged_options(trackers: typing.List[models.Tracking]) -> dict:
+    """Merge tracker option dicts with last-wins semantics.
+
+    Keyed entries (`{tracking_number: {...}}`) are kept: carrier mappers
+    such as smartkargo read per-number options (prefix/air waybill) from
+    the request, and each locale group only carries its own members'
+    entries because the merge is scoped to the group.
+    """
+    return functools.reduce(
+        lambda acc, t: {**acc, **(t.options or {})}, trackers, {}
+    )
+
+
 def _process_batch(
     gateway: Gateway,
     batch: typing.List[models.Tracking],
@@ -214,26 +238,41 @@ def _process_batch(
 ):
     """Fetch + save a single batch of up to 10 trackers."""
     try:
-        tracking_numbers = [t.tracking_number for t in batch]
-        options: dict = functools.reduce(
-            lambda acc, t: {**acc, **(t.options or {})}, batch, {}
-        )
-
-        request = karrio.Tracking.fetch(
-            datatypes.TrackingRequest(
-                tracking_numbers=tracking_numbers, options=options
+        # `language` applies to a whole TrackingRequest, so each batch is
+        # partitioned by the persisted locale (uniform batches stay a single
+        # request). Each partition is fetched and saved before the next one,
+        # so a failure discards only the partitions after it.
+        locale_groups = [
+            (locale, list(group))
+            for locale, group in groupby(
+                sorted(batch, key=_locale_key), key=_locale_key
             )
-        )
-        response = request.from_(gateway).parse()
+        ]
 
-        _save_tracing(gateway, batch)
-        _save_results(response, batch)
+        for locale, group in locale_groups:
+            options = _merged_options(group)
+            response = (
+                karrio.Tracking.fetch(
+                    datatypes.TrackingRequest(
+                        tracking_numbers=[t.tracking_number for t in group],
+                        options=(
+                            {**options, "language": locale} if locale else options
+                        ),
+                    )
+                )
+                .from_(gateway)
+                .parse()
+            )
 
-        logger.info(
-            "Tracking batch processed",
-            batch=f"{batch_num}/{total_batches}",
-            count=len(batch),
-        )
+            _save_tracing(gateway, group)
+            _save_results(response, group)
+
+            logger.info(
+                "Tracking batch processed",
+                batch=f"{batch_num}/{total_batches}",
+                locale=locale or "default",
+                count=len(group),
+            )
 
     except Exception as e:
         logger.warning(
