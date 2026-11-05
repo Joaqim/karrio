@@ -50,6 +50,7 @@ BRANCHES=(
   feat-document-stamping
   fix-service-features-input
   fix-connections-custom-carrier-name
+  feat-admin-label-template
   dev-nix-flake
   docs-openspec
 )
