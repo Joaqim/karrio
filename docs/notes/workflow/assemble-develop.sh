@@ -49,6 +49,7 @@ BRANCHES=(
   feat-shipment-advisors
   feat-document-stamping
   fix-service-features-input
+  fix-connections-custom-carrier-name
   dev-nix-flake
   docs-openspec
 )
