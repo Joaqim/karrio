@@ -95,12 +95,10 @@ def parse_response(binary_string):
 STATE_CODE_COUNTRIES = ["US", "CA", "PR", "MX", "IN", "AE"]
 
 
-def state_code(address: lib.units.ComputedAddress) -> str:
-    if address.state_code is None or address.country_code not in STATE_CODE_COUNTRIES:
+def state_code(address: lib.units.ComputedAddress) -> typing.Optional[str]:
+    if not address.state_code or address.country_code not in STATE_CODE_COUNTRIES:
         return None
 
-    return (
-        "PQ"
-        if address.state_code.lower() == "qc" and address.country_code == "CA"
-        else address.state_code
-    )
+    code = lib.to_state_code(address.state_code, address.country_code)
+
+    return "PQ" if code == "QC" and address.country_code == "CA" else code
