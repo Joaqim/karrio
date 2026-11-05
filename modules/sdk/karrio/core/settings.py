@@ -46,6 +46,18 @@ class Settings(abc.ABC):
             ),
         )
 
+    def recipient_locale(
+        self, recipient: typing.Optional[dict] = None
+    ) -> typing.Optional[str]:
+        """Locale derived from a shipment's recipient address, if any.
+
+        Consulted at label purchase for shipments without an explicit
+        `options.language`; the returned locale is persisted onto the
+        shipment options and inherited by its tracker. Carriers override
+        this to opt in; the default `None` leaves the shipment unchanged.
+        """
+        return None
+
     @property
     def connection_cache(self):
         import karrio.lib as lib

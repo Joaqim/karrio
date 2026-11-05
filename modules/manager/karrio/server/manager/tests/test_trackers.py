@@ -8,6 +8,7 @@ from karrio.server.core.tests import APITestCase
 from karrio.server.core.utils import create_carrier_snapshot
 import karrio.server.manager.models as models
 import karrio.server.manager.serializers as serializers
+from karrio.server.serializers.abstract import Context
 
 
 class TestTrackers(APITestCase):
@@ -43,6 +44,28 @@ class TestTrackers(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
         self.assertDictEqual(response_data, TRACKING_RESPONSE)
         self.assertEqual(len(self.user.tracking_set.all()), 1)
+
+    def test_create_tracker_persists_request_language(self):
+        """Tracker creation keeps the request's options.language for later polls."""
+        context = Context(user=self.user, test_mode=True)
+
+        with patch("karrio.server.core.gateway.utils.identity") as mock:
+            mock.return_value = RETURNED_VALUE
+            tracker = (
+                serializers.TrackingSerializer.map(
+                    data=dict(
+                        tracking_number="1Z12345E6205277936",
+                        carrier_name="ups",
+                        options={"language": "sv"},
+                    ),
+                    context=context,
+                )
+                .save(carrier_filter=dict(carrier_name="ups"))
+                .instance
+            )
+
+        tracker.refresh_from_db()
+        self.assertEqual(tracker.options.get("language"), "sv")
 
 
 class TestTrackersUpdate(APITestCase):
