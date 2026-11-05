@@ -111,6 +111,11 @@ venv.bak/
 *.DS_Store
 *.pem
 
+# nix
+.direnv
+!.envrc
+/result*
+
 # node
 node_modules
 !**/packages/**/lib/
