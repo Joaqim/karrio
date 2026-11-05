@@ -48,6 +48,7 @@ BRANCHES=(
   feat-tracker-locale
   feat-shipment-advisors
   feat-document-stamping
+  fix-service-features-input
   dev-nix-flake
   docs-openspec
 )
